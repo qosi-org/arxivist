@@ -1,5 +1,18 @@
 {
   "index_version": 1,
-  "total_papers": 0,
-  "papers": []
+  "total_papers": 1,
+  "papers": [
+    {
+      "paper_id": "arxiv_2605_06564",
+      "title": "Dynamic Treatment on Networks",
+      "domain": "RL / Causal Inference / Network Science",
+      "sir_version": 1,
+      "sir_confidence": 0.83,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": true,
+      "pipeline_complete": true,
+      "last_updated": "2026-05-09T00:00:00Z"
+    }
+  ]
 }
