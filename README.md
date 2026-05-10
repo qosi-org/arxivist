@@ -69,6 +69,34 @@ a `paper-repos/` folder of generated implementations.
 
 ---
 
+## SIR Learning System
+
+ArXivist includes `sir_learner.py`, a lightweight corpus-learning subsystem trained entirely on accumulated SIR artifacts stored in the global registry.
+
+Unlike the primary paper-parsing workflow, the learner does not attempt full semantic understanding of papers. Instead, it compresses statistical structure and implementation patterns observed across previously processed research into a fast predictive prior.
+
+The learner is trained on generated `(prompt → SIR)` examples derived deterministically from existing SIRs and can predict:
+
+- architecture module patterns
+- likely implementation frameworks
+- optimizer and scheduler configurations
+- implementation risks and hidden assumptions
+- confidence scores for SIR sections
+- ambiguity patterns common to specific paper families
+- reproducibility failure modes
+
+This allows ArXivist to:
+
+- accelerate Stage 1 SIR drafting
+- pre-flag potentially ambiguous or under-specified papers
+- infer missing implementation details before full parsing
+- estimate reproducibility difficulty from abstract-level information
+- surface likely high-risk implementation regions for human review
+
+The learner continuously improves as the SIR registry expands, enabling ArXivist to accumulate domain-specific implementation priors and reproducibility intelligence over time.
+
+---
+
 ## Quickstart
 
 1. Install the ArXivist skill into your Claude environment by pointing it at `skill/SKILL.md`.
@@ -104,6 +132,7 @@ arxivist/
 │
 ├── docs/                     # Documentation
 ├── examples/                 # Pre-generated SIR and arch plan for reference
+├── sir_learner.py            # SIR corpus learning engine
 └── .github/workflows/        # CI — schema validation on every push
 ```
 
