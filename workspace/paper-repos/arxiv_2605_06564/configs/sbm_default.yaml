@@ -1,0 +1,55 @@
+# Q-Ising Configuration — Stochastic Block Model Experiment
+# Paper: "Dynamic Treatment on Networks" (arXiv:2605.06564)
+# Section 5.1
+
+experiment: sbm
+seed: 42
+
+network:
+  N: 500
+  K: 4                      # bins = SBM blocks (confidence: 0.90)
+  bin_method: spectral       # ASSUMED: spectral clustering to recover SBM blocks (confidence: 0.78)
+
+sis:
+  n_per_block: [187, 187, 63, 63]   # Section 5.1
+  p_in: 0.1                          # Section 5.1
+  p_out: 0.01                        # Section 5.1
+  spread_rates: [0.010, 0.012, 0.1, 0.12]  # Section 5.1
+  churn_rates: [0.4, 0.4, 0.2, 0.2]        # Section 5.1
+
+ising:
+  estimation_method: emvs            # Use EMVS for MAP (fast); set to 'mcmc' for ensemble
+  v0: 0.01                           # Spike variance — Section 3.1
+  v1: 10.0                           # Slab variance — Section 3.1
+  c: 1.0                             # Inclusion scale — Section 3.1
+  tau_sq: 10.0                       # Beta prior variance — Section 3.1
+  emvs_n_iter: 10                    # ASSUMED: convergence in 2-3 steps, 10 is safe upper bound
+  mcmc_n_draws: 200                  # Appendix B/E.3
+  mcmc_n_tune: 300                   # Appendix E.3
+
+cql:
+  hidden_layers: [256, 256]          # Appendix E.2
+  learning_rate: 0.0003              # Appendix E.2
+  batch_size: 64                     # Appendix E.2
+  max_steps: 30000                   # Appendix E.2
+  steps_per_epoch: 1000              # Appendix E.2
+  early_stopping_patience: 10        # Appendix E.2
+  early_stopping_min_delta: 0.0001   # Appendix E.2
+  dropout_rate: 0.3                  # Appendix E.2
+  batch_norm: true                   # Appendix E.2
+  alpha: 0.1                         # Conservative penalty — Appendix E.2
+  discount: 0.8                      # Discount psi — Appendix E.2
+  activation: relu                   # ASSUMED: standard for CQL/d3rlpy (confidence: 0.80)
+  n_ensemble_agents: 20              # Section 3.3
+
+training:
+  T_train: 100                       # Section 5.1
+  H_test: 25                         # Section 5.1
+  n_test_runs: 50                    # Section 5.1
+
+paths:
+  data_dir: data/
+  output_dir: results/
+  checkpoint_dir: results/checkpoints/
+  log_every_steps: 500
+  checkpoint_every_steps: 5000

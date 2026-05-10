@@ -1,0 +1,54 @@
+# Q-Ising Configuration — Indian Microfinance Villages Experiment
+# Paper: "Dynamic Treatment on Networks" (arXiv:2605.06564)
+# Section 5.2, Appendix E.3
+
+experiment: village
+seed: 42
+
+network:
+  K: null                    # Determined per-village by community detection
+  bin_method: edge_betweenness   # Appendix E.3: igraph edge-betweenness
+  min_community_size: 10     # Appendix E.3: communities < 10 merged into largest
+
+sis:
+  # Spread and churn rates ordered by community size rank — Appendix E.3
+  spread_rates: [0.01, 0.5, 0.05, 0.07, 0.06, 0.02, 0.01, 0.4, 0.1, 0.3]
+  churn_rates:  [0.5,  0.9, 0.9,  0.6,  0.5,  0.5,  0.7,  0.6, 0.5, 0.8]
+
+ising:
+  estimation_method: emvs
+  v0: 0.01
+  v1: 10.0
+  c: 1.0
+  tau_sq: 10.0
+  emvs_n_iter: 10
+  mcmc_n_draws: 200
+  mcmc_n_tune: 300
+
+cql:
+  hidden_layers: [256, 256]
+  learning_rate: 0.0003
+  batch_size: 64
+  max_steps: 30000
+  steps_per_epoch: 1000
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.0001
+  dropout_rate: 0.3
+  batch_norm: true
+  alpha: 0.1
+  discount: 0.8
+  activation: relu           # ASSUMED
+  n_ensemble_agents: 20
+
+training:
+  T_train: 500               # Appendix E.3
+  H_test: 25                 # Appendix E.3
+  n_test_runs: 50            # Appendix E.3
+  village_ids: null          # null = run all 42 villages; or list e.g. [0, 1, 5]
+
+paths:
+  data_dir: data/villages/
+  output_dir: results/villages/
+  checkpoint_dir: results/villages/checkpoints/
+  log_every_steps: 500
+  checkpoint_every_steps: 5000
