@@ -1,0 +1,35 @@
+{
+  "paper_id": "arxiv_2605_06564",
+  "paper_title": "Dynamic Treatment on Networks",
+  "current_stage": 7,
+  "stages_completed": [
+    "stage_1_paper_parser",
+    "stage_2_sir_registry",
+    "stage_3_architecture_planner",
+    "stage_4_code_generator",
+    "stage_5_notebook_generator",
+    "stage_6_results_comparator"
+  ],
+  "sir_path": "sir-registry/arxiv_2605_06564/sir.json",
+  "repo_path": "paper-repos/arxiv_2605_06564/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2605_06564/sir.json",
+    "architecture_plan": null,
+    "repo_initialized": false,
+    "notebook_path": null,
+    "comparison_report": null
+  },
+  "confidence_flags": {
+    "architecture": 0.88,
+    "mathematical_spec": 0.93,
+    "tensor_semantics": 0.72,
+    "training_pipeline": 0.85,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.65,
+    "overall_sir_confidence": 0.83
+  },
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-09T00:00:00Z",
+  "last_updated": "2026-05-09T00:00:00Z"
+}

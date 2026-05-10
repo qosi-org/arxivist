@@ -1,0 +1,343 @@
+{
+  "paper_id": "arxiv_2605_06564",
+  "framework": {
+    "primary": "Python + NumPy/SciPy (Stage 1) + PyTorch via d3rlpy (Stage 2)",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_note": "Experiments run on Apple M1 CPU; GPU optional for larger networks",
+    "config_library": "YAML + dataclasses",
+    "reasoning": "Paper explicitly uses d3rlpy (PyTorch-based) for CQL; NumPy/SciPy for Ising EMVS; PyMC/NumPyro for MCMC. No GPU requirement stated."
+  },
+
+  "project_name": "q_ising",
+
+  "module_hierarchy": {
+    "src/q_ising/__init__.py": {},
+    "src/q_ising/data/": {
+      "__init__.py": {},
+      "network.py": {
+        "classes": ["NetworkData"],
+        "methods": [
+          "from_adjacency_matrix(M: np.ndarray, X: np.ndarray) -> NetworkData",
+          "get_neighbors(node: int) -> List[int]",
+          "assign_bins(method: str, K: int) -> np.ndarray"
+        ],
+        "sir_mapping": "Framework Section 2 (fixed network M, features X)"
+      },
+      "panel.py": {
+        "classes": ["ObservationalPanel"],
+        "methods": [
+          "from_trajectory(y0: np.ndarray, actions: np.ndarray, outcomes: np.ndarray) -> ObservationalPanel",
+          "get_period(t: int) -> Tuple",
+          "to_rl_transitions(states: np.ndarray) -> List[Transition]"
+        ],
+        "sir_mapping": "Framework Section 2 (panel D)"
+      },
+      "sis_simulator.py": {
+        "classes": ["SISSimulator"],
+        "methods": [
+          "__init__(spread_rates: np.ndarray, churn_rates: np.ndarray, network: NetworkData)",
+          "step(y: np.ndarray, action: int) -> np.ndarray",
+          "generate_panel(T: int, policy: Callable) -> ObservationalPanel",
+          "run_test(policy: Callable, H: int, n_runs: int) -> np.ndarray"
+        ],
+        "sir_mapping": "Appendix E.1 SIS dynamics"
+      }
+    },
+    "src/q_ising/models/": {
+      "__init__.py": {},
+      "ising.py": {
+        "classes": ["DynamicIsingModel", "BinIsingModel"],
+        "methods": [
+          "linear_predictor(y_prev: np.ndarray, action: int, node: int, t: int) -> float",
+          "adoption_prob(y_prev: np.ndarray, action: int, node: int) -> float",
+          "fit_emvs(panel: ObservationalPanel, network: NetworkData, bins: np.ndarray, n_iter: int) -> None",
+          "fit_mcmc(panel: ObservationalPanel, network: NetworkData, bins: np.ndarray, n_draws: int, n_tune: int) -> List[dict]",
+          "counterfactual_prob(y_prev: np.ndarray, node: int, t: int) -> float",
+          "get_theta() -> np.ndarray"
+        ],
+        "sir_mapping": "Section 3.1 — Dynamic Ising Inference; Equations eq_linear_predictor, eq_likelihood, eq_spike_slab"
+      },
+      "state_constructor.py": {
+        "classes": ["StateConstructor"],
+        "methods": [
+          "__init__(ising_model: DynamicIsingModel, bins: np.ndarray, K: int)",
+          "build_state(y_prev: np.ndarray, t: int, theta: dict) -> np.ndarray",
+          "build_all_states(panel: ObservationalPanel) -> np.ndarray",
+          "build_states_ensemble(panel: ObservationalPanel, theta_draws: List[dict]) -> List[np.ndarray]"
+        ],
+        "sir_mapping": "Section 3.1 state construction; Equations eq_latent_state, eq_bin_state, eq_qising_state"
+      }
+    },
+    "src/q_ising/training/": {
+      "__init__.py": {},
+      "cql_trainer.py": {
+        "classes": ["CQLTrainer"],
+        "methods": [
+          "__init__(K: int, state_dim: int, config: CQLConfig)",
+          "build_dataset(transitions: List[Transition]) -> d3rlpy.dataset.MDPDataset",
+          "train(dataset: MDPDataset) -> d3rlpy.algos.CQL",
+          "get_policy() -> Callable[[np.ndarray], int]"
+        ],
+        "sir_mapping": "Section 3.2 Offline Q-Learning; Equation eq_cql_loss"
+      },
+      "ensemble_trainer.py": {
+        "classes": ["EnsembleTrainer"],
+        "methods": [
+          "__init__(K: int, state_dim: int, n_agents: int, config: CQLConfig)",
+          "train_all(state_draws: List[np.ndarray], transitions_base: List) -> List[d3rlpy.algos.CQL]",
+          "majority_vote_policy(s: np.ndarray) -> int"
+        ],
+        "sir_mapping": "Section 3.3 Ensemble Policy"
+      }
+    },
+    "src/q_ising/evaluation/": {
+      "__init__.py": {},
+      "metrics.py": {
+        "classes": ["PolicyEvaluator"],
+        "methods": [
+          "evaluate(policy: Callable, simulator: SISSimulator, H: int, n_runs: int) -> EvalResult",
+          "mean_adoption_rate(results: np.ndarray) -> float",
+          "compare_policies(policies: Dict[str, Callable], simulator: SISSimulator) -> pd.DataFrame"
+        ],
+        "sir_mapping": "Section 5 — Evaluation Protocol"
+      },
+      "baselines.py": {
+        "classes": ["RandomPolicy", "DegreePolicy", "LIRPolicy", "DegreeBinPolicy", "PlainDQNPolicy"],
+        "methods": ["__call__(state: np.ndarray, network: NetworkData, bins: np.ndarray) -> int"],
+        "sir_mapping": "Section 5 baselines"
+      }
+    },
+    "src/q_ising/utils/": {
+      "__init__.py": {},
+      "config.py": {
+        "classes": ["IsingConfig", "CQLConfig", "ExperimentConfig"],
+        "methods": ["from_yaml(path: str) -> ExperimentConfig", "to_yaml(path: str) -> None"],
+        "sir_mapping": "All hyperparameters from SIR"
+      },
+      "community_detection.py": {
+        "classes": ["CommunityDetector"],
+        "methods": [
+          "edge_betweenness(G: igraph.Graph, min_size: int) -> np.ndarray",
+          "merge_small_communities(communities: np.ndarray, min_size: int) -> np.ndarray"
+        ],
+        "sir_mapping": "Appendix E.3 — igraph edge-betweenness"
+      },
+      "sbm_generator.py": {
+        "classes": ["SBMGenerator"],
+        "methods": [
+          "generate(n_per_block: List[int], p_in: float, p_out: float, seed: int) -> np.ndarray"
+        ],
+        "sir_mapping": "Section 5.1 SBM experiment"
+      }
+    },
+    "train.py": {"role": "CLI entrypoint for full Q-Ising pipeline"},
+    "evaluate.py": {"role": "CLI entrypoint for policy evaluation"},
+    "notebooks/": {"role": "Jupyter notebooks for experiments"}
+  },
+
+  "tensor_flows": [
+    {
+      "name": "Dynamic Ising Forward Pass (node i, period t)",
+      "pseudocode": [
+        "INPUT: y_prev [N], action a_t (int), node i (int), theta_i [4 + |N_i|]",
+        "treatment_self = 1 if a_t == i else 0",
+        "neighbor_treated = 1 if a_t in N_i else 0",
+        "peer_sum = sum(gamma_{k, m_j} * y_prev[j] for j in N_i)",
+        "eta = beta_0_k + beta_1_k * treatment_self + beta_2_k * y_prev[i] + beta_3_k * neighbor_treated + peer_sum",
+        "prob = sigmoid(eta)   → scalar in (0,1)",
+        "OUTPUT: adoption probability for node i"
+      ]
+    },
+    {
+      "name": "State Construction (period t)",
+      "pseudocode": [
+        "INPUT: panel history up to t, theta_hat",
+        "For each node i: compute eta_i with a_t = empty (zero out treatment indicators)",
+        "l_hat_0_i = sigmoid(eta_i_counterfactual)   → [N]",
+        "For each bin k: l_bar_0_k = mean(l_hat_0_i for i in B_k)   → [K]",
+        "For each bin k: y_bar_{k} = mean(y_prev[i] for i in B_k)   → [K]",
+        "s_t = concat(l_bar_0, y_bar)   → [2K]",
+        "OUTPUT: state s_t [2K]"
+      ]
+    },
+    {
+      "name": "CQL Q-Function Forward Pass",
+      "pseudocode": [
+        "INPUT: s [2K] float32",
+        "x = BatchNorm(s)   → [2K]",
+        "x = Linear(2K, 256) -> ReLU -> Dropout(0.3)   → [256]",
+        "x = Linear(256, 256) -> ReLU -> Dropout(0.3)  → [256]",
+        "q_values = Linear(256, K)   → [K]",
+        "OUTPUT: Q(s, b) for all b in [K]   → [K]"
+      ]
+    },
+    {
+      "name": "Ensemble Policy (majority vote)",
+      "pseudocode": [
+        "INPUT: s [2K], P ensemble agents, P state representations s^(p) [2K]",
+        "For each agent p: a_p = argmax_k Q_p(s^(p), k)   → scalar",
+        "votes = count(a_p == k for each k in [K])   → [K]",
+        "OUTPUT: argmax_k votes[k]"
+      ]
+    }
+  ],
+
+  "config_schema": {
+    "network": {
+      "N": "number of nodes (e.g. 500 for SBM)",
+      "K": "number of bins (e.g. 4 for SBM)",
+      "bin_method": "edge_betweenness | spectral | manual"
+    },
+    "ising": {
+      "v0": 0.01,
+      "v1": 10.0,
+      "c": 1.0,
+      "tau_sq": 10.0,
+      "emvs_n_iter": 10,
+      "mcmc_n_draws": 200,
+      "mcmc_n_tune": 300,
+      "estimation_method": "emvs | mcmc"
+    },
+    "cql": {
+      "hidden_layers": [256, 256],
+      "learning_rate": 3e-4,
+      "batch_size": 64,
+      "max_steps": 30000,
+      "steps_per_epoch": 1000,
+      "early_stopping_patience": 10,
+      "early_stopping_min_delta": 1e-4,
+      "dropout_rate": 0.3,
+      "batch_norm": true,
+      "alpha": 0.1,
+      "discount": 0.8,
+      "n_ensemble_agents": 20
+    },
+    "sis": {
+      "sbm": {
+        "n_per_block": [187, 187, 63, 63],
+        "p_in": 0.1,
+        "p_out": 0.01,
+        "spread_rates": [0.010, 0.012, 0.1, 0.12],
+        "churn_rates": [0.4, 0.4, 0.2, 0.2]
+      },
+      "village": {
+        "spread_rates": [0.01, 0.5, 0.05, 0.07, 0.06, 0.02, 0.01, 0.4, 0.1, 0.3],
+        "churn_rates": [0.5, 0.9, 0.9, 0.6, 0.5, 0.5, 0.7, 0.6, 0.5, 0.8]
+      }
+    },
+    "training": {
+      "T_train_sbm": 100,
+      "T_train_village": 500,
+      "H_test": 25,
+      "n_test_runs": 50,
+      "seed": 42
+    }
+  },
+
+  "dependencies": {
+    "requirements": [
+      "numpy>=1.24",
+      "scipy>=1.10",
+      "pandas>=2.0",
+      "scikit-learn>=1.3",
+      "torch>=2.0",
+      "d3rlpy>=2.3",
+      "pymc>=5.0",
+      "python-igraph>=0.11",
+      "networkx>=3.0",
+      "matplotlib>=3.7",
+      "seaborn>=0.12",
+      "pyyaml>=6.0",
+      "tqdm>=4.65",
+      "joblib>=1.3"
+    ],
+    "requirements_dev": [
+      "pytest>=7.0",
+      "pytest-cov>=4.0",
+      "black>=23.0",
+      "ruff>=0.1",
+      "mypy>=1.0",
+      "jupyter>=1.0",
+      "ipykernel>=6.0"
+    ]
+  },
+
+  "entrypoints": [
+    {
+      "file": "train.py",
+      "description": "Run full Q-Ising pipeline on a network",
+      "cli_args": [
+        "--config (str, required): path to config YAML",
+        "--experiment (str): sbm | village",
+        "--village-id (int): which village (0-41, for village experiment)",
+        "--ensemble (flag): use MCMC ensemble instead of EMVS",
+        "--output-dir (str): where to save results",
+        "--seed (int, default 42)"
+      ]
+    },
+    {
+      "file": "evaluate.py",
+      "description": "Compare multiple policies on a trained simulator",
+      "cli_args": [
+        "--config (str, required)",
+        "--policies (list): random degree lir degree_bin plain_dqn q_ising",
+        "--model-path (str): path to trained Q-Ising model",
+        "--n-runs (int, default 50)",
+        "--H (int, default 25)"
+      ]
+    },
+    {
+      "file": "simulate_sis.py",
+      "description": "Generate observational panel from SIS simulator",
+      "cli_args": [
+        "--experiment (str): sbm | village",
+        "--T (int): training periods",
+        "--seed (int)",
+        "--output (str): path to save panel"
+      ]
+    }
+  ],
+
+  "docker_spec": {
+    "base_image": "python:3.10-slim",
+    "system_deps": ["build-essential", "libigraph-dev"],
+    "workdir": "/app",
+    "copy": ["requirements.txt", "src/", "configs/", "data/"],
+    "install_cmd": "pip install --no-cache-dir -r requirements.txt",
+    "default_cmd": "python train.py --config configs/sbm_default.yaml"
+  },
+
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "EMVS implementation is non-trivial: requires weighted penalized logistic regression with spike-and-slab EM updates. The exact EM update equations are not in the paper; must follow Rockova & George (2014).",
+      "mitigation": "Implement simplified version: fix spike-slab inclusion probs, solve L1-regularized logistic regression. Make EMVSSolver an abstract base class so it can be swapped."
+    },
+    {
+      "severity": "Medium",
+      "description": "HMC/NUTS sampling via PyMC may have convergence issues for high-N networks with many coupling parameters.",
+      "mitigation": "Add NUTS diagnostics (R-hat, ESS). Default to EMVS for large N; expose mcmc as opt-in flag."
+    },
+    {
+      "severity": "Medium",
+      "description": "SIR confidence 0.65 for implementation_assumptions: EMVS inner solver details are underspecified.",
+      "mitigation": "Design IsingFitter as abstract class with plug-in solvers; add TODO comments at low-confidence points."
+    },
+    {
+      "severity": "Medium",
+      "description": "Indian microfinance village adjacency data requires access to Banerjee et al. 2013 dataset (publicly available on Harvard Dataverse but download script needed).",
+      "mitigation": "Include data/download_villages.py script pointing to Harvard Dataverse URL."
+    },
+    {
+      "severity": "Low",
+      "description": "d3rlpy API may differ across versions; CQL hyperparameter names change between major releases.",
+      "mitigation": "Pin d3rlpy version; wrap CQL in thin adapter class."
+    },
+    {
+      "severity": "Low",
+      "description": "Ensemble with 20 agents x 60s = ~20 min training; acceptable on M1 but slow on CPU-only servers.",
+      "mitigation": "Add --n-agents flag; default to 5 for quick runs, 20 for full replication."
+    }
+  ]
+}

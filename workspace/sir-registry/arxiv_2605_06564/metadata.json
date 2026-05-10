@@ -1,0 +1,44 @@
+{
+  "paper_id": "arxiv_2605_06564",
+  "title": "Dynamic Treatment on Networks",
+  "authors": [
+    {"name": "Bengusu Nar", "affiliation": "Booth School of Business, University of Chicago", "role": "doctoral student, Econometrics and Statistics"},
+    {"name": "Jiguang Li", "affiliation": "Booth School of Business, University of Chicago", "role": "doctoral student, Econometrics and Statistics"},
+    {"name": "Veronika Rockova", "affiliation": "Booth School of Business, University of Chicago", "role": "Bruce Lindsay Professor of Econometrics and Statistics"},
+    {"name": "Panos Toulis", "affiliation": "Booth School of Business, University of Chicago", "role": "Professor of Econometrics and Statistics"}
+  ],
+  "arxiv_id": "2605.06564",
+  "submission_date": "2026-05-07",
+  "abstract_truncated": "We integrate network interference and dynamic treatment perspectives and propose Q-Ising, a three-stage pipeline that (i) estimates network adoption dynamics via a Bayesian dynamic Ising model from a single observed panel, (ii) augments treatment adoption histories with continuous posterior latent states, and (iii) learns a dynamic policy via offline reinforcement learning.",
+  "primary_domain": "RL",
+  "secondary_domains": ["Causal Inference", "Network Science", "Bayesian Statistics"],
+  "key_claims": [
+    "Q-Ising combines Bayesian dynamic Ising inference with offline RL for sequential decision-making under network interference from a single observational trajectory",
+    "Provides finite-sample regret upper bound decomposing into offline-RL uncertainty, network abstraction error, and first-stage Ising estimation error",
+    "Greedy (myopic) policies are provably suboptimal under network interference",
+    "Q-Ising matches or outperforms centrality-based baselines and plain DQN on SBM and real Indian microfinance village networks",
+    "Ensemble posterior sampling via MCMC provides interpretable uncertainty quantification over dynamic treatment decisions"
+  ],
+  "parsed_at": "2026-05-09T00:00:00Z",
+  "sir_version": 1,
+  "has_repo": true,
+  "has_notebook": true,
+  "has_comparison_report": true,
+  "pipeline_completed_at": "2026-05-09T00:00:00Z",
+  "pipeline_stages_completed": [
+    "stage_1_paper_parser",
+    "stage_2_sir_registry",
+    "stage_3_architecture_planner",
+    "stage_4_code_generator",
+    "stage_5_notebook_generator",
+    "stage_6_results_comparator"
+  ],
+  "repo_path": "paper-repos/arxiv_2605_06564/",
+  "overall_sir_confidence": 0.83,
+  "requires_manual_review": true,
+  "manual_review_items": [
+    "EMVS inner-loop solver (confidence 0.62) — verify against Rockova & George (2014)",
+    "Village pipeline is a partial stub — needs data download + full pipeline body",
+    "LIR baseline formula is a proxy — verify against Liu et al. (2017)"
+  ]
+}

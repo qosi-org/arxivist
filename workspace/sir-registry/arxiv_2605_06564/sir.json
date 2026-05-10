@@ -1,0 +1,371 @@
+{
+  "paper_id": "arxiv_2605_06564",
+  "sir_version": 1,
+
+  "provenance": {
+    "title": "Dynamic Treatment on Networks",
+    "authors": ["Bengusu Nar", "Jiguang Li", "Veronika Rockova", "Panos Toulis"],
+    "arxiv_id": "2605.06564",
+    "parsed_at": "2026-05-09T00:00:00Z",
+    "source": "uploaded PDF"
+  },
+
+  "architecture": {
+    "confidence": 0.88,
+    "description": "Q-Ising is a 3-stage pipeline: (1) Bayesian Dynamic Ising Model for network state estimation, (2) Offline Q-Learning (CQL) over latent states, (3) Ensemble Policy via MCMC posterior draws.",
+    "components": [
+      {
+        "name": "DynamicIsingModel",
+        "role": "Stage 1 — estimate node-level adoption probabilities from panel data",
+        "input": "Panel D = {y0, (a_t, y_t)_{t=1}^{T_train}}, adjacency M, node features X, bin partition {B_1..B_K}",
+        "output": "Estimated parameters theta_hat per node/bin; latent adoption probabilities l_hat^0_{i,t}",
+        "operation": "Node-wise logistic pseudo-likelihood with spike-and-slab priors; estimation via EMVS or HMC",
+        "confidence": 0.95
+      },
+      {
+        "name": "StateConstructor",
+        "role": "Stage 1 (post-inference) — aggregate node-level latent states to bin-level Q-Ising states",
+        "input": "Estimated no-intervention adoption probabilities l_hat^0_{i,t} and observed outcomes y_{t-1}",
+        "output": "State s_t = (l_bar^0_t, y_bar_{t-1}) in [0,1]^K x [0,1]^K",
+        "operation": "Bin-level averaging; counterfactual state set by zeroing treatment indicators (a_t = empty)",
+        "confidence": 0.95
+      },
+      {
+        "name": "OfflineCQL",
+        "role": "Stage 2 — learn Q-function over bin-level state-action space from offline transitions",
+        "input": "Offline transitions D_RL = {(s_t, b_t, r_t, s_{t+1})}",
+        "output": "Q-function Q: S x [K] -> R; greedy policy pi_hat(s) = argmax_b Q(s,b)",
+        "operation": "Conservative Q-Learning (CQL) with Bellman error + conservative penalty (alpha=0.1); neural network Q-function",
+        "framework": "d3rlpy library",
+        "confidence": 0.92
+      },
+      {
+        "name": "EnsemblePolicyMCMC",
+        "role": "Stage 3 — uncertainty quantification via posterior sampling",
+        "input": "P posterior MCMC draws {theta^(p)}_{p=1}^P",
+        "output": "Ensemble policy pi_hat^ens(s) = argmax_k sum_p 1{pi_hat^(p)(s) = k} (majority vote)",
+        "operation": "Train P separate CQL agents on P different state representations; majority-vote aggregation",
+        "confidence": 0.90
+      }
+    ],
+    "variants": [
+      {
+        "name": "EMVS variant",
+        "description": "Point-estimate using EMVS for fast MAP inference; single CQL agent",
+        "primary": true
+      },
+      {
+        "name": "Ensemble/MCMC variant",
+        "description": "Full posterior via HMC; P=10-20 CQL agents trained; majority-vote policy",
+        "primary": false
+      }
+    ],
+    "ambiguities": [
+      {
+        "location": "Section 3.2",
+        "description": "Neural network architecture for Q-function not specified (depth, width, activation). Only hidden layers [256,256] mentioned in Appendix E.",
+        "primary_assumption": "[256, 256] hidden layers with ReLU",
+        "alternatives": ["[128,128]", "[512,512]"],
+        "confidence": 0.80
+      },
+      {
+        "location": "Section 3.1",
+        "description": "EMVS convergence criterion not fully specified; '2-3 steps' mentioned but not exact stopping rule.",
+        "primary_assumption": "convergence when parameter change < 1e-4",
+        "alternatives": ["fixed 3 iterations", "likelihood-based tolerance"],
+        "confidence": 0.65
+      }
+    ]
+  },
+
+  "mathematical_spec": {
+    "confidence": 0.93,
+    "equations": [
+      {
+        "id": "eq_linear_predictor",
+        "name": "Dynamic Ising Linear Predictor",
+        "latex": "\\eta_{i,t}(a_t; \\theta_i) = \\beta_{0,k} + \\beta_{1,k} \\mathbf{1}_{a_t=i} + \\beta_{2,k} y_{i,t-1} + \\beta_{3,k} \\mathbf{1}_{a_t \\in N_i} + \\sum_{j \\in N_i} \\gamma_{k,m_j} y_{j,t-1}",
+        "role": "training",
+        "hyperparameters": ["beta_0_k (intercept)", "beta_1_k (direct treatment)", "beta_2_k (persistence)", "beta_3_k (neighbor treatment spillover)", "gamma_k_mj (peer influence coupling)"],
+        "note": "k = bin of node i; m_j = bin of neighbor j; N_i = neighbors of i"
+      },
+      {
+        "id": "eq_adoption_prob",
+        "name": "Node adoption probability",
+        "latex": "P(y_{i,t}=1 | Z_t, a_t, \\theta_i) = \\sigma(\\eta_{i,t}(a_t; \\theta_i))",
+        "role": "training and inference",
+        "hyperparameters": []
+      },
+      {
+        "id": "eq_likelihood",
+        "name": "Panel Likelihood (factorized)",
+        "latex": "L(\\theta) = \\prod_{i=1}^{N} \\prod_{t=1}^{T} \\frac{\\exp(y_{i,t} \\cdot \\eta_{i,t}(a_t; \\theta_i))}{1 + \\exp(\\eta_{i,t}(a_t; \\theta_i))}",
+        "role": "training",
+        "hyperparameters": []
+      },
+      {
+        "id": "eq_spike_slab",
+        "name": "Spike-and-Slab Prior for coupling parameters",
+        "latex": "\\gamma_{i,j} | z_{ij} \\sim (1-z_{ij}) N(0, v_0) + z_{ij} N(0, v_1), \\quad z_{ij} \\sim \\text{Bernoulli}\\left(\\frac{c}{|B_{m_i}|}\\right)",
+        "role": "training",
+        "hyperparameters": ["v0=0.01 (spike variance)", "v1=10.0 (slab variance)", "c=1.0 (inclusion scale)"],
+        "note": "For baseline/treatment/persistence: beta_{l,k} ~ N(0, tau^2) with tau^2=10.0"
+      },
+      {
+        "id": "eq_latent_state",
+        "name": "No-intervention latent adoption probability",
+        "latex": "\\hat{l}^0_{i,t} := \\sigma(\\eta_{i,t}(\\emptyset; \\hat{\\theta}))",
+        "role": "inference / state construction",
+        "hyperparameters": [],
+        "note": "a_t=empty means treatment indicators set to zero"
+      },
+      {
+        "id": "eq_bin_state",
+        "name": "Bin-level Q-Ising state aggregation",
+        "latex": "\\bar{l}^0_{t,k} = \\frac{1}{|B_k|} \\sum_{i \\in B_k} \\hat{l}^0_{i,t}, \\quad \\bar{y}_{t-1,k} = \\frac{1}{|B_k|} \\sum_{i \\in B_k} y_{i,t-1}",
+        "role": "inference",
+        "hyperparameters": []
+      },
+      {
+        "id": "eq_qising_state",
+        "name": "Q-Ising state vector",
+        "latex": "s_t = (\\bar{l}^0_t, \\bar{y}_{t-1}) \\in \\mathcal{S} := [0,1]^K \\times [0,1]^K",
+        "role": "inference",
+        "hyperparameters": []
+      },
+      {
+        "id": "eq_reward",
+        "name": "Per-period reward (adoption rate)",
+        "latex": "r_h = \\frac{1}{N} \\sum_{i=1}^{N} y_{i,h}",
+        "role": "training and evaluation",
+        "hyperparameters": []
+      },
+      {
+        "id": "eq_cql_loss",
+        "name": "CQL Objective",
+        "latex": "L_{CQL}(Q) = \\mathbb{E}_{(s,b,r,s') \\sim D_{RL}} \\left[ (Q(s,b) - \\mathcal{T}^b \\bar{Q})^2 \\right] + \\alpha \\mathbb{E}_{(s,b) \\sim D_{RL}} \\left[ \\log \\sum_{b'} \\exp Q(s,b') - Q(s,b) \\right]",
+        "role": "training",
+        "hyperparameters": ["alpha=0.1 (conservative penalty strength)", "psi=0.8 (discount factor)"]
+      },
+      {
+        "id": "eq_bellman_target",
+        "name": "Bellman backup",
+        "latex": "\\mathcal{T}^b Q(s_t, b_t) = r_t + \\psi \\max_{b' \\in [K]} Q(s_{t+1}, b')",
+        "role": "training",
+        "hyperparameters": ["psi=0.8"]
+      },
+      {
+        "id": "eq_sis_transmission",
+        "name": "SIS infection probability (experimental simulation)",
+        "latex": "p^{\\text{adopt}}_j = 1 - \\prod_{i \\in N(j), i \\text{ adopted}} (1 - \\beta_i)",
+        "role": "data generation (simulation only)",
+        "hyperparameters": ["beta_i: node-specific spread rate", "delta_i: node-specific churn rate"]
+      }
+    ]
+  },
+
+  "tensor_semantics": {
+    "confidence": 0.72,
+    "tensors": [
+      {"name": "y_t", "shape": "[N]", "dtype": "int (binary)", "role": "observed adoption outcomes at period t"},
+      {"name": "a_t", "shape": "scalar in [N]", "dtype": "int", "role": "action — index of treated node"},
+      {"name": "b_t", "shape": "scalar in [K]", "dtype": "int", "role": "bin-level action"},
+      {"name": "eta_it", "shape": "scalar", "dtype": "float32", "role": "linear predictor for node i at t"},
+      {"name": "l_hat_0_it", "shape": "scalar", "dtype": "float32", "role": "counterfactual no-treatment adoption probability for node i"},
+      {"name": "l_bar_0_t", "shape": "[K]", "dtype": "float32", "role": "bin-averaged counterfactual probabilities (forward-looking component of state)"},
+      {"name": "y_bar_t", "shape": "[K]", "dtype": "float32", "role": "bin-averaged observed outcomes (backward-looking component of state)"},
+      {"name": "s_t", "shape": "[2K]", "dtype": "float32", "role": "Q-Ising state vector; concatenation of l_bar and y_bar"},
+      {"name": "Q(s,b)", "shape": "[K]", "dtype": "float32", "role": "Q-function output for all bin actions"},
+      {"name": "theta_i", "shape": "[4 + |N_i|]", "dtype": "float32", "role": "per-node Ising parameter vector (intercept + treatment + persistence + spillover + couplings)"},
+      {"name": "gamma_k_m", "shape": "[K, K]", "dtype": "float32", "role": "bin-level coupling matrix (peer influence)"}
+    ],
+    "note": "N = number of nodes, K = number of bins. State dimension is 2K. Q-network input dim = 2K, output dim = K."
+  },
+
+  "training_pipeline": {
+    "confidence": 0.85,
+    "stage1_ising": {
+      "optimizer": "EMVS (EM-based variational selection) for MAP; HMC for full posterior",
+      "emvs_iterations": "typically 2-3 steps to convergence",
+      "hmc_draws": 200,
+      "hmc_tune_iterations": 300,
+      "library_hmc": "PyMC or Stan (not specified; assumed PyMC given Python ecosystem)",
+      "priors": {
+        "coupling_gamma": "Spike-and-slab: spike N(0, 0.01), slab N(0, 10.0), inclusion prob c/|B_m| with c=1.0",
+        "baseline_treatment_persistence": "N(0, 10.0)"
+      },
+      "wall_clock": "approx 20-30 seconds for state construction; 1 minute for ensemble with 200 MCMC draws"
+    },
+    "stage2_cql": {
+      "algorithm": "Conservative Q-Learning (CQL)",
+      "library": "d3rlpy",
+      "hidden_layers": [256, 256],
+      "learning_rate": 3e-4,
+      "batch_size": 64,
+      "max_steps": 30000,
+      "steps_per_epoch": 1000,
+      "early_stopping_patience": 10,
+      "early_stopping_min_delta": 1e-4,
+      "dropout_rate": 0.3,
+      "batch_normalization": true,
+      "alpha_cql": 0.1,
+      "discount_psi": 0.8,
+      "wall_clock": "60-65 seconds per agent",
+      "ensemble_agents": 20
+    },
+    "hardware": "Apple M1 chip (CPU only; no GPU specified)",
+    "reproducibility": "All experiments seeded for reproducibility (exact seed values not stated)"
+  },
+
+  "evaluation_protocol": {
+    "confidence": 0.95,
+    "datasets": [
+      {
+        "name": "Stochastic Block Model (SBM)",
+        "type": "synthetic",
+        "nodes": 500,
+        "blocks": 4,
+        "block_sizes": [187, 187, 63, 63],
+        "within_block_edge_prob": 0.1,
+        "between_block_edge_prob": 0.01,
+        "spread_rates": [0.010, 0.012, 0.1, 0.12],
+        "churn_rates": [0.4, 0.4, 0.2, 0.2],
+        "T_train": 100,
+        "H_test": 25,
+        "n_test_runs": 50
+      },
+      {
+        "name": "Indian Microfinance Villages (Karnataka)",
+        "type": "real network + simulated SIS dynamics",
+        "source": "Banerjee et al. 2013",
+        "n_villages": 42,
+        "community_detection": "edge-betweenness (igraph)",
+        "T_train": 500,
+        "H_test": 25,
+        "n_test_runs": 50,
+        "spread_params_by_community_rank": [0.01, 0.5, 0.05, 0.07, 0.06, 0.02, 0.01, 0.4, 0.1, 0.3],
+        "churn_params_by_community_rank": [0.5, 0.9, 0.9, 0.6, 0.5, 0.5, 0.7, 0.6, 0.5, 0.8]
+      }
+    ],
+    "metrics": [
+      {
+        "name": "Mean adoption rate per period",
+        "formula": "r_h = (1/N) * sum_i y_{i,h}",
+        "aggregation": "averaged over test horizon H and n_test_runs"
+      }
+    ],
+    "baselines": [
+      {"name": "Random", "description": "Uniform random bin selection"},
+      {"name": "Degree", "description": "Degree centrality — target highest degree node"},
+      {"name": "LIR", "description": "Local influence ranking (Liu et al. 2017) — identifies local degree leaders"},
+      {"name": "Degree-Bin", "description": "Topology heuristic that iterates bins selecting highest degree untreated node"},
+      {"name": "Plain DQN", "description": "Offline RL (same CQL framework) without Ising state augmentation — uses raw observations only"}
+    ],
+    "primary_results_sbm": {
+      "note": "Q-Ising achieves highest adoption rate and fastest ramp in SBM. Random outperforms pure topology methods because it seeds susceptible blocks by chance.",
+      "winner": "Q-Ising"
+    },
+    "primary_results_villages": {
+      "note": "Q-Ising matches or improves over Degree-Bin in majority of 42 villages. Performance gain negatively correlated with village modularity (approx -0.5). Full table in paper Table 2."
+    }
+  },
+
+  "implementation_assumptions": [
+    {
+      "assumption": "PyTorch used as deep learning backend for CQL network",
+      "basis": "d3rlpy library defaults to PyTorch",
+      "confidence": 0.90,
+      "alternatives": ["TensorFlow (d3rlpy also supports it)"]
+    },
+    {
+      "assumption": "PyMC3 or NumPyro used for HMC sampling",
+      "basis": "Common Python Bayesian libraries; paper cites Hoffman & Gelman 2014 (NUTS/HMC)",
+      "confidence": 0.65,
+      "alternatives": ["Stan via PyStan", "TFP", "Numpyro"]
+    },
+    {
+      "assumption": "igraph Python library for edge-betweenness community detection",
+      "basis": "Explicitly stated in Appendix E",
+      "confidence": 0.98
+    },
+    {
+      "assumption": "Community assignment (bin assignment) done once at initialization using spectral or edge-betweenness clustering, then held fixed",
+      "basis": "Paper describes bins as fixed partition; edge-betweenness is stated",
+      "confidence": 0.95
+    },
+    {
+      "assumption": "EMVS inner loop uses sklearn LogisticRegression with L1/L2 penalty weighted by spike-slab posterior inclusion probabilities",
+      "basis": "EMVS (Rockova & George 2014) description; convex optimization per iteration",
+      "confidence": 0.62,
+      "alternatives": ["custom gradient descent", "scipy minimize"]
+    },
+    {
+      "assumption": "Node-level Ising model is estimated independently per node (node-wise likelihood factorization)",
+      "basis": "Explicitly stated: 'enabling efficient likelihood-based inference'",
+      "confidence": 0.97
+    },
+    {
+      "assumption": "Random seeds for experiments not explicitly given; reproducibility must be ensured by setting global seeds",
+      "basis": "Paper says 'seeded appropriately' without specifying values",
+      "confidence": 0.85,
+      "alternatives": ["seed=42 as common default"]
+    },
+    {
+      "assumption": "Q-network uses ReLU activations between hidden layers",
+      "basis": "Standard in CQL/d3rlpy; not specified in paper",
+      "confidence": 0.80,
+      "alternatives": ["tanh", "GELU"]
+    },
+    {
+      "assumption": "Bin-level transitions are mapped from node-level by simply identifying which bin the treated node belongs to",
+      "basis": "Directly described in paper text",
+      "confidence": 0.98
+    },
+    {
+      "assumption": "For the SBM experiment, K=4 bins correspond exactly to the 4 ground-truth blocks",
+      "basis": "Figure 1 caption states K=4 bins; 4-block SBM",
+      "confidence": 0.90
+    }
+  ],
+
+  "confidence_annotations": {
+    "architecture": 0.88,
+    "mathematical_spec": 0.93,
+    "tensor_semantics": 0.72,
+    "training_pipeline": 0.85,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.65,
+    "overall_sir_confidence": 0.83
+  },
+
+  "ambiguities": [
+    {
+      "location": "Section 3.2, Appendix E.2",
+      "description": "Q-network activation function not stated",
+      "primary_assumption": "ReLU",
+      "alternatives": ["tanh", "GELU"],
+      "confidence": 0.80
+    },
+    {
+      "location": "Section 3.1",
+      "description": "EMVS implementation details: exact inner optimization solver not specified",
+      "primary_assumption": "Weighted L1-penalized logistic regression (scipy/sklearn)",
+      "alternatives": ["custom EM updates"],
+      "confidence": 0.62
+    },
+    {
+      "location": "General",
+      "description": "HMC library not named. Hoffman & Gelman 2014 (NUTS) is cited, suggesting NUTS variant of HMC",
+      "primary_assumption": "PyMC with NUTS sampler",
+      "alternatives": ["NumPyro", "Stan"],
+      "confidence": 0.65
+    },
+    {
+      "location": "Section 5.1",
+      "description": "How bins are defined for SBM experiment is not explicitly stated — likely matching to ground-truth communities",
+      "primary_assumption": "K=4 bins = 4 SBM blocks (identified by spectral clustering)",
+      "alternatives": ["degree-based binning"],
+      "confidence": 0.78
+    }
+  ]
+}
