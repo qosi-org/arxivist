@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  package-skill:
+    name: Package and release ArXivist skill
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Package skill folder into .skill zip
+        run: |
+          cd skill
+          zip -r "../arxivist-${{ steps.version.outputs.version }}.skill" . \
+            --exclude "*.DS_Store" \
+            --exclude "__pycache__/*"
+          cd ..
+          echo "Packaged: arxivist-${{ steps.version.outputs.version }}.skill"
+          ls -lh "arxivist-${{ steps.version.outputs.version }}.skill"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "ArXivist ${{ steps.version.outputs.version }}"
+          body: |
+            ## ArXivist ${{ steps.version.outputs.version }}
+
+            ### Install
+
+            Download `arxivist-${{ steps.version.outputs.version }}.skill` and install it into your
+            Claude environment by pointing Claude at the `skill/SKILL.md` inside the zip, or by
+            extracting and placing the `skill/` folder where your Claude skill loader expects it.
+
+            ### What's included
+
+            - `SKILL.md` — master orchestrator
+            - `agents/` — six specialist sub-agent instruction files (Stages 1–6)
+            - `schemas/` — JSON schemas for SIR, architecture plan, and comparison report
+            - `templates/` — blank SIR, repo layout, comparison report template
+            - `state/` — pipeline state schema
+
+            See the [README](https://github.com/qosi-org/arxivist/blob/main/README.md) for usage.
+          files: "arxivist-${{ steps.version.outputs.version }}.skill"
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}

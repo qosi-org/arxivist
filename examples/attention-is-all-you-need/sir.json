@@ -1,0 +1,355 @@
+{
+  "paper_id": "arxiv_1706_03762",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Attention Is All You Need",
+    "authors": [
+      "Ashish Vaswani",
+      "Noam Shazeer",
+      "Niki Parmar",
+      "Jakob Uszkoreit",
+      "Llion Jones",
+      "Aidan N. Gomez",
+      "Łukasz Kaiser",
+      "Illia Polosukhin"
+    ],
+    "affiliations": [
+      "Google Brain",
+      "Google Research",
+      "University of Toronto"
+    ],
+    "arxiv_id": "1706.03762",
+    "doi": null,
+    "submission_date": "2017-06-12",
+    "abstract": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer.",
+    "domain": "NLP",
+    "key_claims": [
+      "Transformers dispense with recurrence and convolutions entirely, relying solely on attention mechanisms",
+      "The Transformer achieves 28.4 BLEU on WMT 2014 EN-DE, outperforming existing best results including ensembles",
+      "Training takes 3.5 days on 8 P100 GPUs — significantly less than prior work",
+      "Multi-head attention allows the model to jointly attend to information from different representation subspaces",
+      "Positional encodings using sine and cosine functions allow the model to make use of sequence order"
+    ],
+    "parsed_at": "2025-01-01T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "Transformer-Base",
+    "modules": [
+      {
+        "name": "InputEmbedding",
+        "operation_type": "embedding_lookup",
+        "input_shape": "[B, T]",
+        "output_shape": "[B, T, D]",
+        "parameters": { "vocab_size": 37000, "d_model": 512 },
+        "paper_section": "Section 3.4",
+        "confidence": 0.95,
+        "notes": "Weights multiplied by sqrt(d_model) before adding positional encoding"
+      },
+      {
+        "name": "PositionalEncoding",
+        "operation_type": "sinusoidal_positional_encoding",
+        "input_shape": "[B, T, D]",
+        "output_shape": "[B, T, D]",
+        "parameters": { "d_model": 512, "max_len": 10000 },
+        "paper_section": "Section 3.5",
+        "confidence": 0.98,
+        "notes": "PE(pos, 2i) = sin(pos/10000^(2i/d_model)); PE(pos, 2i+1) = cos(pos/10000^(2i/d_model))"
+      },
+      {
+        "name": "MultiHeadAttention",
+        "operation_type": "multi_head_scaled_dot_product_attention",
+        "input_shape": "[B, T, D]",
+        "output_shape": "[B, T, D]",
+        "parameters": { "h": 8, "d_model": 512, "d_k": 64, "d_v": 64 },
+        "paper_section": "Section 3.2.2",
+        "confidence": 0.97,
+        "notes": "d_k = d_v = d_model / h = 64 for base model"
+      },
+      {
+        "name": "ScaledDotProductAttention",
+        "operation_type": "attention",
+        "input_shape": "[B, H, T, D_k]",
+        "output_shape": "[B, H, T, D_v]",
+        "parameters": { "d_k": 64 },
+        "paper_section": "Section 3.2.1",
+        "confidence": 0.99,
+        "notes": "Scores scaled by 1/sqrt(d_k) before softmax"
+      },
+      {
+        "name": "PositionwiseFeedForward",
+        "operation_type": "two_layer_mlp_with_relu",
+        "input_shape": "[B, T, D]",
+        "output_shape": "[B, T, D]",
+        "parameters": { "d_model": 512, "d_ff": 2048 },
+        "paper_section": "Section 3.3",
+        "confidence": 0.98,
+        "notes": "FFN(x) = max(0, xW1 + b1)W2 + b2"
+      },
+      {
+        "name": "LayerNorm",
+        "operation_type": "layer_normalization",
+        "input_shape": "[B, T, D]",
+        "output_shape": "[B, T, D]",
+        "parameters": { "d_model": 512, "eps": 1e-6 },
+        "paper_section": "Section 3.1",
+        "confidence": 0.95,
+        "notes": "Applied after each sub-layer with residual connection: LayerNorm(x + Sublayer(x))"
+      },
+      {
+        "name": "EncoderLayer",
+        "operation_type": "transformer_encoder_layer",
+        "input_shape": "[B, T, D]",
+        "output_shape": "[B, T, D]",
+        "parameters": { "N": 6 },
+        "paper_section": "Section 3.1",
+        "confidence": 0.99,
+        "notes": "Stack of N=6 identical layers, each with self-attention and FFN sub-layers"
+      },
+      {
+        "name": "DecoderLayer",
+        "operation_type": "transformer_decoder_layer",
+        "input_shape": "[B, T, D]",
+        "output_shape": "[B, T, D]",
+        "parameters": { "N": 6 },
+        "paper_section": "Section 3.1",
+        "confidence": 0.99,
+        "notes": "Stack of N=6 identical layers with masked self-attention, cross-attention, and FFN"
+      },
+      {
+        "name": "OutputProjection",
+        "operation_type": "linear_then_softmax",
+        "input_shape": "[B, T, D]",
+        "output_shape": "[B, T, V]",
+        "parameters": { "d_model": 512, "vocab_size": 37000 },
+        "paper_section": "Section 3.4",
+        "confidence": 0.95,
+        "notes": "Weights tied with input embedding matrix"
+      }
+    ],
+    "connections": [
+      { "from": "InputEmbedding", "to": "PositionalEncoding", "tensor_name": "embeddings" },
+      { "from": "PositionalEncoding", "to": "EncoderLayer", "tensor_name": "encoder_input" },
+      { "from": "EncoderLayer", "to": "DecoderLayer", "tensor_name": "encoder_output" },
+      { "from": "PositionalEncoding", "to": "DecoderLayer", "tensor_name": "decoder_input" },
+      { "from": "DecoderLayer", "to": "OutputProjection", "tensor_name": "decoder_output" },
+      { "from": "MultiHeadAttention", "to": "LayerNorm", "tensor_name": "attention_output" },
+      { "from": "PositionwiseFeedForward", "to": "LayerNorm", "tensor_name": "ffn_output" }
+    ],
+    "variants": [
+      {
+        "name": "Transformer-Base",
+        "differences": {
+          "d_model": 512, "d_ff": 2048, "h": 8, "N": 6, "d_k": 64, "d_v": 64,
+          "P_drop": 0.1, "train_steps": 100000
+        }
+      },
+      {
+        "name": "Transformer-Big",
+        "differences": {
+          "d_model": 1024, "d_ff": 4096, "h": 16, "N": 6, "d_k": 64, "d_v": 64,
+          "P_drop": 0.3, "train_steps": 300000
+        }
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "scaled_dot_product_attention",
+      "latex": "\\text{Attention}(Q, K, V) = \\text{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": ["d_k"],
+      "undefined_symbols": [],
+      "paper_section": "Equation 1, Section 3.2.1",
+      "confidence": 0.99
+    },
+    {
+      "name": "multi_head_attention",
+      "latex": "\\text{MultiHead}(Q,K,V) = \\text{Concat}(\\text{head}_1,\\dots,\\text{head}_h)W^O \\quad \\text{where head}_i = \\text{Attention}(QW_i^Q, KW_i^K, VW_i^V)",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": ["h", "d_k", "d_v", "d_model"],
+      "undefined_symbols": [],
+      "paper_section": "Equation 2, Section 3.2.2",
+      "confidence": 0.99
+    },
+    {
+      "name": "positionwise_feedforward",
+      "latex": "\\text{FFN}(x) = \\max(0, xW_1 + b_1)W_2 + b_2",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["d_model", "d_ff"],
+      "undefined_symbols": [],
+      "paper_section": "Equation 2, Section 3.3",
+      "confidence": 0.98
+    },
+    {
+      "name": "positional_encoding_sin",
+      "latex": "PE_{(pos, 2i)} = \\sin\\left(\\frac{pos}{10000^{2i/d_{\\text{model}}}}\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["d_model"],
+      "undefined_symbols": [],
+      "paper_section": "Equation 3, Section 3.5",
+      "confidence": 0.99
+    },
+    {
+      "name": "positional_encoding_cos",
+      "latex": "PE_{(pos, 2i+1)} = \\cos\\left(\\frac{pos}{10000^{2i/d_{\\text{model}}}}\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["d_model"],
+      "undefined_symbols": [],
+      "paper_section": "Equation 4, Section 3.5",
+      "confidence": 0.99
+    },
+    {
+      "name": "label_smoothed_cross_entropy",
+      "latex": "\\mathcal{L} = -(1 - \\epsilon_{ls}) \\log p(y^*) - \\frac{\\epsilon_{ls}}{|V|} \\sum_k \\log p(k)",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["epsilon_ls"],
+      "undefined_symbols": [],
+      "paper_section": "Section 5.4",
+      "confidence": 0.92
+    },
+    {
+      "name": "noam_learning_rate_schedule",
+      "latex": "lrate = d_{\\text{model}}^{-0.5} \\cdot \\min(step^{-0.5},\\; step \\cdot warmup\\_steps^{-1.5})",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["d_model", "warmup_steps"],
+      "undefined_symbols": [],
+      "paper_section": "Equation 3, Section 5.3",
+      "confidence": 0.99
+    }
+  ],
+  "tensor_semantics": [
+    { "name": "src_tokens",   "shape_notation": "[B, T_src]",       "dtype": "int64",   "tensor_type": "input",        "module": "InputEmbedding",          "confidence": 0.97 },
+    { "name": "tgt_tokens",   "shape_notation": "[B, T_tgt]",       "dtype": "int64",   "tensor_type": "input",        "module": "InputEmbedding",          "confidence": 0.97 },
+    { "name": "src_emb",      "shape_notation": "[B, T_src, D]",    "dtype": "float32", "tensor_type": "intermediate", "module": "PositionalEncoding",      "confidence": 0.95 },
+    { "name": "tgt_emb",      "shape_notation": "[B, T_tgt, D]",    "dtype": "float32", "tensor_type": "intermediate", "module": "PositionalEncoding",      "confidence": 0.95 },
+    { "name": "Q",            "shape_notation": "[B, H, T, D_k]",   "dtype": "float32", "tensor_type": "intermediate", "module": "MultiHeadAttention",      "confidence": 0.97 },
+    { "name": "K",            "shape_notation": "[B, H, T, D_k]",   "dtype": "float32", "tensor_type": "intermediate", "module": "MultiHeadAttention",      "confidence": 0.97 },
+    { "name": "V",            "shape_notation": "[B, H, T, D_v]",   "dtype": "float32", "tensor_type": "intermediate", "module": "MultiHeadAttention",      "confidence": 0.97 },
+    { "name": "attn_weights", "shape_notation": "[B, H, T, T]",     "dtype": "float32", "tensor_type": "intermediate", "module": "ScaledDotProductAttention","confidence": 0.95 },
+    { "name": "encoder_out",  "shape_notation": "[B, T_src, D]",    "dtype": "float32", "tensor_type": "intermediate", "module": "EncoderLayer",            "confidence": 0.98 },
+    { "name": "decoder_out",  "shape_notation": "[B, T_tgt, D]",    "dtype": "float32", "tensor_type": "intermediate", "module": "DecoderLayer",            "confidence": 0.98 },
+    { "name": "logits",       "shape_notation": "[B, T_tgt, V]",    "dtype": "float32", "tensor_type": "output",       "module": "OutputProjection",        "confidence": 0.96 }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Adam",
+      "learning_rate": null,
+      "beta1": 0.9,
+      "beta2": 0.98,
+      "weight_decay": 0.0,
+      "confidence": 0.99
+    },
+    "lr_schedule": {
+      "type": "noam",
+      "warmup_steps": 4000,
+      "total_steps": 100000,
+      "confidence": 0.99
+    },
+    "batch_size": null,
+    "effective_batch_size": 25000,
+    "training_steps": 100000,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.91
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      { "name": "WMT 2014 English-German", "split": "test",  "size": 3003,   "publicly_available": true },
+      { "name": "WMT 2014 English-French", "split": "test",  "size": 26368,  "publicly_available": true },
+      { "name": "WMT 2014 English-German", "split": "train", "size": 4500000,"publicly_available": true }
+    ],
+    "metrics": ["BLEU"],
+    "reported_results": [
+      { "metric": "BLEU", "dataset": "WMT 2014 English-German", "split": "test", "value": 28.4, "is_primary": true },
+      { "metric": "BLEU", "dataset": "WMT 2014 English-French", "split": "test", "value": 41.8, "is_primary": false },
+      { "metric": "BLEU", "dataset": "WMT 2014 English-German", "split": "test", "value": 27.3, "is_primary": false }
+    ],
+    "baselines": [
+      "ByteNet",
+      "Deep-Att + PosUnk",
+      "GNMT + RL",
+      "ConvS2S",
+      "MoE"
+    ],
+    "compute": "8 × NVIDIA P100 GPUs, 3.5 days (base model), 12 hours (base model faster)",
+    "special_conditions": [
+      "Beam search with beam size 4 and length penalty alpha=0.6",
+      "Checkpoint averaging over last 5 checkpoints saved at 10-minute intervals",
+      "BPE / word-piece tokenization with shared source-target vocabulary of 37000 tokens"
+    ],
+    "confidence": 0.97
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Per-token batch size of ~25000 tokens achieved via gradient accumulation if GPU memory is insufficient",
+      "basis": "Paper specifies ~25000 tokens per batch; standard practice for large effective batch sizes",
+      "confidence": 0.75,
+      "alternatives": ["Distributed training across 8 GPUs with no accumulation"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Dropout applied to attention weights, FFN activations, and embeddings with P_drop=0.1 (base)",
+      "basis": "Section 5.4 describes dropout regularisation; 0.1 is stated for base model",
+      "confidence": 0.96,
+      "alternatives": [],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Weight initialisation follows PyTorch defaults (Xavier uniform for linear layers)",
+      "basis": "Paper does not specify; Xavier uniform is standard for transformer implementations",
+      "confidence": 0.70,
+      "alternatives": ["Scaled initialisation as in T5", "Normal distribution with small std"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Layer norm uses epsilon=1e-6",
+      "basis": "Common default in reference implementations; paper does not specify",
+      "confidence": 0.72,
+      "alternatives": ["1e-5", "1e-8"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Label smoothing epsilon=0.1",
+      "basis": "Explicitly stated in Section 5.4",
+      "confidence": 0.99,
+      "alternatives": [],
+      "affects_section": "training_pipeline"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 5.1 — Batches and padding",
+      "description": "Paper states approximately 25000 source and 25000 target tokens per batch but does not specify per-GPU vs total, or whether this is before or after BPE",
+      "primary_assumption": "25000 tokens per batch total across all 8 GPUs, after BPE",
+      "alternatives": ["25000 tokens per GPU (200000 total)", "25000 source tokens only"],
+      "confidence": 0.65
+    },
+    {
+      "location": "Section 3.4 — Embeddings and softmax",
+      "description": "The paper states input embedding weights are shared with the pre-softmax linear transformation but it is ambiguous whether this applies to both source and target embeddings",
+      "primary_assumption": "All three weight matrices (source embedding, target embedding, pre-softmax) are tied",
+      "alternatives": ["Only target embedding and pre-softmax are tied"],
+      "confidence": 0.80
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.97,
+    "mathematical_spec": 0.98,
+    "tensor_semantics": 0.96,
+    "training_pipeline": 0.91,
+    "evaluation_protocol": 0.97,
+    "implementation_assumptions": 0.82,
+    "overall_sir_confidence": 0.94
+  }
+}

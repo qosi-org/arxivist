@@ -1,0 +1,237 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  validate-schemas:
+    name: Validate JSON schemas and artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install jsonschema
+        run: pip install "jsonschema>=4.0.0"
+
+      - name: Validate JSON syntax — all tracked JSON files
+        run: |
+          echo "Checking JSON syntax..."
+          fail=0
+          while IFS= read -r -d '' f; do
+            if ! python3 -m json.tool "$f" > /dev/null 2>&1; then
+              echo "FAIL (invalid JSON): $f"
+              python3 -m json.tool "$f" || true
+              fail=1
+            else
+              echo "OK: $f"
+            fi
+          done < <(git ls-files -z '*.json')
+          exit $fail
+
+      - name: Validate sir_template against sir_schema
+        run: |
+          python3 - <<'EOF'
+          import json, jsonschema, sys
+
+          with open("skill/schemas/sir_schema.json") as f:
+              schema = json.load(f)
+
+          with open("skill/templates/sir_template.json") as f:
+              template = json.load(f)
+
+          # The template has empty/null values — validate structural shape only.
+          # We remove the "required" constraints for this check because the template
+          # is intentionally blank (all required fields present but empty/null).
+          def strip_required(s):
+              if isinstance(s, dict):
+                  s.pop("required", None)
+                  for v in s.values():
+                      strip_required(v)
+              elif isinstance(s, list):
+                  for item in s:
+                      strip_required(item)
+
+          relaxed = json.loads(json.dumps(schema))
+          strip_required(relaxed)
+
+          try:
+              jsonschema.validate(template, relaxed)
+              print("OK: sir_template.json is structurally valid against sir_schema.json")
+          except jsonschema.ValidationError as e:
+              print(f"FAIL: {e.message}")
+              sys.exit(1)
+          EOF
+
+      - name: Validate example SIR against sir_schema
+        run: |
+          python3 - <<'EOF'
+          import json, jsonschema, sys
+
+          with open("skill/schemas/sir_schema.json") as f:
+              schema = json.load(f)
+
+          with open("examples/attention-is-all-you-need/sir.json") as f:
+              example = json.load(f)
+
+          try:
+              jsonschema.validate(example, schema)
+              print("OK: examples/attention-is-all-you-need/sir.json validates against sir_schema.json")
+          except jsonschema.ValidationError as e:
+              print(f"FAIL: {e.message}")
+              print(f"Path: {list(e.absolute_path)}")
+              sys.exit(1)
+          EOF
+
+      - name: Validate global_index.json structure
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+
+          with open("workspace/sir-registry/global_index.json") as f:
+              idx = json.load(f)
+
+          required_keys = {"index_version", "total_papers", "papers"}
+          missing = required_keys - idx.keys()
+          if missing:
+              print(f"FAIL: global_index.json missing keys: {missing}")
+              sys.exit(1)
+
+          if not isinstance(idx["papers"], list):
+              print("FAIL: global_index.json 'papers' must be an array")
+              sys.exit(1)
+
+          print(f"OK: global_index.json is valid (total_papers={idx['total_papers']})")
+          EOF
+
+      - name: Check SKILL.md line count
+        run: |
+          lines=$(wc -l < skill/SKILL.md)
+          echo "skill/SKILL.md: ${lines} lines"
+          if [ "$lines" -gt 500 ]; then
+            echo "FAIL: SKILL.md exceeds 500 lines (${lines}). Keep the master orchestrator concise."
+            exit 1
+          fi
+          echo "OK: within 500-line limit"
+
+      - name: Check all agent files exist
+        run: |
+          fail=0
+          for agent in \
+            skill/agents/01_paper_parser.md \
+            skill/agents/02_sir_registry.md \
+            skill/agents/03_architecture_planner.md \
+            skill/agents/04_code_generator.md \
+            skill/agents/05_notebook_generator.md \
+            skill/agents/06_results_comparator.md; do
+            if [ -f "$agent" ]; then
+              echo "OK: $agent"
+            else
+              echo "FAIL: missing $agent"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Check all schema files exist
+        run: |
+          fail=0
+          for schema in \
+            skill/schemas/sir_schema.json \
+            skill/schemas/architecture_plan_schema.json \
+            skill/schemas/comparison_report_schema.json \
+            skill/state/pipeline_state_schema.json; do
+            if [ -f "$schema" ]; then
+              echo "OK: $schema"
+            else
+              echo "FAIL: missing $schema"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Check workspace scaffold exists
+        run: |
+          fail=0
+          for f in \
+            workspace/.gitkeep \
+            workspace/sir-registry/.gitkeep \
+            workspace/sir-registry/global_index.json \
+            workspace/paper-repos/.gitkeep; do
+            if [ -f "$f" ]; then
+              echo "OK: $f"
+            else
+              echo "FAIL: missing workspace scaffold file: $f"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Check agent files contain required sections
+        run: |
+          python3 - <<'EOF'
+          import os, sys
+
+          required_sections = [
+              "Input Contract",
+              "Output Contract",
+              "Must NOT Do",
+              "Output Checklist",
+          ]
+
+          agents_dir = "skill/agents"
+          fail = False
+
+          for fname in sorted(os.listdir(agents_dir)):
+              if not fname.endswith(".md"):
+                  continue
+              path = os.path.join(agents_dir, fname)
+              with open(path) as f:
+                  content = f.read()
+              for section in required_sections:
+                  if section not in content:
+                      print(f"FAIL: {fname} missing section containing '{section}'")
+                      fail = True
+                  else:
+                      print(f"OK: {fname} — '{section}' present")
+
+          sys.exit(1 if fail else 0)
+          EOF
+
+  lint-markdown:
+    name: Lint Markdown files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check no TODO/FIXME left in schema files
+        run: |
+          fail=0
+          while IFS= read -r -d '' f; do
+            if grep -qiE 'TODO|FIXME' "$f"; then
+              echo "WARN: $f contains TODO/FIXME markers"
+            fi
+          done < <(git ls-files -z '*.json')
+          # Warn only, do not fail — TODOs in schemas are informational
+          exit 0
+
+      - name: Check README exists and is non-empty
+        run: |
+          for doc in README.md CONTRIBUTING.md docs/getting-started.md docs/how-it-works.md docs/sir-specification.md; do
+            if [ ! -s "$doc" ]; then
+              echo "FAIL: $doc is missing or empty"
+              exit 1
+            fi
+            echo "OK: $doc"
+          done

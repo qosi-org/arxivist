@@ -1,0 +1,232 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Scientific Intermediate Representation (SIR)",
+  "description": "Canonical machine-readable abstraction of a research paper produced by ArXivist Stage 1",
+  "type": "object",
+  "required": [
+    "paper_id",
+    "provenance",
+    "architecture",
+    "mathematical_spec",
+    "tensor_semantics",
+    "training_pipeline",
+    "evaluation_protocol",
+    "implementation_assumptions",
+    "ambiguities",
+    "confidence_annotations"
+  ],
+  "properties": {
+    "paper_id": { "type": "string" },
+    "sir_version": { "type": "integer", "default": 1 },
+    "provenance": {
+      "type": "object",
+      "required": ["title", "authors", "domain", "parsed_at"],
+      "properties": {
+        "title": { "type": "string" },
+        "authors": { "type": "array", "items": { "type": "string" } },
+        "affiliations": { "type": "array", "items": { "type": "string" } },
+        "arxiv_id": { "type": ["string", "null"] },
+        "doi": { "type": ["string", "null"] },
+        "submission_date": { "type": ["string", "null"] },
+        "abstract": { "type": "string", "maxLength": 500 },
+        "domain": {
+          "type": "string",
+          "enum": ["CV", "NLP", "RL", "Audio", "Tabular", "Multimodal", "Other"]
+        },
+        "key_claims": { "type": "array", "items": { "type": "string" }, "maxItems": 5 },
+        "parsed_at": { "type": "string", "format": "date-time" },
+        "arxivist_version": { "type": "string" }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "required": ["modules", "connections", "variants"],
+      "properties": {
+        "primary_variant": { "type": "string" },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "operation_type", "confidence"],
+            "properties": {
+              "name": { "type": "string" },
+              "operation_type": { "type": "string" },
+              "input_shape": { "type": ["string", "null"] },
+              "output_shape": { "type": ["string", "null"] },
+              "parameters": { "type": "object" },
+              "paper_section": { "type": ["string", "null"] },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "notes": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "to"],
+            "properties": {
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "tensor_name": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "differences": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "mathematical_spec": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "latex", "role", "confidence"],
+        "properties": {
+          "name": { "type": "string" },
+          "latex": { "type": "string" },
+          "role": { "type": "string", "enum": ["loss", "objective", "attention", "normalization", "activation", "other"] },
+          "used_in": { "type": "string", "enum": ["training", "inference", "both"] },
+          "hyperparameters": { "type": "array", "items": { "type": "string" } },
+          "undefined_symbols": { "type": "array", "items": { "type": "string" } },
+          "paper_section": { "type": ["string", "null"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "tensor_semantics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "shape_notation", "tensor_type", "confidence"],
+        "properties": {
+          "name": { "type": "string" },
+          "shape_notation": { "type": "string" },
+          "dtype": { "type": ["string", "null"] },
+          "tensor_type": { "type": "string", "enum": ["input", "output", "intermediate", "parameter"] },
+          "module": { "type": ["string", "null"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "training_pipeline": {
+      "type": "object",
+      "properties": {
+        "optimizer": {
+          "type": "object",
+          "properties": {
+            "name": { "type": ["string", "null"] },
+            "learning_rate": { "type": ["number", "null"] },
+            "beta1": { "type": ["number", "null"] },
+            "beta2": { "type": ["number", "null"] },
+            "weight_decay": { "type": ["number", "null"] },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "lr_schedule": {
+          "type": "object",
+          "properties": {
+            "type": { "type": ["string", "null"] },
+            "warmup_steps": { "type": ["integer", "null"] },
+            "total_steps": { "type": ["integer", "null"] },
+            "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "batch_size": { "type": ["integer", "null"] },
+        "effective_batch_size": { "type": ["integer", "null"] },
+        "training_steps": { "type": ["integer", "null"] },
+        "epochs": { "type": ["integer", "null"] },
+        "mixed_precision": { "type": ["string", "null"] },
+        "gradient_clipping": { "type": ["number", "null"] },
+        "data_augmentation": { "type": "array", "items": { "type": "string" } },
+        "curriculum": { "type": ["string", "null"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "evaluation_protocol": {
+      "type": "object",
+      "required": ["datasets", "metrics", "reported_results"],
+      "properties": {
+        "datasets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "split": { "type": "string" },
+              "size": { "type": ["integer", "null"] },
+              "publicly_available": { "type": ["boolean", "null"] }
+            }
+          }
+        },
+        "metrics": { "type": "array", "items": { "type": "string" } },
+        "reported_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["metric", "dataset", "value"],
+            "properties": {
+              "metric": { "type": "string" },
+              "dataset": { "type": "string" },
+              "split": { "type": "string" },
+              "value": { "type": "number" },
+              "is_primary": { "type": "boolean", "default": false }
+            }
+          }
+        },
+        "baselines": { "type": "array", "items": { "type": "string" } },
+        "compute": { "type": ["string", "null"] },
+        "special_conditions": { "type": "array", "items": { "type": "string" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "implementation_assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["assumption", "basis", "confidence"],
+        "properties": {
+          "assumption": { "type": "string" },
+          "basis": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "alternatives": { "type": "array", "items": { "type": "string" } },
+          "affects_section": { "type": "string" }
+        }
+      }
+    },
+    "ambiguities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["location", "description", "primary_assumption", "confidence"],
+        "properties": {
+          "location": { "type": "string" },
+          "description": { "type": "string" },
+          "primary_assumption": {},
+          "alternatives": { "type": "array" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "confidence_annotations": {
+      "type": "object",
+      "required": ["overall_sir_confidence"],
+      "properties": {
+        "architecture": { "type": "number", "minimum": 0, "maximum": 1 },
+        "mathematical_spec": { "type": "number", "minimum": 0, "maximum": 1 },
+        "tensor_semantics": { "type": "number", "minimum": 0, "maximum": 1 },
+        "training_pipeline": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evaluation_protocol": { "type": "number", "minimum": 0, "maximum": 1 },
+        "implementation_assumptions": { "type": "number", "minimum": 0, "maximum": 1 },
+        "overall_sir_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

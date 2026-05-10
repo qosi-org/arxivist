@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ArXivist Pipeline State",
+  "description": "Persistent state object tracking a paper's progress through the ArXivist pipeline. Written by the orchestrator after each stage. Lives at sir-registry/{paper_id}/pipeline_state.json",
+  "type": "object",
+  "required": [
+    "paper_id",
+    "current_stage",
+    "stages_completed",
+    "artifacts",
+    "confidence_flags",
+    "human_review_required",
+    "loop_count",
+    "created_at",
+    "last_updated"
+  ],
+  "properties": {
+    "paper_id": {
+      "type": "string",
+      "description": "Unique paper identifier. Format: arxiv_{YYMM}_{NNNNNN} or paper_{slug}"
+    },
+    "paper_title": {
+      "type": "string",
+      "description": "Full paper title, set after Stage 1"
+    },
+    "current_stage": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6,
+      "description": "The stage currently executing or the next stage to execute"
+    },
+    "stages_completed": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "description": "List of stage numbers that have successfully completed"
+    },
+    "stage_timestamps": {
+      "type": "object",
+      "description": "ISO timestamps for when each stage completed",
+      "properties": {
+        "1": { "type": ["string", "null"] },
+        "2": { "type": ["string", "null"] },
+        "3": { "type": ["string", "null"] },
+        "4": { "type": ["string", "null"] },
+        "5": { "type": ["string", "null"] },
+        "6": { "type": ["string", "null"] }
+      }
+    },
+    "stage_confidence": {
+      "type": "object",
+      "description": "Overall confidence score recorded after each stage completed",
+      "properties": {
+        "1": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "2": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "3": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "4": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "5": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "6": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    },
+    "sir_path": {
+      "type": "string",
+      "description": "Path to canonical SIR artifact",
+      "default": "sir-registry/{paper_id}/sir.json"
+    },
+    "repo_path": {
+      "type": "string",
+      "description": "Path to generated repository root",
+      "default": "paper-repos/{paper_id}/"
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Paths to artifacts produced by each stage. null = not yet produced.",
+      "properties": {
+        "sir": { "type": ["string", "null"] },
+        "architecture_plan": { "type": ["string", "null"] },
+        "repo_initialized": { "type": "boolean", "default": false },
+        "notebook_path": { "type": ["string", "null"] },
+        "comparison_report": { "type": ["string", "null"] }
+      }
+    },
+    "confidence_flags": {
+      "type": "object",
+      "description": "Sections flagged for low confidence. Key = section name, value = confidence score.",
+      "additionalProperties": { "type": "number" }
+    },
+    "human_review_required": {
+      "type": "boolean",
+      "description": "Set to true if any stage produces confidence < 0.5 or validation failure"
+    },
+    "human_review_reasons": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of reasons why human review is required"
+    },
+    "loop_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of repair/retry loops executed on this paper"
+    },
+    "retry_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "stage": { "type": "integer" },
+          "retry_at": { "type": "string" },
+          "reason": { "type": "string" },
+          "outcome": { "type": "string", "enum": ["success", "failed", "escalated"] }
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "pipeline_complete": {
+      "type": "boolean",
+      "default": false,
+      "description": "True only when stages 1-5 have completed and comparison is not pending"
+    }
+  },
+
+  "examples": [
+    {
+      "paper_id": "arxiv_2301_099130",
+      "paper_title": "Attention Is All You Need",
+      "current_stage": 3,
+      "stages_completed": [1, 2],
+      "stage_timestamps": { "1": "2024-01-15T10:23:00Z", "2": "2024-01-15T10:31:00Z", "3": null, "4": null, "5": null, "6": null },
+      "stage_confidence": { "1": 0.84, "2": 1.0, "3": null, "4": null, "5": null, "6": null },
+      "sir_path": "sir-registry/arxiv_2301_099130/sir.json",
+      "repo_path": "paper-repos/arxiv_2301_099130/",
+      "artifacts": {
+        "sir": "sir-registry/arxiv_2301_099130/sir.json",
+        "architecture_plan": null,
+        "repo_initialized": false,
+        "notebook_path": null,
+        "comparison_report": null
+      },
+      "confidence_flags": { "training_pipeline": 0.61 },
+      "human_review_required": false,
+      "human_review_reasons": [],
+      "loop_count": 0,
+      "retry_history": [],
+      "created_at": "2024-01-15T10:20:00Z",
+      "last_updated": "2024-01-15T10:31:00Z",
+      "pipeline_complete": false
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "paper_id": "",
+  "sir_version": 1,
+  "provenance": {
+    "title": "",
+    "authors": [],
+    "affiliations": [],
+    "arxiv_id": null,
+    "doi": null,
+    "submission_date": null,
+    "abstract": "",
+    "domain": "Other",
+    "key_claims": [],
+    "parsed_at": "",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "",
+    "modules": [],
+    "connections": [],
+    "variants": []
+  },
+  "mathematical_spec": [],
+  "tensor_semantics": [],
+  "training_pipeline": {
+    "optimizer": {
+      "name": null,
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.0
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.0
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.0
+  },
+  "evaluation_protocol": {
+    "datasets": [],
+    "metrics": [],
+    "reported_results": [],
+    "baselines": [],
+    "compute": null,
+    "special_conditions": [],
+    "confidence": 0.0
+  },
+  "implementation_assumptions": [],
+  "ambiguities": [],
+  "confidence_annotations": {
+    "architecture": 0.0,
+    "mathematical_spec": 0.0,
+    "tensor_semantics": 0.0,
+    "training_pipeline": 0.0,
+    "evaluation_protocol": 0.0,
+    "implementation_assumptions": 0.0,
+    "overall_sir_confidence": 0.0
+  }
+}
