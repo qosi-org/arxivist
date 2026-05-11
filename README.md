@@ -1,117 +1,194 @@
 # ArXivist
 
-**ArXivist** is a multi-agent Claude skill that converts scientific papers into fully executable,
-reproducible Git repositories — automatically.
+**ArXivist** converts scientific papers into fully executable, reproducible codebases - automatically, using a multi-agent workflow.
 
-Give it an arXiv URL or a PDF. It reads the paper, extracts a structured Scientific Intermediate
-Representation (SIR), plans the software architecture, generates a complete codebase, produces a
-runnable Jupyter notebook, and — after you run the code — scores how closely your results match
-the paper's reported metrics.
+Point it at an arXiv URL, a DOI, or a PDF. ArXivist reads the paper, extracts every architectural
+decision, equation, training detail, and evaluation protocol into a structured machine-readable
+representation, then generates a complete, runnable repository from it. When you run the code and
+have results, it scores how faithfully your implementation reproduces the paper's reported metrics
+and tells you exactly why any gaps exist.
 
-Built by [qosi-org](https://github.com/qosi-org).
+Built by [QOSI](https://github.com/qosi-org).
+
+---
+
+## The problem
+
+Reproducing a machine learning paper takes weeks. The gap between reading a paper and having
+working code is filled with undocumented hyperparameters, ambiguous architecture descriptions,
+missing preprocessing steps, and implementation decisions the authors never wrote down. Most
+papers are never reproduced at all.
+
+ArXivist exists to close that gap.
 
 ---
 
 ## How it works
 
-ArXivist orchestrates six specialist sub-agents in sequence:
+ArXivist runs a six-stage pipeline, each stage owned by a specialist sub-system:
 
 ```
-Paper (PDF / arXiv URL)
-      │
-      ▼
-┌─────────────────────┐
-│  Stage 1            │  Parses paper into a Scientific Intermediate
-│  Paper Parser       │  Representation (SIR) — structured JSON with
-│                     │  architecture, equations, training details,
-│                     │  evaluation protocol, and confidence scores
-└────────┬────────────┘
+Paper (PDF / arXiv URL / DOI)
          │
          ▼
-┌─────────────────────┐
-│  Stage 2            │  Commits the SIR to the global registry with
-│  SIR Registry       │  versioning, metadata, and provenance tracking
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Stage 3            │  Translates the SIR into a complete software
-│  Architecture       │  architecture plan: module hierarchy, tensor
-│  Planner            │  flows, configs, dependencies, Docker spec
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Stage 4            │  Generates the full Git repository — source
-│  Code Generator     │  code, configs, Dockerfile, dataset scripts,
-│                     │  training & evaluation entrypoints, README
-└────────┬────────────┘
-         │
-         ▼
-┌─────────────────────┐
-│  Stage 5            │  Produces a runnable Jupyter notebook that
-│  Notebook           │  walks through each component and runs a
-│  Generator          │  mini training loop on synthetic data
-└────────┬────────────┘
-         │
-    [you run the code]
-         │
-         ▼
-┌─────────────────────┐
-│  Stage 6            │  Compares your results against the paper's
-│  Results            │  reported metrics: deviation scores,
-│  Comparator         │  hallucination report, reproducibility score
-└─────────────────────┘
+┌──────────────────────────────────────┐
+│  Stage 1 — Paper Parser              │
+│                                      │
+│  Reads the paper end-to-end and      │
+│  extracts a Scientific Intermediate  │
+│  Representation (SIR): architecture  │
+│  graph, equations in LaTeX, tensor   │
+│  shapes, training pipeline, eval     │
+│  protocol, and confidence scores.    │
+│  Every ambiguity is flagged.         │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  Stage 2 — SIR Registry              │
+│                                      │
+│  Commits the SIR to a versioned      │
+│  global registry with full           │
+│  provenance tracking. Every paper    │
+│  processed by ArXivist accumulates   │
+│  here permanently.                   │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  Stage 3 — Architecture Planner      │
+│                                      │
+│  Translates the SIR into a concrete  │
+│  software plan: module hierarchy,    │
+│  tensor flow specs, config schema,   │
+│  dependency manifest, Docker spec,   │
+│  and risk assessment.                │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  Stage 4 — Code Generator            │
+│                                      │
+│  Generates the full repository:      │
+│  source code, configs, Dockerfile,   │
+│  dataset scripts, training and       │
+│  evaluation entrypoints, README.     │
+│  Every assumption is annotated.      │
+│  Unknown components are stubbed      │
+│  and clearly labelled.               │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  Stage 5 — Notebook Generator        │
+│                                      │
+│  Produces a runnable Jupyter         │
+│  notebook: component walkthroughs,   │
+│  equations rendered inline, and a   │
+│  mini training loop on synthetic     │
+│  data — no downloads required.       │
+└─────────────────┬────────────────────┘
+                  │
+            [you run the code]
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  Stage 6 — Results Comparator        │
+│                                      │
+│  Compares your results against the   │
+│  paper's reported metrics. Computes  │
+│  a reproducibility score, performs   │
+│  root cause analysis on deviations,  │
+│  and audits the generated code for   │
+│  hallucinations.                     │
+└──────────────────────────────────────┘
 ```
-
-Everything is stored in `workspace/` — a persistent `sir-registry/` of all processed papers, and
-a `paper-repos/` folder of generated implementations.
 
 ---
 
-## SIR Learning System
+## The SIR
 
-ArXivist includes `sir_learner.py`, a lightweight corpus-learning subsystem trained entirely on accumulated SIR artifacts stored in the global registry.
+At the core of ArXivist is the **Scientific Intermediate Representation** — a structured,
+machine-readable abstraction of a paper's entire implementation surface.
 
-Unlike the primary paper-parsing workflow, the learner does not attempt full semantic understanding of papers. Instead, it compresses statistical structure and implementation patterns observed across previously processed research into a fast predictive prior.
+The SIR is not a summary. It is a complete engineering specification extracted from prose:
 
-The learner is trained on generated `(prompt → SIR)` examples derived deterministically from existing SIRs and can predict:
+- **Architecture graph** — every named module, its input/output tensor shapes, and the
+  directed connections between them
+- **Mathematical spec** — every equation in LaTeX, named, categorised, and linked to its
+  role in training or inference
+- **Tensor semantics** — shape notation, dtype, and role for every major tensor
+- **Training pipeline** — optimiser, learning rate schedule, batch size, augmentation,
+  mixed precision, gradient clipping
+- **Evaluation protocol** — datasets, metrics, and the paper's exact reported results table
+- **Implementation assumptions** — every decision the paper leaves implicit, recorded
+  explicitly with a basis and alternatives
+- **Ambiguities** — points where the correct interpretation is genuinely unclear, with the
+  most likely interpretation and alternatives listed
+- **Confidence annotations** — per-section scores (0.0–1.0) reflecting how explicitly each
+  detail was stated in the paper
 
-- architecture module patterns
-- likely implementation frameworks
-- optimizer and scheduler configurations
-- implementation risks and hidden assumptions
-- confidence scores for SIR sections
-- ambiguity patterns common to specific paper families
-- reproducibility failure modes
+Every SIR is stored permanently in the global registry. As the registry grows, ArXivist
+accumulates implementation priors across research domains — making each successive paper
+faster and more accurate to process.
 
-This allows ArXivist to:
-
-- accelerate Stage 1 SIR drafting
-- pre-flag potentially ambiguous or under-specified papers
-- infer missing implementation details before full parsing
-- estimate reproducibility difficulty from abstract-level information
-- surface likely high-risk implementation regions for human review
-
-The learner continuously improves as the SIR registry expands, enabling ArXivist to accumulate domain-specific implementation priors and reproducibility intelligence over time.
+Full format reference: [`docs/sir-specification.md`](docs/sir-specification.md)
+JSON schema: [`skill/schemas/sir_schema.json`](skill/schemas/sir_schema.json)
 
 ---
 
-## Quickstart
+## Confidence scoring
 
-1. Install the ArXivist skill into your Claude environment by pointing it at `skill/SKILL.md`.
+ArXivist never silently guesses. Every extracted detail carries a confidence score:
 
-2. Start a Claude conversation and say:
+| Score | Meaning |
+|-------|---------|
+| 0.9–1.0 | Explicitly stated in the paper |
+| 0.7–0.89 | Strongly implied or standard practice for the domain |
+| 0.5–0.69 | Inferred with reasoning — surfaced as a warning |
+| < 0.5 | Speculative — pipeline pauses and requests human confirmation |
 
-   > "Use ArXivist to implement this paper: https://arxiv.org/abs/1706.03762"
+Low-confidence sections propagate forward: they trigger risk entries in the architecture
+plan, `# ASSUMED` comments in the generated code, and expanded root cause analysis in the
+reproducibility report.
 
-3. Claude will run Stages 1–5 automatically, writing all outputs to `workspace/`.
+---
 
-4. Run the generated code. When you have results:
+## SIR Learner
 
-   > "Here are my results — compare them against the paper."
+`sir_learner.py` is a corpus learning engine trained entirely on SIR artifacts accumulated
+in the global registry. As more papers are processed, the learner builds statistical priors
+over implementation patterns it has observed — architecture structures, optimizer choices,
+common ambiguities, reproducibility failure modes — without requiring any external training
+data or labelling.
 
-   Claude runs Stage 6 and writes the comparison artifacts into the paper's repository.
+It feeds into the pipeline at Stage 1, providing a predictive prior that:
+
+- pre-flags papers likely to have under-specified architectures
+- infers plausible values for missing implementation details before full parsing
+- estimates reproducibility difficulty from abstract-level signals
+- surfaces high-risk implementation regions for human review
+
+The learner improves continuously as the registry grows. A registry with ten processed
+papers produces better priors than one with one. A registry with a hundred produces better
+still. The system compounds.
+
+---
+
+## Reproducibility report
+
+Stage 6 produces four artifacts that together constitute a complete scientific audit of
+the generated implementation:
+
+| Artifact | Contents |
+|---|---|
+| `benchmark_comparison.md` | Metric-by-metric comparison table with deviation percentages and severity ratings |
+| `reproducibility_score.json` | Score (0.0–1.0) with confidence estimate and per-metric breakdown |
+| `hallucination_report.md` | Structural, parametric, and omission issues in the generated code |
+| `verification_log.md` | Full audit trail — timestamps, input hash, SIR version, config changes |
+
+These are committed permanently into the paper's repository alongside the generated code,
+forming a complete scientific provenance record for every implementation ArXivist produces.
 
 ---
 
@@ -119,64 +196,53 @@ The learner continuously improves as the SIR registry expands, enabling ArXivist
 
 ```
 arxivist/
-├── skill/                    # The ArXivist Claude skill
-│   ├── SKILL.md              # Master orchestrator (read this first)
-│   ├── agents/               # Six specialist sub-agent instruction files
-│   ├── schemas/              # JSON schemas for SIR, arch plan, comparison report
-│   ├── templates/            # Blank SIR, repo layout, comparison report template
-│   └── state/                # Pipeline state schema
+├── skill/                      # ArXivist pipeline — six-stage system
+│   ├── SKILL.md                # Master orchestrator
+│   ├── agents/                 # Stage instruction files (01–06)
+│   ├── schemas/                # SIR, architecture plan, comparison report schemas
+│   ├── templates/              # Blank SIR, repo layout, report template
+│   └── state/                  # Pipeline state schema
 │
-├── workspace/                # Runtime output directory (contents gitignored)
-│   ├── sir-registry/         # Global SIR registry — one folder per paper
-│   └── paper-repos/          # Generated paper repositories
+├── workspace/                  # Runtime output (gitignored contents)
+│   ├── sir-registry/           # Global SIR registry — one folder per paper
+│   │   └── global_index.json   # Index of every processed paper
+│   └── paper-repos/            # Generated paper repositories
 │
-├── docs/                     # Documentation
-├── examples/                 # Pre-generated SIR and arch plan for reference
-├── sir_learner.py            # SIR corpus learning engine
-└── .github/workflows/        # CI — schema validation on every push
+├── sir_learner.py              # SIR corpus learning engine
+├── docs/                       # Documentation
+├── examples/                   # Reference SIRs for well-known papers
+└── .github/workflows/          # CI — schema validation on every push
 ```
 
 ---
 
-## The SIR format
+## Quickstart
 
-The Scientific Intermediate Representation (SIR) is the canonical machine-readable abstraction of
-a paper. It contains:
+See [`INSTRUCTIONS.md`](INSTRUCTIONS.md) for the full onboarding walkthrough.
 
-- **Provenance** — title, authors, arXiv ID, domain, key claims
-- **Architecture graph** — named modules, input/output tensor shapes, connections
-- **Mathematical spec** — all equations in LaTeX, named and categorised
-- **Tensor semantics** — shapes, dtypes, roles for every major tensor
-- **Training pipeline** — optimiser, LR schedule, batch size, augmentation
-- **Evaluation protocol** — datasets, metrics, reported results table
-- **Implementation assumptions** — everything the paper leaves implicit
-- **Ambiguities** — explicitly flagged unclear points with alternatives
-- **Confidence annotations** — per-section scores (0.0–1.0)
+```bash
+git clone https://github.com/qosi-org/arxivist.git
+cd arxivist
+```
 
-See [`docs/sir-specification.md`](docs/sir-specification.md) for the full format reference, and
-[`skill/schemas/sir_schema.json`](skill/schemas/sir_schema.json) for the JSON schema.
+Load the `skill/` folder into your ArXivist environment, then:
 
----
+```
+Use ArXivist to implement this paper: https://arxiv.org/abs/1706.03762
+```
 
-## Confidence scoring
-
-Every section of every SIR carries a confidence score:
-
-| Score | Meaning |
-|-------|---------|
-| 0.9–1.0 | Explicitly stated in the paper |
-| 0.7–0.89 | Strongly implied or standard practice |
-| 0.5–0.69 | Inferred with reasoning |
-| < 0.5 | Speculative — flagged for human review |
-
-Sections below 0.7 surface warnings during generation. Sections below 0.5 pause the pipeline
-and require your explicit confirmation before proceeding.
+ArXivist runs Stages 1–5 and writes everything to `workspace/`. Open the generated
+notebook to verify your setup, run the full training pipeline, then feed your results back
+to trigger Stage 6.
 
 ---
 
 ## CI
 
-GitHub Actions validates all JSON schemas on every push and pull request.
+Every push and pull request runs schema validation across all JSON artifacts, checks that
+all six stage files are present and correctly structured, and verifies the workspace
+scaffold and example SIRs are intact.
+
 See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ---
