@@ -1,0 +1,507 @@
+{
+  "paper_id": "arxiv_2605_09712",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Quantifying the Risk-Return Tradeoff in Forecasting",
+    "authors": ["Philippe Goulet Coulombe"],
+    "affiliations": ["Université du Québec à Montréal — Département des Sciences Économiques"],
+    "arxiv_id": "2605.09712v1",
+    "doi": null,
+    "submission_date": "2026-05-10",
+    "abstract": "Average forecast accuracy is not the same as forecast reliability. I treat forecast loss differentials relative to a benchmark as a return series. These return series are then evaluated using risk-adjusted performance measures from finance, including the Sharpe ratio, Sortino ratio, Omega ratio, and drawdown-based metrics. I also introduce the Edge Ratio capturing...",
+    "domain": "Other",
+    "key_claims": [
+      "Forecast loss differentials can be treated as financial return series and evaluated with Sharpe, Sortino, Omega, and drawdown metrics.",
+      "The Survey of Professional Forecasters (SPF) dominates on risk-adjusted metrics despite being beatable on average RMSE, due to rarely exhibiting catastrophic failures.",
+      "The Edge Ratio — a novel metric — captures whether a model provides unique predictive information relative to the full forecasting frontier.",
+      "Risk-adjusted metrics extend naturally to meta-analyses across targets, horizons, and samples.",
+      "The Sharpe ratio equals the Diebold-Mariano t-statistic (up to a scaling constant) when loss differentials are serially uncorrelated."
+    ],
+    "parsed_at": "2026-05-12T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+
+  "architecture": {
+    "primary_variant": "Forecast Risk-Adjusted Evaluation Framework (no neural architecture — statistical/econometric framework)",
+    "modules": [
+      {
+        "name": "Benchmark Loss Differencer",
+        "description": "Computes r_t = L_benchmark_t - L_model_t for each evaluation period t",
+        "input": "Two scalar time series: L^B_t and L^M_t (loss values)",
+        "output": "Return series {r_t}^T_{t=1}",
+        "operation": "Element-wise subtraction",
+        "confidence": 0.98
+      },
+      {
+        "name": "Forecast Sharpe Ratio Calculator",
+        "description": "Computes mean return divided by standard deviation of returns",
+        "input": "{r_t}",
+        "output": "Scalar Sharpe = r_bar / s_r",
+        "operation": "mean(r) / std(r)",
+        "confidence": 0.98
+      },
+      {
+        "name": "Forecast Sortino Ratio Calculator",
+        "description": "Computes mean return divided by downside semi-deviation",
+        "input": "{r_t}",
+        "output": "Scalar Sortino = r_bar / s_down",
+        "operation": "mean(r) / sqrt(mean(min(r_t,0)^2))",
+        "confidence": 0.98
+      },
+      {
+        "name": "Forecast Omega Ratio Calculator",
+        "description": "Computes ratio of average upside to average absolute downside",
+        "input": "{r_t}",
+        "output": "Scalar Omega = sum(r+_t) / sum(|r-_t|)",
+        "operation": "Non-parametric upside/downside ratio",
+        "confidence": 0.98
+      },
+      {
+        "name": "Maximum Drawdown Calculator",
+        "description": "Tracks worst cumulative underperformance from historical peak",
+        "input": "{r_t}",
+        "output": "Scalar MaxDD = max_{1<=t<=T}(M_t - R_t)",
+        "operation": "Cumulative sum → running max → max drawdown",
+        "confidence": 0.97
+      },
+      {
+        "name": "Edge Ratio Calculator",
+        "description": "Computes how often a model reaches the forecasting frontier vs incurs regret",
+        "input": "Loss series for all M models {L_{j,t}} plus model under evaluation L_{M,t}",
+        "output": "Scalar EdgeRatio = (sum e+_{M,t} / sum e-_{M,t}) * (M-1)",
+        "operation": "Frontier computation + Omega-style ratio with moving benchmark",
+        "confidence": 0.97
+      },
+      {
+        "name": "Meta-Analysis Aggregator",
+        "description": "Applies Sharpe/Sortino/Omega/Edge across cross-sectional design space (targets x horizons x samples)",
+        "input": "Grid of percentage returns R^M_{v,h,s}",
+        "output": "Meta-Sharpe, Meta-Sortino, Meta-Omega, Meta-Edge scalars",
+        "operation": "Cross-sectional analogs of time-series risk metrics",
+        "confidence": 0.95
+      },
+      {
+        "name": "Forecasting Model Suite",
+        "description": "Collection of econometric/ML models: AR(4), FAAR, RR, KRR, RF, LGB, LGB+, LGBA+, NN, HNN, TabPFN, SPF",
+        "input": "FRED-QD panel data (248 quarterly U.S. macro/financial series)",
+        "output": "Point forecasts for GDP growth, CPI inflation, unemployment rate, housing starts",
+        "operation": "Model-specific (see sub-modules below)",
+        "confidence": 0.92
+      }
+    ],
+    "connections": [
+      "FRED-QD Data → Forecasting Model Suite → {L^M_t, L^B_t}",
+      "{L^B_t, L^M_t} → Benchmark Loss Differencer → {r_t}",
+      "{r_t} → Forecast Sharpe Ratio Calculator → Sharpe",
+      "{r_t} → Forecast Sortino Ratio Calculator → Sortino",
+      "{r_t} → Forecast Omega Ratio Calculator → Omega",
+      "{r_t} → Maximum Drawdown Calculator → MaxDD",
+      "{L_{j,t} for all j} → Edge Ratio Calculator → EdgeRatio",
+      "Grid of {R^M_{v,h,s}} → Meta-Analysis Aggregator → Meta-metrics"
+    ],
+    "variants": [
+      {
+        "name": "Time-Series Risk Evaluation",
+        "description": "Applies metrics along the time axis for a single target/horizon combination",
+        "primary": true
+      },
+      {
+        "name": "Cross-Sectional Meta-Analysis",
+        "description": "Applies metrics across the design space (targets x horizons x evaluation windows)",
+        "primary": false
+      }
+    ]
+  },
+
+  "mathematical_spec": [
+    {
+      "name": "Forecast Gain (Return)",
+      "latex": "r_t = L^B_t - L^M_t",
+      "role": "Defines the 'return' of switching from benchmark B to model M at time t",
+      "hyperparameters": ["Loss function L (squared error, absolute error, log score, CRPS)"],
+      "role_in_pipeline": "Foundation for all risk metrics",
+      "confidence": 0.99
+    },
+    {
+      "name": "Average Return",
+      "latex": "\\bar{r} = \\frac{1}{T} \\sum_{t=1}^{T} r_t",
+      "role": "Mean loss differential; corresponds to standard RMSE/MAE improvement",
+      "hyperparameters": [],
+      "role_in_pipeline": "Baseline performance measure",
+      "confidence": 0.99
+    },
+    {
+      "name": "Forecast Sharpe Ratio",
+      "latex": "\\text{Sharpe} = \\frac{\\bar{r}}{s_r}, \\quad s_r^2 = \\frac{1}{T-1}\\sum_{t=1}^T (r_t - \\bar{r})^2",
+      "role": "Average return per unit of total return volatility",
+      "hyperparameters": [],
+      "role_in_pipeline": "Primary risk-adjusted metric; equals DM t-stat / sqrt(T) when no serial correlation",
+      "confidence": 0.99
+    },
+    {
+      "name": "Forecast Sortino Ratio",
+      "latex": "\\text{Sortino} = \\frac{\\bar{r}}{s_{\\text{down}}}, \\quad s_{\\text{down}} = \\sqrt{\\frac{1}{T}\\sum_{t=1}^T (r_t^-)^2}, \\quad r_t^- = \\min(r_t, 0)",
+      "role": "Average return per unit of downside volatility; penalizes underperformance only",
+      "hyperparameters": [],
+      "role_in_pipeline": "Primary asymmetric risk metric favored by paper",
+      "confidence": 0.99
+    },
+    {
+      "name": "Forecast Omega Ratio",
+      "latex": "\\Omega = \\frac{\\frac{1}{T}\\sum_{t=1}^T r_t^+}{\\frac{1}{T}\\sum_{t=1}^T |r_t^-|}",
+      "role": "Ratio of average upside to average downside; non-parametric",
+      "hyperparameters": [],
+      "role_in_pipeline": "Full-distribution risk metric; Omega > 1 means more upside than downside",
+      "confidence": 0.99
+    },
+    {
+      "name": "Maximum Drawdown",
+      "latex": "\\text{MaxDD} = \\max_{1 \\le t \\le T} DD_t, \\quad DD_t = M_t - R_t, \\quad M_t = \\max_{0 \\le u \\le t} R_u, \\quad R_t = \\sum_{s=1}^t r_s",
+      "role": "Worst cumulative underperformance from historical peak",
+      "hyperparameters": [],
+      "role_in_pipeline": "Path-dependent downside risk; captures sustained failure episodes",
+      "confidence": 0.98
+    },
+    {
+      "name": "Frontier Loss",
+      "latex": "L^\\star_t = \\min_{j \\ne M} L_{j,t}",
+      "role": "Best competitor loss at time t (excluding model M)",
+      "hyperparameters": [],
+      "role_in_pipeline": "Moving benchmark for Edge Ratio",
+      "confidence": 0.97
+    },
+    {
+      "name": "Edge of Model M",
+      "latex": "e_{M,t} = L^\\star_t - L_{M,t}",
+      "role": "Positive when M beats all competitors; negative when M lags frontier",
+      "hyperparameters": [],
+      "role_in_pipeline": "Building block of Edge Ratio",
+      "confidence": 0.97
+    },
+    {
+      "name": "Edge Ratio",
+      "latex": "\\text{EdgeRatio}(M) = \\frac{\\sum_t e^+_{M,t}}{\\sum_t e^-_{M,t}} \\times (M-1)",
+      "role": "Measures whether a model delivers unique predictive advantage relative to forecasting frontier",
+      "hyperparameters": ["M = total number of competing models"],
+      "role_in_pipeline": "Novel metric introduced by paper; null expectation ≈ 1 under equal performance",
+      "confidence": 0.97
+    },
+    {
+      "name": "Meta-Analysis Percentage Return",
+      "latex": "R^M_{v,h,s} = \\frac{P^B_{v,h,s} - P^M_{v,h,s}}{P^B_{v,h,s}} \\times 100",
+      "role": "Percentage improvement over benchmark across design-space index (target v, horizon h, sample s)",
+      "hyperparameters": [],
+      "role_in_pipeline": "Cross-sectional return for meta-analysis",
+      "confidence": 0.97
+    },
+    {
+      "name": "Meta-Analysis Sharpe",
+      "latex": "\\text{Sharpe}^M_{\\text{meta}} = \\frac{\\bar{R}^M}{s^M_R}",
+      "role": "How reliably a model outperforms across forecasting problems",
+      "hyperparameters": [],
+      "role_in_pipeline": "Cross-sectional analog of Sharpe ratio",
+      "confidence": 0.96
+    },
+    {
+      "name": "DM Statistic / Sharpe Link",
+      "latex": "\\text{DM} = \\frac{\\bar{r}}{\\sqrt{\\widehat{LRV}/T}}, \\quad \\widehat{LRV} = \\gamma_0 + 2\\sum_{k=1}^K \\gamma_k \\Rightarrow \\text{DM} = \\sqrt{T} \\cdot \\text{Sharpe if } \\gamma_k=0 \\forall k>0",
+      "role": "Theoretical link between Sharpe ratio and Diebold-Mariano test statistic",
+      "hyperparameters": ["K = HAC lag truncation"],
+      "role_in_pipeline": "Connects framework to classical forecast evaluation tests",
+      "confidence": 0.99
+    }
+  ],
+
+  "tensor_semantics": [
+    {
+      "name": "r_t",
+      "description": "Scalar loss differential (return) at evaluation period t",
+      "shape": "[T]",
+      "dtype": "float64",
+      "role": "intermediate",
+      "confidence": 0.99
+    },
+    {
+      "name": "r_t_plus",
+      "description": "Positive part of return: max(r_t, 0)",
+      "shape": "[T]",
+      "dtype": "float64",
+      "role": "intermediate",
+      "confidence": 0.99
+    },
+    {
+      "name": "r_t_minus",
+      "description": "Negative part of return: min(r_t, 0)",
+      "shape": "[T]",
+      "dtype": "float64",
+      "role": "intermediate",
+      "confidence": 0.99
+    },
+    {
+      "name": "R_t",
+      "description": "Cumulative gain at time t: sum_{s=1}^t r_s",
+      "shape": "[T]",
+      "dtype": "float64",
+      "role": "intermediate",
+      "confidence": 0.98
+    },
+    {
+      "name": "L_jt",
+      "description": "Loss of model j at time t; matrix over all models and periods",
+      "shape": "[M, T]",
+      "dtype": "float64",
+      "role": "input",
+      "confidence": 0.97
+    },
+    {
+      "name": "e_Mt",
+      "description": "Edge of model M at time t",
+      "shape": "[T]",
+      "dtype": "float64",
+      "role": "intermediate",
+      "confidence": 0.97
+    },
+    {
+      "name": "R_meta",
+      "description": "Cross-sectional return grid over design space",
+      "shape": "[V, H, S]",
+      "dtype": "float64",
+      "role": "input to meta-analysis",
+      "confidence": 0.96
+    }
+  ],
+
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Model-specific (see below); primary ML models use Adam or gradient boosting",
+      "learning_rate": null,
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "weight_decay": null,
+      "confidence": 0.65
+    },
+    "lr_schedule": {
+      "type": "Early stopping (NN, LGB); None for linear models",
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.65
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": ["Blocked subsampling B=1000 bootstrap samples for HNN"],
+    "curriculum": "Expanding window, re-estimated every 8 quarters (2 years)",
+    "notes": {
+      "NN": "3 hidden layers, 400 neurons each, ReLU, dropout 0.2, Adam, early stopping",
+      "HNN": "4 dedicated hemispheres + common core, 2 hidden layers x 400 neurons, ReLU, softplus variance, maximum likelihood training",
+      "RF": "500 trees, 75% subsampling, min node size 5, random feature subsets",
+      "LGB": "Histogram-based gradient boosting, learning rate / depth / sampling fractions cross-validated with early stopping",
+      "LGB+": "Hybrid: tree-based + linear updates compete at each boosting step via OOB validation",
+      "LGBA+": "Alternating variant of LGB+, computationally lighter",
+      "RR": "Ridge regression, lambda selected by cross-validation",
+      "KRR": "Gaussian + Laplacian kernels, bandwidth sigma and lambda cross-validated",
+      "FAAR": "Factor-Augmented AR(4), 4 principal components from FRED-QD panel",
+      "TabPFN": "In-context learning, single forward pass, no task-specific training"
+    },
+    "confidence": 0.72
+  },
+
+  "evaluation_protocol": {
+    "datasets": [
+      {
+        "name": "FRED-QD",
+        "description": "248 quarterly U.S. macroeconomic and financial series, 1960Q1 onwards",
+        "reference": "McCracken and Ng (2020)",
+        "role": "Predictor panel"
+      },
+      {
+        "name": "Survey of Professional Forecasters (SPF)",
+        "description": "Median consensus forecasts from professional forecasters, Philadelphia Fed",
+        "reference": "Stark (2010); Engelberg et al. (2009)",
+        "role": "Benchmark / competitor"
+      },
+      {
+        "name": "M4 Competition",
+        "description": "48,000 monthly time series (of 100,000 total), diverse domains",
+        "reference": "Makridakis et al. (2018, 2020)",
+        "role": "External meta-analysis benchmark"
+      }
+    ],
+    "metrics": [
+      {"name": "Forecast Sharpe Ratio", "direction": "higher is better"},
+      {"name": "Forecast Sortino Ratio", "direction": "higher is better"},
+      {"name": "Forecast Omega Ratio", "direction": "higher is better, Omega>1 means net positive"},
+      {"name": "Maximum Drawdown (MaxDD)", "direction": "less negative is better"},
+      {"name": "Edge Ratio", "direction": "higher is better; null expectation=1"},
+      {"name": "RMSE (ratio to AR benchmark)", "direction": "lower is better"},
+      {"name": "MAE (ratio to AR benchmark)", "direction": "lower is better"},
+      {"name": "Diebold-Mariano t-statistic", "direction": "higher positive is better"},
+      {"name": "First-order autocorrelation rho(1)", "direction": "diagnostic"},
+      {"name": "MASE", "direction": "lower is better (M4 metric)"},
+      {"name": "OWA (Overall Weighted Average)", "direction": "lower is better (M4 metric)"},
+      {"name": "Log Score", "direction": "less negative is better (density forecasts)"}
+    ],
+    "reported_results": [
+      {
+        "target": "GDP Growth h=1, Pre-COVID",
+        "best_return": "KRR (29%); SPF Sortino 1.80 vs NN 1.09",
+        "SPF_sortino": 1.80,
+        "KRR_sortino": 2.85,
+        "SPF_edge_h1": 0.08,
+        "FAAR_edge_h1": 0.85,
+        "SPF_edge_h4": 1.10
+      },
+      {
+        "target": "Unemployment h=1, Pre-COVID",
+        "LGB+_return": 0.55,
+        "LGB+_sortino": 7.7,
+        "TPFN_h4_return": 0.48,
+        "TPFN_h4_edge": 4.45
+      },
+      {
+        "target": "Inflation Pre-2020 h=1",
+        "HNN_sortino": 2.0,
+        "SPF_sortino": 1.2,
+        "TPFN_edge": 0.86
+      },
+      {
+        "target": "Inflation Post-2021 h=1",
+        "HNN_only_positive_return": true,
+        "HNN_edge_highest": 1.83
+      },
+      {
+        "target": "Meta-Analysis RMSE (GCFK exercise)",
+        "HNN_sharpe": 0.85,
+        "BART_sharpe": 0.97,
+        "HNN_sortino": 1.62,
+        "BART_sortino": 1.62,
+        "HNN_edge": 1.97,
+        "BART_edge": 0.81
+      },
+      {
+        "target": "Meta-Analysis Log Score (GCFK exercise)",
+        "HNN_sharpe": 0.48,
+        "HNN_sortino": 0.92,
+        "HNN_edge": 2.59,
+        "BART_sharpe": -0.41,
+        "BART_sortino": -0.30
+      },
+      {
+        "target": "M4 Monthly MASE",
+        "model_118_wins_all_risk_metrics": true,
+        "top_MASE_sharpe": 0.16,
+        "top_OWA_sharpe": 0.42
+      }
+    ],
+    "baselines": [
+      "AR(4) autoregression",
+      "FAAR (factor-augmented AR)",
+      "Naive2 (M4 baseline: random walk with seasonal adjustment)"
+    ],
+    "compute": null,
+    "special_conditions": [
+      "Expanding window estimation; models re-estimated every 8 quarters",
+      "2020 excluded from post-COVID evaluation to avoid COVID shock contamination",
+      "Pre-COVID: 2007Q2–2019Q4; Post-COVID: 2021Q1–2024Q2 (or 2025Q1 depending on table)",
+      "MARX transformation: 4 lags + moving averages of order 2, 4, 8",
+      "Series standardized to zero mean and unit variance over training sample",
+      "Direct forecasting at h=1, 2, 4 quarters ahead with separate models per horizon"
+    ],
+    "confidence": 0.95
+  },
+
+  "implementation_assumptions": [
+    {
+      "assumption": "Loss function defaults to squared error (MSE) for primary analysis; MAE also reported",
+      "basis": "Stated in paper",
+      "confidence": 0.98,
+      "alternatives": ["CRPS", "log score"]
+    },
+    {
+      "assumption": "HAC adjustment NOT applied to Sharpe/Sortino/Omega ratios — they use sample (not long-run) variance",
+      "basis": "Explicitly stated as deliberate design choice",
+      "confidence": 0.97,
+      "alternatives": ["HAC-adjusted versions as robustness check"]
+    },
+    {
+      "assumption": "Ridge regression lambda selected by time-series cross-validation (rolling/expanding fold)",
+      "basis": "Standard practice for macroeconomic forecasting; paper says 'cross-validated'",
+      "confidence": 0.75,
+      "alternatives": ["Leave-one-out CV", "information criteria"]
+    },
+    {
+      "assumption": "Neural networks use standard normal weight initialization (He/Xavier for ReLU)",
+      "basis": "Not specified in paper; standard practice for ReLU networks",
+      "confidence": 0.65,
+      "alternatives": ["Glorot uniform", "orthogonal init"]
+    },
+    {
+      "assumption": "FRED-QD transformations follow the McCracken-Ng (2020) transformation codes",
+      "basis": "Paper references FRED-QD and stationarity transformation",
+      "confidence": 0.90,
+      "alternatives": ["Custom transformation codes"]
+    },
+    {
+      "assumption": "Edge Ratio denominator uses absolute value of negative edges (|e-_{M,t}|), not squared",
+      "basis": "Directly from Omega-ratio analogy described in paper",
+      "confidence": 0.95,
+      "alternatives": ["Squared negative edges"]
+    },
+    {
+      "assumption": "TabPFN used with default pre-trained weights from Hollmann et al. (2022), no fine-tuning",
+      "basis": "Paper describes in-context learning and no task-specific training",
+      "confidence": 0.88,
+      "alternatives": ["Fine-tuned variant"]
+    },
+    {
+      "assumption": "Python implementation using scikit-learn, lightgbm, pytorch/tensorflow for models",
+      "basis": "Standard ML stack for these model families; not specified in paper",
+      "confidence": 0.72,
+      "alternatives": ["R (tidymodels/caret)", "Julia"]
+    }
+  ],
+
+  "ambiguities": [
+    {
+      "location": "Section 3 — Models",
+      "description": "KRR kernel bandwidth sigma and lambda cross-validation scheme not fully specified (grid search range not given)",
+      "primary_assumption": "Log-spaced grid search over [0.01, 100] for both sigma and lambda",
+      "alternatives": ["Random search", "Bayesian optimization"],
+      "confidence": 0.55
+    },
+    {
+      "location": "Section 3 — Models",
+      "description": "LGB early stopping patience (number of rounds) not specified",
+      "primary_assumption": 50,
+      "alternatives": [20, 100],
+      "confidence": 0.55
+    },
+    {
+      "location": "Section 3 — Evaluation",
+      "description": "Post-COVID end date varies across tables (2024Q2 vs 2025Q1) — slightly unclear which is canonical",
+      "primary_assumption": "2024Q2 for main text figures; appendix tables extend to 2025Q1",
+      "alternatives": ["All tables use 2025Q1"],
+      "confidence": 0.72
+    },
+    {
+      "location": "Section 2.4 — Edge Ratio",
+      "description": "Whether the (M-1) scaling factor is applied using the fixed total M or a time-varying count of available models",
+      "primary_assumption": "Fixed M = total number of models in the pool throughout",
+      "alternatives": ["Time-varying M"],
+      "confidence": 0.85
+    }
+  ],
+
+  "confidence_annotations": {
+    "architecture": 0.88,
+    "mathematical_spec": 0.97,
+    "tensor_semantics": 0.92,
+    "training_pipeline": 0.72,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.78,
+    "overall_sir_confidence": 0.87
+  }
+}
