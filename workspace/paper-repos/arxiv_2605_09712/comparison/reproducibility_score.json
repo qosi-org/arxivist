@@ -1,0 +1,55 @@
+{
+  "paper_id": "arxiv_2605_09712",
+  "paper_title": "Quantifying the Risk-Return Tradeoff in Forecasting",
+  "comparison_date": "2026-05-12T00:00:00Z",
+  "status": "pre_run_scaffold",
+  "reproducibility_score": null,
+  "score_confidence": "none",
+  "score_notes": "No user results submitted. Score will be computed when experimental results are provided.",
+  "metrics_in_paper": 28,
+  "metrics_compared": 0,
+  "metrics_matched": 0,
+  "metrics_unmatched": 0,
+  "deviation_summary": {
+    "excellent_le2pct": 0,
+    "good_2to5pct": 0,
+    "moderate_5to15pct": 0,
+    "significant_15to30pct": 0,
+    "critical_gt30pct": 0
+  },
+  "hallucination_count": {
+    "structural": 1,
+    "parametric": 4,
+    "omission": 3
+  },
+  "sir_version_used": 1,
+  "sir_overall_confidence": 0.87,
+  "architecture_plan_version": 1,
+  "requires_manual_review": true,
+  "manual_review_reasons": [
+    "HNN implementation is a stub — actual architecture requires Goulet Coulombe (2025a, 2026)",
+    "LGB+ and LGBA+ are approximated — actual implementation requires Goulet Coulombe (2026)",
+    "M4 results require original competition submissions, not generated models",
+    "SPF data requires manual download and vintage alignment verification"
+  ],
+  "expected_reproducibility_once_stubs_resolved": {
+    "core_metrics_framework": 0.95,
+    "AR4_FAAR_Ridge_results": 0.80,
+    "RF_LGB_results": 0.75,
+    "LGBPlus_results": 0.30,
+    "NN_results": 0.70,
+    "HNN_results": 0.20,
+    "SPF_results": 0.85,
+    "TabPFN_results": 0.65,
+    "M4_results": 0.10
+  },
+  "implementation_risk_assessment": {
+    "risk_level": "high",
+    "primary_risks": [
+      "HNN stub will not reproduce inflation post-2021 dominance result",
+      "LGB+ stub will not reproduce LGB+ unemployment results",
+      "FAAR edge ratio depends on PC extraction matching paper exactly",
+      "KRR bandwidth grid assumed (SIR confidence 0.55)"
+    ]
+  }
+}
