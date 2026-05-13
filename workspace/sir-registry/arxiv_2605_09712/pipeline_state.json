@@ -1,0 +1,20 @@
+{
+  "paper_id": "arxiv_2605_09712",
+  "paper_title": "Quantifying the Risk-Return Tradeoff in Forecasting",
+  "current_stage": 1,
+  "stages_completed": [],
+  "sir_path": "sir-registry/arxiv_2605_09712/sir.json",
+  "repo_path": "paper-repos/arxiv_2605_09712/",
+  "artifacts": {
+    "sir": null,
+    "architecture_plan": null,
+    "repo_initialized": false,
+    "notebook_path": null,
+    "comparison_report": null
+  },
+  "confidence_flags": {},
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-12T00:00:00Z",
+  "last_updated": "2026-05-12T00:00:00Z"
+}

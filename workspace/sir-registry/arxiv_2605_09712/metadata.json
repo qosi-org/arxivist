@@ -1,0 +1,22 @@
+{
+  "paper_id": "arxiv_2605_09712",
+  "title": "Quantifying the Risk-Return Tradeoff in Forecasting",
+  "authors": ["Philippe Goulet Coulombe"],
+  "domain": "Econometrics / Macroeconomic Forecasting",
+  "arxiv_id": "2605.09712v1",
+  "version": 1,
+  "created_at": "2026-05-12T00:00:00Z",
+  "last_updated": "2026-05-12T00:00:00Z",
+  "sir_confidence": 0.87,
+  "stages_with_data": ["stage_1_sir", "stage_2_registry", "stage_3_architecture", "stage_4_code", "stage_5_notebook", "stage_6_comparison"],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2605_09712/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-05-12T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    }
+  ]
+}

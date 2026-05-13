@@ -1,0 +1,36 @@
+# forecast_risk — Requirements
+# Paper: "Quantifying the Risk-Return Tradeoff in Forecasting"
+# arXiv: 2605.09712
+
+# Core numeric
+numpy>=1.24
+pandas>=2.0
+scipy>=1.11
+
+# Machine learning
+scikit-learn>=1.3
+lightgbm>=4.0
+
+# Deep learning (for NN, HNN)
+torch>=2.0
+
+# Statistical modelling
+statsmodels>=0.14
+
+# Foundation model (TabPFN)
+# NOTE: pin version; TabPFN API may change
+tabpfn>=0.1.9
+
+# FRED data access
+fredapi>=0.5
+
+# Config and I/O
+pyyaml>=6.0
+openpyxl>=3.1
+
+# Progress and CLI
+tqdm>=4.65
+
+# Visualisation
+matplotlib>=3.7
+seaborn>=0.13

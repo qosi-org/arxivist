@@ -1,0 +1,428 @@
+{
+  "paper_id": "arxiv_2605_09712",
+  "plan_version": 1,
+  "framework": {
+    "primary": "Python / NumPy / Pandas / scikit-learn / lightgbm / pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "huggingface_integration": false,
+    "config_management": "YAML + argparse",
+    "reasoning": "Paper is an econometrics/statistics paper producing a risk-adjusted evaluation framework and forecasting model suite. Core metrics (Sharpe, Sortino, Omega, MaxDD, Edge Ratio) are pure NumPy operations. ML models (RF, LGB, NN, HNN) map to scikit-learn, lightgbm, and PyTorch respectively. No GPU required for the evaluation framework itself; optional for NN/HNN training."
+  },
+  "module_hierarchy": {
+    "project_name": "forecast_risk",
+    "root": "src/forecast_risk/",
+    "files": [
+      {
+        "path": "src/forecast_risk/__init__.py",
+        "description": "Package init, version string",
+        "classes": [],
+        "sir_modules": []
+      },
+      {
+        "path": "src/forecast_risk/metrics/__init__.py",
+        "description": "Metrics package init",
+        "classes": [],
+        "sir_modules": []
+      },
+      {
+        "path": "src/forecast_risk/metrics/risk_metrics.py",
+        "description": "Core risk-adjusted performance metrics",
+        "classes": [
+          {
+            "name": "ForecastRiskMetrics",
+            "methods": [
+              "sharpe(returns: np.ndarray) -> float",
+              "sortino(returns: np.ndarray) -> float",
+              "omega(returns: np.ndarray) -> float",
+              "max_drawdown(returns: np.ndarray) -> float",
+              "all_metrics(returns: np.ndarray) -> dict"
+            ]
+          }
+        ],
+        "sir_modules": ["Forecast Sharpe Ratio Calculator", "Forecast Sortino Ratio Calculator", "Forecast Omega Ratio Calculator", "Maximum Drawdown Calculator"]
+      },
+      {
+        "path": "src/forecast_risk/metrics/edge_ratio.py",
+        "description": "Edge Ratio computation across model pool",
+        "classes": [
+          {
+            "name": "EdgeRatioCalculator",
+            "methods": [
+              "compute(losses_matrix: np.ndarray, model_idx: int) -> float",
+              "edge_series(losses_matrix: np.ndarray, model_idx: int) -> np.ndarray",
+              "frontier_loss(losses_matrix: np.ndarray, model_idx: int) -> np.ndarray"
+            ]
+          }
+        ],
+        "sir_modules": ["Edge Ratio Calculator"]
+      },
+      {
+        "path": "src/forecast_risk/metrics/meta_analysis.py",
+        "description": "Cross-sectional meta-analysis metrics over design space",
+        "classes": [
+          {
+            "name": "MetaAnalysisMetrics",
+            "methods": [
+              "percentage_return(perf_model: np.ndarray, perf_benchmark: np.ndarray) -> np.ndarray",
+              "meta_sharpe(returns_grid: np.ndarray) -> float",
+              "meta_sortino(returns_grid: np.ndarray) -> float",
+              "meta_omega(returns_grid: np.ndarray) -> float",
+              "meta_edge(returns_grid: np.ndarray, model_idx: int) -> float",
+              "full_table(returns_grid: np.ndarray) -> pd.DataFrame"
+            ]
+          }
+        ],
+        "sir_modules": ["Meta-Analysis Aggregator"]
+      },
+      {
+        "path": "src/forecast_risk/data/__init__.py",
+        "description": "Data package init",
+        "classes": [],
+        "sir_modules": []
+      },
+      {
+        "path": "src/forecast_risk/data/fred_loader.py",
+        "description": "FRED-QD data download, transformation, and panel construction",
+        "classes": [
+          {
+            "name": "FREDQDLoader",
+            "methods": [
+              "download(vintage: str = 'latest') -> pd.DataFrame",
+              "apply_transformations(df: pd.DataFrame) -> pd.DataFrame",
+              "build_panel(df: pd.DataFrame, lags: int = 4, ma_orders: list = [2,4,8]) -> pd.DataFrame",
+              "standardize(X_train: pd.DataFrame, X_test: pd.DataFrame) -> tuple"
+            ]
+          }
+        ],
+        "sir_modules": ["Forecasting Model Suite"]
+      },
+      {
+        "path": "src/forecast_risk/data/spf_loader.py",
+        "description": "Survey of Professional Forecasters data loader",
+        "classes": [
+          {
+            "name": "SPFLoader",
+            "methods": [
+              "download() -> pd.DataFrame",
+              "get_median_forecasts(target: str, horizon: int) -> pd.Series"
+            ]
+          }
+        ],
+        "sir_modules": ["Forecasting Model Suite"]
+      },
+      {
+        "path": "src/forecast_risk/models/__init__.py",
+        "description": "Models package init",
+        "classes": [],
+        "sir_modules": []
+      },
+      {
+        "path": "src/forecast_risk/models/base.py",
+        "description": "Abstract base class for all forecasting models",
+        "classes": [
+          {
+            "name": "BaseForecaster",
+            "methods": [
+              "fit(X: np.ndarray, y: np.ndarray) -> None",
+              "predict(X: np.ndarray) -> np.ndarray",
+              "name() -> str"
+            ]
+          }
+        ],
+        "sir_modules": ["Forecasting Model Suite"]
+      },
+      {
+        "path": "src/forecast_risk/models/linear.py",
+        "description": "AR, FAAR, Ridge Regression, Kernel Ridge Regression",
+        "classes": [
+          {
+            "name": "ARModel",
+            "methods": ["fit(X, y)", "predict(X)"]
+          },
+          {
+            "name": "FAARModel",
+            "methods": ["fit(X, y)", "predict(X)", "_extract_factors(X, n_factors=4)"]
+          },
+          {
+            "name": "RidgeForecaster",
+            "methods": ["fit(X, y)", "predict(X)", "_cv_lambda(X, y)"]
+          },
+          {
+            "name": "KernelRidgeForecaster",
+            "methods": ["fit(X, y)", "predict(X)", "_cv_params(X, y)", "_build_kernel(X1, X2, kernel_type)"]
+          }
+        ],
+        "sir_modules": ["Forecasting Model Suite"]
+      },
+      {
+        "path": "src/forecast_risk/models/tree_models.py",
+        "description": "Random Forest, LightGBM, LGB+, LGBA+ forecasters",
+        "classes": [
+          {
+            "name": "RandomForestForecaster",
+            "methods": ["fit(X, y)", "predict(X)"]
+          },
+          {
+            "name": "LGBForecaster",
+            "methods": ["fit(X, y)", "predict(X)"]
+          },
+          {
+            "name": "LGBPlusForecaster",
+            "methods": ["fit(X, y)", "predict(X)", "_hybrid_boost_step(X, y, residuals)"]
+          },
+          {
+            "name": "LGBAltForecaster",
+            "methods": ["fit(X, y)", "predict(X)"]
+          }
+        ],
+        "sir_modules": ["Forecasting Model Suite"]
+      },
+      {
+        "path": "src/forecast_risk/models/neural.py",
+        "description": "Feed-forward NN and Hemisphere Neural Network (HNN)",
+        "classes": [
+          {
+            "name": "NeuralNetworkForecaster",
+            "methods": ["fit(X, y)", "predict(X)", "_build_network(input_dim, hidden_sizes, dropout)"]
+          },
+          {
+            "name": "HemisphereNeuralNetwork",
+            "methods": [
+              "fit(X, y)",
+              "predict(X)",
+              "predict_variance(X)",
+              "_build_hemispheres(input_dim)",
+              "_volatility_emphasis_constraint()"
+            ]
+          }
+        ],
+        "sir_modules": ["Forecasting Model Suite"]
+      },
+      {
+        "path": "src/forecast_risk/models/tabpfn_wrapper.py",
+        "description": "Wrapper for TabPFN in-context learning forecaster",
+        "classes": [
+          {
+            "name": "TabPFNForecaster",
+            "methods": ["fit(X, y)", "predict(X)"]
+          }
+        ],
+        "sir_modules": ["Forecasting Model Suite"]
+      },
+      {
+        "path": "src/forecast_risk/evaluation/__init__.py",
+        "description": "Evaluation package init",
+        "classes": [],
+        "sir_modules": []
+      },
+      {
+        "path": "src/forecast_risk/evaluation/expanding_window.py",
+        "description": "Expanding window out-of-sample forecast evaluation engine",
+        "classes": [
+          {
+            "name": "ExpandingWindowEvaluator",
+            "methods": [
+              "run(models: list, data: pd.DataFrame, targets: list, horizons: list, start_year: int, refit_every: int) -> dict",
+              "_compute_losses(y_true, y_pred, loss_fn) -> np.ndarray",
+              "_split_panel(data, train_end, horizon) -> tuple"
+            ]
+          }
+        ],
+        "sir_modules": ["Benchmark Loss Differencer"]
+      },
+      {
+        "path": "src/forecast_risk/evaluation/report.py",
+        "description": "Generate full risk-adjusted report table (mirrors Tables 4-15 in paper)",
+        "classes": [
+          {
+            "name": "RiskAdjustedReport",
+            "methods": [
+              "generate(losses_dict: dict, benchmark_key: str) -> pd.DataFrame",
+              "to_latex(df: pd.DataFrame) -> str",
+              "to_excel(df: pd.DataFrame, path: str) -> None"
+            ]
+          }
+        ],
+        "sir_modules": ["Forecast Sharpe Ratio Calculator", "Forecast Sortino Ratio Calculator", "Forecast Omega Ratio Calculator", "Maximum Drawdown Calculator", "Edge Ratio Calculator"]
+      },
+      {
+        "path": "src/forecast_risk/utils/__init__.py",
+        "description": "Utils package init",
+        "classes": [],
+        "sir_modules": []
+      },
+      {
+        "path": "src/forecast_risk/utils/config.py",
+        "description": "Config loading/validation from YAML",
+        "classes": [
+          {
+            "name": "Config",
+            "methods": ["from_yaml(path: str) -> Config", "to_dict() -> dict"]
+          }
+        ],
+        "sir_modules": []
+      },
+      {
+        "path": "src/forecast_risk/utils/dm_test.py",
+        "description": "Diebold-Mariano test implementation with HAC variance",
+        "classes": [
+          {
+            "name": "DieboldMarianoTest",
+            "methods": [
+              "statistic(losses_a: np.ndarray, losses_b: np.ndarray, h: int = 1) -> float",
+              "pvalue(losses_a: np.ndarray, losses_b: np.ndarray) -> float"
+            ]
+          }
+        ],
+        "sir_modules": []
+      }
+    ]
+  },
+  "tensor_flow": [
+    {
+      "name": "Risk Metrics Forward Pass",
+      "pseudocode": [
+        "INPUT: losses_model [T], losses_benchmark [T]",
+        "r = losses_benchmark - losses_model  → [T]  (return series)",
+        "r_bar = mean(r)  → scalar",
+        "s_r = std(r, ddof=1)  → scalar",
+        "sharpe = r_bar / s_r  → scalar",
+        "r_minus = clip(r, upper=0)  → [T]",
+        "s_down = sqrt(mean(r_minus**2))  → scalar",
+        "sortino = r_bar / s_down  → scalar",
+        "r_plus = clip(r, lower=0)  → [T]",
+        "omega = sum(r_plus) / sum(abs(r_minus))  → scalar",
+        "R_cumsum = cumsum(r)  → [T]",
+        "M_running = running_max(R_cumsum, prepend_zero=True)  → [T]",
+        "DD = M_running - R_cumsum  → [T]",
+        "max_dd = max(DD)  → scalar (negated for reporting)",
+        "OUTPUT: {sharpe, sortino, omega, max_dd}"
+      ]
+    },
+    {
+      "name": "Edge Ratio Forward Pass",
+      "pseudocode": [
+        "INPUT: losses_all_models [M, T], model_idx int",
+        "L_model = losses_all_models[model_idx, :]  → [T]",
+        "L_competitors = losses_all_models[exclude model_idx, :]  → [M-1, T]",
+        "L_star = min(L_competitors, axis=0)  → [T]  (frontier)",
+        "e = L_star - L_model  → [T]",
+        "e_plus = clip(e, lower=0)  → [T]",
+        "e_minus = clip(-e, lower=0)  → [T]",
+        "edge_ratio = (sum(e_plus) / sum(e_minus)) * (M - 1)  → scalar",
+        "OUTPUT: edge_ratio"
+      ]
+    },
+    {
+      "name": "Expanding Window Evaluation Pass",
+      "pseudocode": [
+        "INPUT: panel_data [T_full, N_series], targets list, horizons list",
+        "FOR each evaluation_period t in [T_start, T_end]:",
+        "  X_train, y_train = panel_data[:t], targets[:t-h]",
+        "  model.fit(X_train, y_train)",
+        "  X_test = panel_data[t:t+1]",
+        "  y_hat = model.predict(X_test)  → scalar",
+        "  loss_t = loss_fn(y_true[t+h], y_hat)  → scalar",
+        "END FOR",
+        "OUTPUT: losses_dict[model_name] = [T_eval]"
+      ]
+    }
+  ],
+  "config_schema": {
+    "template_path": "configs/default_config.yaml",
+    "sections": ["data", "models", "evaluation", "metrics", "hardware"]
+  },
+  "dependencies": {
+    "requirements": [
+      "numpy>=1.24",
+      "pandas>=2.0",
+      "scikit-learn>=1.3",
+      "lightgbm>=4.0",
+      "torch>=2.0",
+      "statsmodels>=0.14",
+      "scipy>=1.11",
+      "matplotlib>=3.7",
+      "seaborn>=0.13",
+      "tabpfn>=0.1.9",
+      "fredapi>=0.5",
+      "openpyxl>=3.1",
+      "pyyaml>=6.0",
+      "tqdm>=4.65"
+    ],
+    "dev_requirements": [
+      "pytest>=7.4",
+      "black>=23.0",
+      "ruff>=0.1",
+      "mypy>=1.5",
+      "jupyter>=1.0",
+      "nbformat>=5.9"
+    ]
+  },
+  "entrypoints": [
+    {
+      "script": "run_evaluation.py",
+      "description": "Full expanding-window evaluation pipeline",
+      "cli_args": ["--config configs/default_config.yaml", "--targets gdp inflation unemployment housing", "--horizons 1 2 4", "--start-year 2007", "--end-year 2024", "--output-dir results/"]
+    },
+    {
+      "script": "compute_metrics.py",
+      "description": "Compute risk-adjusted metrics from pre-computed loss files",
+      "cli_args": ["--losses-dir results/losses/", "--benchmark ar4", "--output results/metrics_table.csv"]
+    },
+    {
+      "script": "run_meta_analysis.py",
+      "description": "Cross-sectional meta-analysis across targets/horizons",
+      "cli_args": ["--metrics-dir results/metrics/", "--output results/meta_analysis.csv"]
+    },
+    {
+      "script": "download_data.py",
+      "description": "Download FRED-QD and SPF data",
+      "cli_args": ["--fred-api-key YOUR_KEY", "--output-dir data/"]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.10-slim",
+    "system_deps": ["build-essential", "git", "curl"],
+    "workdir": "/workspace",
+    "volumes": ["data/:/workspace/data", "results/:/workspace/results"],
+    "default_cmd": "python run_evaluation.py --config configs/default_config.yaml"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "HNN (Hemisphere Neural Network) architecture has specialized hemisphere structure not fully detailed in this paper — requires consulting Goulet Coulombe (2025a) and Goulet Coulombe et al. (2026) for full implementation",
+      "mitigation": "Provide placeholder HNN with simplified architecture; flag for user to integrate actual HNN code from author"
+    },
+    {
+      "severity": "High",
+      "description": "LGB+ and LGBA+ are non-standard lightgbm variants described in Goulet Coulombe (2026), a working paper not fully available",
+      "mitigation": "Implement approximation using lightgbm with linear tree option; add prominent TODO comment"
+    },
+    {
+      "severity": "Medium",
+      "description": "TabPFN requires pre-trained model weights — may fail if tabpfn package version is incompatible or weights unavailable",
+      "mitigation": "Wrap in try/except with graceful fallback; pin tabpfn version"
+    },
+    {
+      "severity": "Medium",
+      "description": "FRED-QD transformation codes must match McCracken-Ng (2020) exactly — wrong stationarity transformation invalidates results",
+      "mitigation": "Download official transformation code file alongside data; validate series properties"
+    },
+    {
+      "severity": "Medium",
+      "description": "KRR bandwidth grid search range not specified (SIR confidence 0.55)",
+      "mitigation": "Use log-spaced grid [0.01, 1, 10, 100] as default; make configurable in YAML"
+    },
+    {
+      "severity": "Low",
+      "description": "Edge Ratio denominator is zero if a model never loses to competitors — division by zero",
+      "mitigation": "Add epsilon guard: if sum(e_minus) < 1e-10, return edge_ratio = inf or large constant; document behavior"
+    },
+    {
+      "severity": "Low",
+      "description": "SPF data format varies by vintage — loader must handle Philadelphia Fed CSV format changes",
+      "mitigation": "Pin SPF download to known-good vintage; include cached sample in data/"
+    }
+  ]
+}

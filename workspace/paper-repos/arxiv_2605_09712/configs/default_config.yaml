@@ -1,0 +1,141 @@
+# ============================================================
+# forecast_risk — Default Configuration
+# Paper: "Quantifying the Risk-Return Tradeoff in Forecasting"
+# Author: Philippe Goulet Coulombe (arXiv: 2605.09712)
+# ============================================================
+
+data:
+  fred_api_key: ""               # Set via env var FRED_API_KEY or here
+  fred_qd_vintage: "latest"      # FRED-QD vintage date
+  spf_file: "data/spf_median.csv"
+  output_dir: "data/"
+  targets:
+    - gdp_growth
+    - cpi_inflation
+    - unemployment_rate
+    - housing_starts
+  lags: 4                        # Sec 3: 4 lags per predictor
+  ma_orders: [2, 4, 8]          # Sec 3: MARX transformation
+  n_factors: 4                   # FAAR: 4 principal components (Sec 3)
+
+evaluation:
+  horizons: [1, 2, 4]           # Quarters ahead (Sec 3)
+  pre_covid_start: "2007Q2"
+  pre_covid_end: "2019Q4"
+  post_covid_start: "2021Q1"
+  post_covid_end: "2024Q2"
+  train_start: "1961Q2"
+  benchmark: "ar4"              # Benchmark model key
+  refit_every: 8                # Re-estimate every 8 quarters (Sec 3)
+  loss_function: "squared_error"  # Options: squared_error, absolute_error, log_score
+
+models:
+  enabled:
+    - ar4
+    - faar
+    - ridge
+    - kernel_ridge
+    - random_forest
+    - lgb
+    - lgb_plus          # STUB: approximated (see src/forecast_risk/models/tree_models.py)
+    - lgb_alt           # STUB: approximated
+    - neural_net
+    - hnn               # STUB: simplified HNN (see src/forecast_risk/models/neural.py)
+    - tabpfn
+    - spf               # Loaded from data file, not estimated
+
+  ar4:
+    lags: 4
+
+  faar:
+    n_factors: 4       # Explicitly stated in paper Sec 3
+    lags: 4
+
+  ridge:
+    # ASSUMED: lambda grid — not specified in paper
+    lambda_grid: [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
+    cv_folds: 5
+
+  kernel_ridge:
+    # ASSUMED: kernel types and grid — not specified in paper (SIR confidence 0.55)
+    kernels: ["gaussian", "laplacian"]
+    sigma_grid: [0.01, 0.1, 1.0, 10.0, 100.0]
+    lambda_grid: [0.001, 0.01, 0.1, 1.0, 10.0]
+    cv_folds: 5
+
+  random_forest:
+    n_estimators: 500            # Explicitly stated: 500 trees (Sec 3)
+    subsample: 0.75              # Explicitly stated: 75% subsampling (Sec 3)
+    min_samples_leaf: 5          # Explicitly stated: min node size 5 (Sec 3)
+    max_features: "sqrt"         # ASSUMED: standard RF random feature selection
+
+  lgb:
+    # ASSUMED: default LGB params; paper says cross-validated
+    num_leaves: 31
+    learning_rate: 0.05
+    n_estimators: 1000
+    early_stopping_rounds: 50   # ASSUMED: not specified in paper
+
+  lgb_plus:
+    # ASSUMED: See Goulet Coulombe (2026) for actual implementation
+    # Using LGB with linear_tree=True as approximation
+    use_linear_tree: true
+    num_leaves: 31
+    learning_rate: 0.05
+    n_estimators: 1000
+    early_stopping_rounds: 50   # ASSUMED
+
+  lgb_alt:
+    use_linear_tree: true
+    alternating: true
+    num_leaves: 31
+    learning_rate: 0.05
+    n_estimators: 1000
+
+  neural_net:
+    hidden_sizes: [400, 400, 400]  # Explicitly stated: 3 hidden layers, 400 neurons (Sec 3)
+    activation: "relu"             # Explicitly stated (Sec 3)
+    dropout: 0.2                   # Explicitly stated (Sec 3)
+    optimizer: "adam"              # Explicitly stated (Sec 3)
+    learning_rate: 0.001           # ASSUMED: Adam default
+    max_epochs: 200                # ASSUMED
+    early_stopping_patience: 20    # ASSUMED
+
+  hnn:
+    # STUB: Hemisphere Neural Network — see Goulet Coulombe (2025a, 2026)
+    # Full implementation requires consulting the dedicated HNN papers
+    n_hemispheres: 4               # Stated: long-run, short-run, output gap, commodities (Sec 3)
+    hidden_sizes: [400, 400]       # Stated: 2 hidden layers, 400 neurons (Appendix A)
+    activation: "relu"             # Stated (Appendix A)
+    variance_activation: "softplus" # Stated (Appendix A)
+    bootstrap_samples: 1000        # Stated: B=1000 (Appendix A)
+    learning_rate: 0.001           # ASSUMED
+
+  tabpfn:
+    # TabPFN: in-context learning, no fine-tuning
+    device: "cpu"
+    N_ensemble_configurations: 32  # ASSUMED: TabPFN default
+
+metrics:
+  compute_sharpe: true
+  compute_sortino: true
+  compute_omega: true
+  compute_max_drawdown: true
+  compute_edge_ratio: true
+  compute_dm_test: true
+  # HAC NOT applied to Sharpe/Sortino/Omega (deliberate design choice, Sec 2.2)
+  hac_lags: 4                    # Used only for DM test statistic
+
+hardware:
+  seed: 42
+  deterministic: false           # Set true for full reproducibility (may slow training)
+  device: "cpu"                  # Change to "cuda" for GPU training of NN/HNN
+  num_workers: 4
+
+output:
+  results_dir: "results/"
+  losses_dir: "results/losses/"
+  metrics_dir: "results/metrics/"
+  figures_dir: "results/figures/"
+  save_losses: true
+  save_metrics: true
