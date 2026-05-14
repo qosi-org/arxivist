@@ -1,0 +1,29 @@
+{
+  "paper_id": "arxiv_2605_volatility_sig",
+  "title": "Volatility Modeling in Markovian and Rough Regimes: Signature Methods and Analytical Expansions",
+  "arxiv_id": "2507.23392v4",
+  "authors": [
+    "Elisa Al\u00f2s",
+    "\u00d2scar Bur\u00e9s",
+    "Rafael de Santiago",
+    "Josep Vives"
+  ],
+  "domain": "Quantitative Finance / Mathematical Finance",
+  "sir_version": 1,
+  "sir_path": "sir-registry/arxiv_2605_volatility_sig/sir.json",
+  "repo_path": "paper-repos/arxiv_2605_volatility_sig/",
+  "created_at": "2026-05-13T00:00:00Z",
+  "last_updated": "2026-05-13T00:00:00Z",
+  "tags": [
+    "rough volatility",
+    "signatures",
+    "Heston",
+    "rough Bergomi",
+    "implied volatility",
+    "calibration",
+    "fBM"
+  ],
+  "has_comparison_report": true,
+  "has_repo": true,
+  "has_notebook": true
+}

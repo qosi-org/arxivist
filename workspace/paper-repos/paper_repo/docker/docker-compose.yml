@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: volsig:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ../results:/workspace/results
+      - ../data:/workspace/data
+    command: >
+      python train.py
+        --config configs/config.yaml
+        --experiment heston_uncorr
+
+  notebook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: volsig:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../notebooks:/workspace/notebooks
+      - ../results:/workspace/results
+      - ../data:/workspace/data
+    command: >
+      jupyter notebook
+        --ip=0.0.0.0
+        --port=8888
+        --no-browser
+        --allow-root
+        --notebook-dir=/workspace/notebooks

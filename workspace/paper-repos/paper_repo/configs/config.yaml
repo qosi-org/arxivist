@@ -1,0 +1,77 @@
+# volsig configuration
+# Paper: "Volatility Modeling in Markovian and Rough Regimes" (arXiv 2507.23392)
+# Confidence annotations: values marked # ASSUMED were not explicitly stated in the paper.
+
+model:
+  signature_truncation_N: 3          # paper: explicit (Sections 4.3, 5, 6)
+  primary_process: heston_variance   # options: heston_variance | fbm_raw | fbm_exp | fbm_shifted_exp
+  S0: 100.0                          # paper: explicit (Section 2.1)
+  r: 0.0                             # paper: explicit (Section 4, "assume r=0")
+
+# ── Heston primary process parameters (used when primary_process = heston_variance) ──
+heston_primary:
+  X0: 0.1                            # paper: Section 5.1 — stated explicitly; see SIR ambiguity R4
+  x0_is_variance: true               # ASSUMED: X0 is initial variance; set false if X0 is initial vol
+  nu: 0.2                            # paper: Section 5.1
+  kappa: 2.0                         # paper: Section 5.1
+  theta: 0.15                        # paper: Section 5.1
+  rho_asset_vol: 0.0                 # paper: 0.0 uncorrelated (Sec 5.1), -0.5 correlated (Sec 5.2)
+
+# ── fBM primary process parameters (used when primary_process = fbm_*) ──
+fbm_primary:
+  H: 0.2                             # paper: Section 6 (shifted_exp variant)
+  X0: 0.1                            # paper: Section 6 (shifted_exp variant)
+  rho_asset_vol: -0.6                # paper: Section 6
+
+# ── Heston market parameters (ground-truth for synthetic market generation) ──
+heston_market:
+  sigma0: 0.2                        # paper: Table 2.1 / 2.2
+  nu: 0.3                            # paper: Table 2.1 / 2.2
+  kappa: 3.0                         # paper: Table 2.1 / 2.2
+  theta: 0.09                        # paper: Table 2.1 / 2.2
+  rho: 0.0                           # paper: Table 2.1 (set to -0.5 for correlated experiment)
+
+# ── Rough Bergomi market parameters (ground-truth for synthetic market generation) ──
+rbergomi_market:
+  sigma0: 0.2                        # paper: Table 2.3
+  H: 0.1                             # paper: Table 2.3
+  eta: 0.5                           # paper: Table 2.3
+  rho: -0.7                          # paper: Table 2.3
+
+# ── Simulation ──
+simulation:
+  nMC: 800000                        # paper: Section 4.3 explicit
+  T_steps_per_unit: 252              # ASSUMED: daily time steps; paper only says "Euler scheme"
+  seed: 42                           # ASSUMED: paper does not specify
+  interpolation: linear              # paper: Section 4.3 explicit
+  fbm_method: cholesky               # ASSUMED: options: cholesky | hybrid_bennedsen
+  cholesky_reg_eps: 1.0e-8           # ASSUMED: regularization for Cholesky of -Q matrix (Risk R7)
+
+# ── Calibration ──
+calibration:
+  optimizer: L-BFGS-B                # paper: Section 4.3 explicit
+  tolerance: 1.0e-8                  # paper: Section 4.3 explicit
+  l0_init: zeros                     # ASSUMED: paper does not specify initialization
+  box_bounds: [-10.0, 10.0]          # ASSUMED: paper mentions box constraints, bounds unspecified
+  maturities: [0.1, 0.6, 1.1, 1.6]  # paper: Section 5.1 explicit
+  strikes: [90, 95, 100, 105, 110]   # paper: Section 5.1 explicit
+  weight_scheme: inverse_vega        # paper: Section 5.1 explicit ("gamma_i = inverse Vega")
+  max_iter: 10000                    # ASSUMED
+
+# ── Rough Bergomi VIX calibration ──
+vix_calibration:
+  Delta_trading_days: 30             # paper: Section 2.2 explicit ("30 trading days")
+  T1: 0.1                            # ASSUMED: short maturity for H estimation
+  T2: 0.5                            # ASSUMED: second maturity for H estimation
+
+# ── Hardware ──
+hardware:
+  device: cuda                       # options: cuda | cpu
+  num_workers: 4                     # ASSUMED
+  use_float64: true                  # ASSUMED: financial precision typically requires float64
+
+# ── Paths (all relative to project root) ──
+paths:
+  output_dir: results/
+  checkpoint_dir: results/checkpoints/
+  data_dir: data/
