@@ -1,0 +1,425 @@
+{
+  "paper_id": "arxiv_2605_volatility_sig",
+  "schema_version": "1.0",
+
+  "provenance": {
+    "title": "Volatility Modeling in Markovian and Rough Regimes: Signature Methods and Analytical Expansions",
+    "authors": [
+      {"name": "Elisa Alòs", "affiliation": "Universitat Pompeu Fabra and Barcelona School of Economics"},
+      {"name": "Òscar Burés", "affiliation": "Universitat de Barcelona; IESE Business School"},
+      {"name": "Rafael de Santiago", "affiliation": "IESE Business School"},
+      {"name": "Josep Vives", "affiliation": "Universitat de Barcelona; Institut de Matemàtiques, Universitat de Barcelona"}
+    ],
+    "arxiv_id": "2507.23392v4",
+    "submission_date": "2026-05-08",
+    "abstract_truncated": "We study two complementary methodologies for calibrating implied volatility surfaces: analytical approximations and data-driven models based on rough path theory. On the analytical side, we revisit a second-order asymptotic expansion for the Heston model, and propose a new, VIX-based calibration scheme for the rough Bergomi model. In parallel, we develop a signature-based approach in which volatility is represented as a linear functional of the truncated signature.",
+    "primary_domain": "Quantitative Finance / Mathematical Finance",
+    "key_claims": [
+      "Analytical second-order expansion (ASV) calibrates Heston model parameters with errors ~1e-4 in implied volatility.",
+      "A new VIX-based closed-form calibration procedure for the rough Bergomi model is introduced, estimating H, η, ρ, σ₀ sequentially from short-maturity data.",
+      "Volatility can be represented as a linear functional of the truncated signature of a primary stochastic process (signature-based model).",
+      "In the Heston setting, signature-based calibration matches analytic accuracy (~1e-4 IV errors).",
+      "In the rough Bergomi setting (non-Markovian), signatures slightly outperform analytical methods, capturing complex temporal dependencies."
+    ],
+    "parsed_at": "2026-05-13T00:00:00Z"
+  },
+
+  "architecture": {
+    "description": "Two parallel calibration frameworks: (A) Analytical expansions for Heston and rough Bergomi, (B) Signature-based stochastic volatility model. Both produce implied volatility surfaces over a grid of strikes/maturities.",
+    "confidence": 0.92,
+    "components": [
+      {
+        "name": "HestonAnalyticalExpansion",
+        "type": "closed_form_approximation",
+        "role": "Calibrates Heston parameters (σ₀, ν, κ, θ, ρ) from ATM and skew term structures",
+        "inputs": ["implied_volatility_surface_IxT", "market_parameters"],
+        "outputs": ["calibrated_heston_params"],
+        "key_equations": ["I1(K,T)", "I2(K,T)", "short-T expansion eq2.4", "long-T expansion eq2.5", "ATM expansion eq2.6"],
+        "confidence": 0.95
+      },
+      {
+        "name": "RoughBergomiVIXCalibration",
+        "type": "closed_form_stepwise_calibration",
+        "role": "Sequentially estimates H, η, ρ, σ₀ from VIX ATMI and implied vol skew",
+        "inputs": ["implied_volatility_surface_IxT", "VIX_ATMI", "short_maturity_skew"],
+        "outputs": ["calibrated_rBergomi_params"],
+        "steps": ["Step1_H_estimation", "Step2_eta_from_VIX_ATMI", "Step3_rho_from_skew", "Step4_sigma0_regression"],
+        "confidence": 0.93
+      },
+      {
+        "name": "PrimaryProcess",
+        "type": "stochastic_process",
+        "variants": [
+          {"name": "HestonVarianceSDE", "equation": "dXt = κ(θ-Xt)dt + ν√Xt dWt", "use_case": "Heston experiments"},
+          {"name": "fBM_raw", "equation": "Xt = ∫₀ᵗ KH(t,s)dWs", "use_case": "rough Bergomi experiments variant 1"},
+          {"name": "fBM_exp", "equation": "Xt = exp(∫₀ᵗ KH(t,s)dWs)", "use_case": "rough Bergomi experiments variant 2"},
+          {"name": "fBM_shifted_exp", "equation": "Xt = X0*exp(∫₀ᵗ KH(t,s)dWs)", "use_case": "rough Bergomi experiments variant 3 (best)"}
+        ],
+        "confidence": 0.95
+      },
+      {
+        "name": "TimeAugmentation",
+        "type": "path_transformation",
+        "description": "Augment primary path Xt → X̂t = (t, Xt) ∈ R ⊕ V",
+        "inputs": ["primary_process_path"],
+        "outputs": ["time_augmented_path"],
+        "confidence": 0.98
+      },
+      {
+        "name": "TruncatedSignatureComputer",
+        "type": "feature_extractor",
+        "description": "Computes truncated signature S(X)^{≤N}_t for N=3. For a 2-dim path (time + primary), signature up to level N has sum_{k=0}^{N} 2^k components = 15 total at N=3.",
+        "inputs": ["time_augmented_path [T_steps, 2]"],
+        "outputs": ["signature_vector [15]", "extended_signature_for_Q [255]"],
+        "truncation_level": 3,
+        "extended_level_for_Q": 7,
+        "dimension_at_N3": 15,
+        "dimension_for_Q_at_level7": 255,
+        "confidence": 0.95
+      },
+      {
+        "name": "SignatureVolatilityModel",
+        "type": "linear_functional",
+        "description": "σt(ℓ) = ℓᵀ · vec(S(X)^{≤N}_t), a linear combination of signature coordinates",
+        "inputs": ["signature_vector [15]", "coefficient_vector_l [15]"],
+        "outputs": ["scalar_volatility"],
+        "confidence": 0.98
+      },
+      {
+        "name": "QMatrixAssembler",
+        "type": "matrix_assembly",
+        "description": "Assembles 15×15 symmetric matrix Q(T) from shuffle products of signature entries at level 2N+1=7. Q(T)_{L(I),L(J)} = -½ <(eI⊔eJ)⊗e0, S(X)^{≤7}_T>",
+        "inputs": ["extended_signature [255]"],
+        "outputs": ["Q_matrix [15,15]", "cholesky_factor_U [15,15]"],
+        "confidence": 0.95
+      },
+      {
+        "name": "MonteCarloOptionPricer",
+        "type": "simulation",
+        "description": "Prices European calls by Monte Carlo using the signature-driven price process formula",
+        "inputs": ["S0", "strikes [5]", "maturities [4]", "coefficient_vector_l [15]", "U_matrix [15,15]", "stochastic_integrals [nMC,15]"],
+        "outputs": ["option_prices [20]"],
+        "formula": "S̃_T(ℓ) = S0 * exp(-‖U(T)ℓ‖² + ℓᵀ ∫vec(S(X)^{≤N}_s)dZs)",
+        "confidence": 0.95
+      },
+      {
+        "name": "CalibrationOptimizer",
+        "type": "optimizer",
+        "description": "Minimizes weighted least-squares loss L(ℓ) between model and market option prices",
+        "inputs": ["market_prices [20]", "model_prices_fn"],
+        "outputs": ["optimal_l_star [15]", "min_loss"],
+        "algorithm": "L-BFGS-B",
+        "tolerance": 1e-8,
+        "constraints": "box constraints on ℓ",
+        "confidence": 0.92
+      }
+    ],
+    "data_flow": [
+      "simulate W, B → Z = ρW + √(1-ρ²)B",
+      "simulate primary process X via Euler scheme",
+      "time-augment: X̂ = (t, X)",
+      "compute S(X)^{≤7} for all paths (offline, once)",
+      "extract S(X)^{≤3} → stochastic integrals ∫vec(S)dZ [nMC]",
+      "assemble Q(T) → Cholesky U(T) [nMC]",
+      "given ℓ: evaluate S̃_T(ℓ) per path → C(K,T,ℓ)",
+      "optimize L(ℓ) via L-BFGS-B"
+    ]
+  },
+
+  "mathematical_spec": {
+    "confidence": 0.95,
+    "equations": [
+      {
+        "id": "eq_heston_stock",
+        "name": "Heston Stock SDE",
+        "latex": "dS_t = rS_t dt + \\sigma_t S_t d(\\rho W_t + \\sqrt{1-\\rho^2}B_t)",
+        "role": "market dynamics",
+        "symbols": {"S_t": "stock price", "r": "risk-free rate", "σ_t": "volatility", "W,B": "independent BMs", "ρ": "correlation"}
+      },
+      {
+        "id": "eq_heston_vol",
+        "name": "Heston Variance SDE",
+        "latex": "d\\sigma_t^2 = \\kappa(\\theta - \\sigma_t^2)dt + \\nu\\sqrt{\\sigma_t^2}dW_t",
+        "role": "variance dynamics",
+        "symbols": {"κ": "mean reversion speed", "θ": "long-run variance", "ν": "vol-of-vol"}
+      },
+      {
+        "id": "eq_iv_approx_atm",
+        "name": "ATM Heston IV expansion",
+        "latex": "I(T,K) \\approx \\sigma_0 + \\frac{3\\sigma_0^2\\rho\\nu - 6\\kappa(\\sigma_0^2-\\theta) - \\nu^2}{24\\sigma_0}T",
+        "role": "calibration: ATM slope in T"
+      },
+      {
+        "id": "eq_iv_approx_shortT",
+        "name": "Short-T Heston IV expansion",
+        "latex": "I(0,K) \\approx \\sigma_0 - \\frac{\\rho\\nu}{4\\sigma_0}(x-k) + \\frac{\\nu^2}{24\\sigma_0^3}(x-k)^2",
+        "role": "calibration: smile at short maturities (x=log S, k=log K)"
+      },
+      {
+        "id": "eq_iv_approx_longT",
+        "name": "Long-T Heston IV expansion",
+        "latex": "I(T,K) \\approx \\sqrt{\\theta}\\left(1 + \\frac{\\nu\\rho}{4\\kappa} - \\frac{\\nu^2}{32\\kappa^2}\\right) + \\left[\\ldots\\right]\\frac{1}{T}",
+        "role": "calibration: ATM level at large T"
+      },
+      {
+        "id": "eq_rBergomi",
+        "name": "Rough Bergomi Model",
+        "latex": "\\sigma_t^2 = \\sigma_0^2 \\exp\\left(\\eta W_t^H - \\frac{1}{2}\\eta^2 t^{2H}\\right), \\quad W_t^H = \\int_0^t K_H(t,s)dW_s",
+        "role": "rough volatility market model",
+        "symbols": {"H": "Hurst index (0,0.5)", "η": "vol-of-vol", "KH": "Volterra kernel √(2H)(t-s)^{H-1/2}"}
+      },
+      {
+        "id": "eq_H_estimator",
+        "name": "Hurst index estimator from skew",
+        "latex": "\\hat{H} = -\\frac{1}{2} + \\frac{\\ln\\left(\\frac{[I(T_1,K^+_{T_1})-I(T_1,K^-_{T_1})]}{[I(T_2,K^+_{T_2})-I(T_2,K^-_{T_2})]}\\cdot\\frac{I^2(T_2,K^*)}{I^2(T_1,K^*)}\\right)}{\\ln(T_1/T_2)}",
+        "role": "Step 1 of rough Bergomi calibration"
+      },
+      {
+        "id": "eq_eta_estimator",
+        "name": "η estimator from VIX ATMI",
+        "latex": "\\hat{\\eta} = \\frac{I^{VIX}_T(0)(2\\hat{H}+1)}{\\sqrt{2\\hat{H}}\\Delta^{\\hat{H}-1/2}}, \\quad \\text{as } T\\to 0",
+        "role": "Step 2 of rough Bergomi calibration"
+      },
+      {
+        "id": "eq_rho_estimator",
+        "name": "ρ estimator from ATM skew",
+        "latex": "\\hat{\\rho} = \\frac{T^{1/2-\\hat{H}}\\partial_k I(0,K^*)(3+4\\hat{H}(2+\\hat{H}))}{2\\hat{\\eta}\\sqrt{2\\hat{H}}}",
+        "role": "Step 3 of rough Bergomi calibration"
+      },
+      {
+        "id": "eq_sigma0_regression",
+        "name": "σ₀ regression from ATM term structure",
+        "latex": "I(T,K^*) \\approx \\sigma_0 + c_1 T^{2H} + O(T^{H+1/2})",
+        "role": "Step 4 of rough Bergomi calibration"
+      },
+      {
+        "id": "eq_sig_volatility",
+        "name": "Signature-based volatility",
+        "latex": "\\sigma_t(\\ell) = \\sum_{|I|\\leq N} \\ell_I \\langle e_I, S(X)^{\\leq N}_t \\rangle",
+        "role": "core model — linear functional of truncated signature"
+      },
+      {
+        "id": "eq_price_process",
+        "name": "Signature-driven price process",
+        "latex": "\\tilde{S}_T(\\ell) = S_0 \\exp\\left(-\\|U(T)\\ell\\|^2 + \\ell^T \\int_0^T \\text{vec}(S(X)^{\\leq N}_s)dZ_s\\right)",
+        "role": "closed-form MC evaluation formula"
+      },
+      {
+        "id": "eq_Q_matrix",
+        "name": "Q matrix definition",
+        "latex": "Q(T)_{L(I),L(J)} = -\\frac{1}{2}\\langle (e_I \\shuffle e_J)\\otimes e_0, S(X)^{\\leq 2N+1}_T \\rangle",
+        "role": "assembles variance term via shuffle product and extended signature"
+      },
+      {
+        "id": "eq_loss",
+        "name": "Calibration loss function",
+        "latex": "L(\\ell) = \\sum_{i=1}^{20} \\gamma_i (C^{mkt}(K_i,T_i) - C(K_i,T_i,\\ell))^2",
+        "role": "objective for L-BFGS-B optimizer",
+        "weights": "γ_i = inverse Vega of i-th option"
+      }
+    ]
+  },
+
+  "tensor_semantics": {
+    "confidence": 0.88,
+    "tensors": [
+      {"name": "primary_path", "shape": "[nMC, T_steps, 1]", "dtype": "float64", "role": "input"},
+      {"name": "augmented_path", "shape": "[nMC, T_steps, 2]", "dtype": "float64", "role": "intermediate", "note": "channel 0=time, channel 1=Xt"},
+      {"name": "signature_N3", "shape": "[nMC, 15]", "dtype": "float64", "role": "features", "note": "sum_{k=0}^{3} 2^k = 15 terms for 2D path"},
+      {"name": "extended_signature_N7", "shape": "[nMC, 255]", "dtype": "float64", "role": "intermediate_for_Q", "note": "sum_{k=0}^{7} 2^k = 255"},
+      {"name": "stochastic_integral", "shape": "[nMC, 15]", "dtype": "float64", "role": "intermediate", "note": "∫vec(S^{≤N}_s)dZs per path"},
+      {"name": "Q_matrix", "shape": "[nMC, 15, 15]", "dtype": "float64", "role": "variance_term"},
+      {"name": "U_cholesky", "shape": "[nMC, 15, 15]", "dtype": "float64", "role": "cholesky_factor"},
+      {"name": "l_vector", "shape": "[15]", "dtype": "float64", "role": "trainable_parameters"},
+      {"name": "option_prices", "shape": "[4, 5]", "dtype": "float64", "role": "output", "note": "4 maturities x 5 strikes"},
+      {"name": "implied_vol_surface", "shape": "[4, 5]", "dtype": "float64", "role": "output"}
+    ]
+  },
+
+  "training_pipeline": {
+    "confidence": 0.91,
+    "description": "Two-phase: (1) offline signature computation, (2) online optimization of ℓ",
+    "phase1_offline": {
+      "steps": [
+        "Simulate nMC paths of W, B (Gaussian increments, Euler scheme)",
+        "Construct Z = ρW + √(1-ρ²)B",
+        "Simulate primary process X (Euler, dt determined by T_steps)",
+        "Time-augment: X̂ = (t, X)",
+        "Compute truncated signature S(X)^{≤7} for all paths (GPU vectorized)",
+        "Extract S(X)^{≤3} subsets",
+        "Compute stochastic integrals ∫vec(S^{≤3}_s)dZs via Euler sum",
+        "Assemble Q(T) matrices per maturity, compute Cholesky"
+      ],
+      "note": "All computed once and cached before optimization"
+    },
+    "phase2_optimization": {
+      "optimizer": "L-BFGS-B",
+      "tolerance": 1e-8,
+      "constraints": "box constraints on ℓ components (paper does not specify exact bounds)",
+      "initial_guess": "not specified (assumption: zeros or random small values)",
+      "convergence": "tolerance-based"
+    },
+    "hyperparameters": {
+      "nMC": 800000,
+      "T_steps": "not explicitly stated (assumption: ~100-200 Euler steps per unit time)",
+      "maturities": [0.1, 0.6, 1.1, 1.6],
+      "strikes": [90, 95, 100, 105, 110],
+      "S0": 100,
+      "r": 0,
+      "signature_truncation_N": 3,
+      "interpolation": "linear"
+    },
+    "heston_primary_params_uncorrelated": {
+      "X0": 0.04,
+      "nu": 0.2,
+      "kappa": 2.0,
+      "theta": 0.15,
+      "rho_asset_vol": 0.0,
+      "note": "X0 stated as 0.1 in Sec 5.1; but equation says dσ²=..., so X0=σ₀²=0.04 or X0=0.1 as variance — paper states X0=0.1 for the SDE (4.2)"
+    },
+    "heston_primary_params_correlated": {
+      "X0": 0.25,
+      "nu": 0.35,
+      "kappa": 3.3,
+      "theta": 0.15,
+      "rho_asset_vol": -0.5
+    },
+    "rBergomi_primary_params": {
+      "H": 0.2,
+      "rho": -0.6,
+      "X0": 0.1,
+      "variant": "shifted_exp"
+    }
+  },
+
+  "evaluation_protocol": {
+    "confidence": 0.95,
+    "datasets": "Synthetic market prices from Heston MC / rough Bergomi MC (ground truth)",
+    "metrics": [
+      "Absolute implied volatility error per contract: |IV_model(Ki,Ti) - IV_mkt(Ki,Ti)|",
+      "Loss function value L(ℓ*) at convergence"
+    ],
+    "results": {
+      "heston_uncorrelated": {
+        "method": "SIG vs ASV",
+        "ASV_errors_range": "2e-5 to 1.2e-4",
+        "SIG_errors_range": "5e-5 to 1.27e-3",
+        "loss_at_convergence": 1.05e-4,
+        "l_star": [0.201202133, 0.142660997, 1.08471290, -0.297312378, -0.0293435325,
+                   -0.0422317187, 9.25090162e-4, 0.293103687, -0.0143435573, -0.0134285652,
+                   -1.64737083e-3, -2.89883092e-3, -5.72798006e-4, -1.93045420e-3, -1.84406803e-4]
+      },
+      "heston_correlated": {
+        "method": "SIG vs ASV",
+        "errors_range": "1e-4 to ~1e-3",
+        "loss_at_convergence": 1.46e-3,
+        "l_star": [-0.195158212, -0.250867130, -0.125195785, 0.606113847, -0.303740047,
+                   0.347580926, 0.136816382, -0.664746087, 0.563172308, 0.033241841,
+                   0.029376982, 0.019240593, -0.065104522, 3.67e-5, -8.94e-3]
+      },
+      "rough_bergomi": {
+        "method": "SIG vs VIX analytical",
+        "errors_range": "~1e-4",
+        "loss_at_convergence": 3.5e-4,
+        "calibration_time_minutes": "17-19 (shifted_exp variant)",
+        "l_star": [0.17273586, -0.29578964, -0.08071348, 0.40101573, -0.2974647,
+                   0.31988953, 1.40158411, 0.15016936, -0.05769989, 0.00999173,
+                   0.25021442, 0.02998332, -0.00789562, 0.12012242, 0.27102252]
+      }
+    },
+    "compute": {
+      "hardware": "Consumer desktop, 128 GB RAM, NVIDIA RTX 3080 Ti GPU",
+      "framework": "Python + NumPy/SciPy + GPU-accelerated signature code",
+      "signature_code": "Peter Foster's path_signatures_introduction (vectorized + GPU)"
+    },
+    "baselines": [
+      "Heston ASV expansion (Alòs et al. 2015)",
+      "Rough Bergomi VIX calibration (new, this paper)"
+    ]
+  },
+
+  "implementation_assumptions": [
+    {
+      "assumption": "Euler-Maruyama discretization with ~100-200 time steps per unit time for primary process",
+      "basis": "Common practice for SDE simulation; paper states Euler scheme but not dt",
+      "confidence": 0.65,
+      "alternatives": ["Milstein scheme", "exact simulation for CIR/Heston (Broadie-Kaya)"]
+    },
+    {
+      "assumption": "Stochastic integral ∫vec(S^{≤N}_s)dZs computed via left-point Euler sum over time grid",
+      "basis": "Standard MC approximation for Itô integrals; consistent with Euler scheme for X",
+      "confidence": 0.72,
+      "alternatives": ["Stratonovich approximation", "midpoint rule"]
+    },
+    {
+      "assumption": "Box constraints on ℓ set to [-10, 10] per component",
+      "basis": "Paper mentions box constraints to accelerate convergence but does not specify bounds",
+      "confidence": 0.45,
+      "alternatives": ["[-5,5]", "[-20,20]", "[-∞,∞] with regularization"]
+    },
+    {
+      "assumption": "Initial guess for ℓ is zero vector",
+      "basis": "Common initialization for unconstrained/box-constrained optimization",
+      "confidence": 0.60,
+      "alternatives": ["Random small normal", "OLS warm start"]
+    },
+    {
+      "assumption": "fBM simulation via Cholesky or Hybrid scheme (Bennedsen et al. 2017) for rough Bergomi market generation; Euler with exact fBM increments for primary process",
+      "basis": "Paper cites Bennedsen et al. 2017 and McCrickerd & Pakkanen 2018 for market prices; primary process uses standard Volterra kernel simulation",
+      "confidence": 0.75,
+      "alternatives": ["Circulant embedding FFT", "Hosking method"]
+    },
+    {
+      "assumption": "PyTorch or NumPy + CuPy used for GPU computation of signatures",
+      "basis": "Paper references Peter Foster's code adapted for GPU; likely PyTorch or CuPy",
+      "confidence": 0.60,
+      "alternatives": ["JAX", "pure CUDA"]
+    },
+    {
+      "assumption": "Signature computed via log-ODE or Chen's identity on linear interpolation of discrete path",
+      "basis": "Paper says linear interpolation is used (Section 4.3)",
+      "confidence": 0.90,
+      "alternatives": ["piecewise-constant", "cubic spline (tried but marginal gain)"]
+    },
+    {
+      "assumption": "Weights γ_i = 1/Vega_i computed under Black-Scholes with ATM vol = σ₀",
+      "basis": "Inverse Vega weighting is standard practice; paper states γ_i = inverse Vega",
+      "confidence": 0.78,
+      "alternatives": ["Uniform weights", "Vega computed under market IV"]
+    }
+  ],
+
+  "ambiguities": [
+    {
+      "location": "Section 5.1",
+      "description": "X0 for Heston primary SDE stated as 0.1, but equation (4.2) is variance (σ²). Ambiguous whether X0=0.1 means initial variance=0.1 (so σ₀≈0.316) or initial vol=0.1 (σ₀=0.1)",
+      "primary_assumption": "X0=0.1 is the initial variance, since the SDE is for variance (matching market σ₀=0.2 → variance=0.04 doesn't match; paper explicitly states X0=0.1 so treat as given)",
+      "alternatives": ["X0=0.04 (=σ₀²=0.2²)"],
+      "confidence": 0.60
+    },
+    {
+      "location": "Section 4.3",
+      "description": "Number of Euler time steps not specified",
+      "primary_assumption": "252 steps per year (daily)",
+      "alternatives": ["50 steps", "500 steps"],
+      "confidence": 0.55
+    },
+    {
+      "location": "Section 4.3",
+      "description": "Exact box constraint bounds for L-BFGS-B not stated",
+      "primary_assumption": "Symmetric bounds around zero, e.g. [-10, 10]",
+      "alternatives": ["[-5,5]", "asymmetric"],
+      "confidence": 0.45
+    }
+  ],
+
+  "confidence_annotations": {
+    "architecture": 0.92,
+    "mathematical_spec": 0.95,
+    "tensor_semantics": 0.88,
+    "training_pipeline": 0.80,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.65,
+    "overall_sir_confidence": 0.86
+  }
+}

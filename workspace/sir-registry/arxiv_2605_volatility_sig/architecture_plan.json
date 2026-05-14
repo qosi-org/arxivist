@@ -1,0 +1,386 @@
+{
+  "paper_id": "arxiv_2605_volatility_sig",
+  "plan_version": 1,
+  "created_at": "2026-05-13T00:00:00Z",
+
+  "framework": {
+    "primary": "Python + NumPy/SciPy + signatory (or iisignature)",
+    "gpu_acceleration": "CuPy or PyTorch tensors for signature computation",
+    "python_version": "3.10+",
+    "cuda_required": true,
+    "cuda_minimum": "11.8",
+    "config_management": "YAML + dataclasses",
+    "reasoning": "Paper uses SciPy L-BFGS-B, GPU-vectorized signatures (Peter Foster's code), and NumPy-style array ops. PyTorch used for GPU tensor ops and autograd-free Monte Carlo. signatory library provides fast truncated signature computation on GPU."
+  },
+
+  "project_name": "volsig",
+
+  "module_hierarchy": {
+    "src/volsig/__init__.py": {"classes": [], "description": "Package init"},
+    "src/volsig/models/__init__.py": {"classes": [], "description": "Models subpackage"},
+    "src/volsig/models/signature_vol.py": {
+      "description": "Core signature-based stochastic volatility model",
+      "sir_components": ["SignatureVolatilityModel", "QMatrixAssembler", "MonteCarloOptionPricer"],
+      "classes": [
+        {
+          "name": "SignatureVolModel",
+          "methods": [
+            {"name": "__init__", "args": "(cfg: ModelConfig)", "returns": "None"},
+            {"name": "compute_signatures", "args": "(paths: ndarray[nMC,T,2], level: int) -> ndarray[nMC, dN]", "returns": "ndarray"},
+            {"name": "compute_extended_signatures", "args": "(paths: ndarray[nMC,T,2], level: int) -> ndarray[nMC, dN_ext]", "returns": "ndarray"},
+            {"name": "assemble_Q_matrix", "args": "(ext_sig: ndarray[nMC,255]) -> ndarray[nMC,15,15]", "returns": "ndarray"},
+            {"name": "compute_stochastic_integrals", "args": "(sig_N3: ndarray[nMC,T,15], dZ: ndarray[nMC,T]) -> ndarray[nMC,15]", "returns": "ndarray"},
+            {"name": "price_calls", "args": "(l: ndarray[15], U: ndarray[nMC,15,15], stoch_integrals: ndarray[nMC,15], S0: float, K: float, r: float) -> float", "returns": "float"},
+            {"name": "calibrate", "args": "(market_prices: ndarray[20], strikes: ndarray[5], maturities: ndarray[4]) -> ndarray[15]", "returns": "ndarray"}
+          ]
+        }
+      ]
+    },
+    "src/volsig/models/heston.py": {
+      "description": "Heston model: SDE simulation and analytical IV expansion (ASV)",
+      "sir_components": ["HestonAnalyticalExpansion", "PrimaryProcess(HestonVarianceSDE)"],
+      "classes": [
+        {
+          "name": "HestonModel",
+          "methods": [
+            {"name": "__init__", "args": "(sigma0, nu, kappa, theta, rho, S0, r)", "returns": "None"},
+            {"name": "simulate_variance", "args": "(nMC, T_steps, dt, seed) -> ndarray[nMC, T_steps]", "returns": "ndarray"},
+            {"name": "simulate_stock", "args": "(var_paths, rho, nMC, T_steps, dt) -> ndarray[nMC, T_steps]", "returns": "ndarray"},
+            {"name": "implied_vol_ASV", "args": "(K: float, T: float) -> float", "returns": "float", "note": "Second-order expansion from Alòs et al. 2015"},
+            {"name": "calibrate_from_surface", "args": "(IV_surface: ndarray[nT,nK], maturities, strikes) -> dict", "returns": "dict", "note": "3-equation system: ATM slope, short-T skew, long-T level"}
+          ]
+        }
+      ]
+    },
+    "src/volsig/models/rough_bergomi.py": {
+      "description": "Rough Bergomi model: fBM simulation and VIX-based analytical calibration",
+      "sir_components": ["RoughBergomiVIXCalibration", "PrimaryProcess(fBM variants)"],
+      "classes": [
+        {
+          "name": "RoughBergomiModel",
+          "methods": [
+            {"name": "__init__", "args": "(sigma0, H, eta, rho, S0, r)", "returns": "None"},
+            {"name": "simulate_variance", "args": "(nMC, T_steps, dt, seed) -> ndarray[nMC, T_steps]", "returns": "ndarray", "note": "Hybrid scheme (Bennedsen et al. 2017)"},
+            {"name": "simulate_stock", "args": "(var_paths, rho, nMC, T_steps, dt) -> ndarray[nMC, T_steps]", "returns": "ndarray"},
+            {"name": "implied_vol_surface", "args": "(strikes, maturities, nMC) -> ndarray[nT,nK]", "returns": "ndarray"}
+          ]
+        },
+        {
+          "name": "RoughBergomiVIXCalibrator",
+          "methods": [
+            {"name": "estimate_H", "args": "(IV_surface, T1, T2, strikes) -> float", "returns": "float"},
+            {"name": "estimate_eta", "args": "(H_hat, VIX_ATMI, Delta) -> float", "returns": "float"},
+            {"name": "estimate_rho", "args": "(H_hat, eta_hat, ATM_skew_T, T) -> float", "returns": "float"},
+            {"name": "estimate_sigma0", "args": "(H_hat, ATM_IV_curve, maturities) -> float", "returns": "float"},
+            {"name": "calibrate", "args": "(IV_surface, VIX_ATMI, maturities, strikes) -> dict", "returns": "dict"}
+          ]
+        }
+      ]
+    },
+    "src/volsig/models/primary_process.py": {
+      "description": "Primary process variants: Heston variance SDE, fBM raw, exp(fBM), X0*exp(fBM)",
+      "sir_components": ["PrimaryProcess"],
+      "classes": [
+        {
+          "name": "PrimaryProcessSimulator",
+          "methods": [
+            {"name": "simulate_heston_variance", "args": "(X0,nu,kappa,theta,nMC,T_steps,dt,seed) -> ndarray[nMC,T_steps]", "returns": "ndarray"},
+            {"name": "simulate_fbm_volterra", "args": "(H,nMC,T_steps,dt,seed) -> ndarray[nMC,T_steps]", "returns": "ndarray", "note": "Volterra kernel KH(t,s)=√(2H)(t-s)^{H-1/2}, Cholesky or Riemann sum"},
+            {"name": "simulate_exp_fbm", "args": "(H,nMC,T_steps,dt,seed) -> ndarray[nMC,T_steps]", "returns": "ndarray"},
+            {"name": "simulate_shifted_exp_fbm", "args": "(X0,H,nMC,T_steps,dt,seed) -> ndarray[nMC,T_steps]", "returns": "ndarray"}
+          ]
+        }
+      ]
+    },
+    "src/volsig/signatures/__init__.py": {"classes": [], "description": "Signature subpackage"},
+    "src/volsig/signatures/compute.py": {
+      "description": "Signature computation: time augmentation, truncated signatures, shuffle products",
+      "sir_components": ["TimeAugmentation", "TruncatedSignatureComputer"],
+      "classes": [
+        {
+          "name": "SignatureComputer",
+          "methods": [
+            {"name": "time_augment", "args": "(paths: ndarray[nMC,T,d], dt: float) -> ndarray[nMC,T,d+1]", "returns": "ndarray"},
+            {"name": "compute_truncated_sig", "args": "(aug_paths: ndarray[nMC,T,2], N: int) -> ndarray[nMC, dN]", "returns": "ndarray", "note": "Uses signatory or iisignature on GPU"},
+            {"name": "sig_dimension", "args": "(d: int, N: int) -> int", "returns": "int", "note": "sum_{k=0}^{N} d^k"},
+            {"name": "multi_index_to_label", "args": "(I: tuple) -> int", "returns": "int"},
+            {"name": "label_to_multi_index", "args": "(label: int, d: int, N: int) -> tuple", "returns": "tuple"}
+          ]
+        },
+        {
+          "name": "ShuffleProductComputer",
+          "methods": [
+            {"name": "shuffle", "args": "(I: tuple, J: tuple) -> dict[tuple, int]", "returns": "dict", "note": "Returns {multi_index: coefficient} for eI ⊔ eJ"},
+            {"name": "compute_Q_entries", "args": "(sig_extended: ndarray[nMC,255], d:int, N:int) -> ndarray[nMC,15,15]", "returns": "ndarray", "note": "Assembles Q(T) via precomputed shuffle lookup table"}
+          ]
+        }
+      ]
+    },
+    "src/volsig/pricing/__init__.py": {"classes": [], "description": "Pricing subpackage"},
+    "src/volsig/pricing/black_scholes.py": {
+      "description": "Black-Scholes formula, IV inversion (Brent's method), Vega computation",
+      "classes": [
+        {
+          "name": "BlackScholes",
+          "methods": [
+            {"name": "call_price", "args": "(S,K,T,r,sigma) -> float", "returns": "float"},
+            {"name": "implied_vol", "args": "(price,S,K,T,r) -> float", "returns": "float"},
+            {"name": "vega", "args": "(S,K,T,r,sigma) -> float", "returns": "float"}
+          ]
+        }
+      ]
+    },
+    "src/volsig/pricing/mc_pricer.py": {
+      "description": "Monte Carlo European call pricer using signature-driven price process",
+      "sir_components": ["MonteCarloOptionPricer"],
+      "classes": [
+        {
+          "name": "SignatureMCPricer",
+          "methods": [
+            {"name": "price_call", "args": "(l: ndarray[15], U: ndarray[nMC,15,15], stoch_int: ndarray[nMC,15], S0,K,r,T) -> float", "returns": "float"},
+            {"name": "price_surface", "args": "(l, precomputed, S0, strikes, maturities, r) -> ndarray[nT,nK]", "returns": "ndarray"}
+          ]
+        }
+      ]
+    },
+    "src/volsig/calibration/__init__.py": {"classes": [], "description": "Calibration subpackage"},
+    "src/volsig/calibration/optimizer.py": {
+      "description": "L-BFGS-B optimizer wrapper for signature calibration loss",
+      "sir_components": ["CalibrationOptimizer"],
+      "classes": [
+        {
+          "name": "SignatureCalibrator",
+          "methods": [
+            {"name": "loss", "args": "(l: ndarray[15], market_prices: ndarray[20], weights: ndarray[20], pricer: SignatureMCPricer) -> float", "returns": "float"},
+            {"name": "calibrate", "args": "(market_prices, weights, l0, bounds) -> OptimizeResult", "returns": "OptimizeResult"},
+            {"name": "compute_weights", "args": "(S0, strikes, maturities, r, sigma0) -> ndarray[20]", "returns": "ndarray", "note": "γ_i = 1/Vega_i"}
+          ]
+        }
+      ]
+    },
+    "src/volsig/utils/__init__.py": {"classes": [], "description": "Utilities"},
+    "src/volsig/utils/config.py": {
+      "description": "Dataclass-based config loading from YAML",
+      "classes": [{"name": "Config", "methods": [{"name": "from_yaml", "args": "(path: str) -> Config", "returns": "Config"}]}]
+    },
+    "src/volsig/utils/plotting.py": {
+      "description": "3D implied volatility surface plots, error tables",
+      "classes": [{"name": "IVSurfacePlotter", "methods": [
+        {"name": "plot_surface_comparison", "args": "(IV1, IV2, strikes, maturities, labels)", "returns": "None"},
+        {"name": "error_table", "args": "(errors_dict, strikes, maturities)", "returns": "DataFrame"}
+      ]}]
+    },
+    "train.py": {"description": "Main entrypoint: run full calibration pipeline"},
+    "evaluate.py": {"description": "Evaluate calibration quality, produce error tables and plots"},
+    "notebooks/": {"description": "Jupyter notebooks (Stage 5)"}
+  },
+
+  "tensor_flows": [
+    {
+      "name": "Offline Signature Precomputation",
+      "pseudocode": [
+        "W, B ~ Gaussian increments → shape [nMC, T_steps]",
+        "Z = rho*W + sqrt(1-rho²)*B → [nMC, T_steps]",
+        "X = euler_simulate(primary_SDE, W) → [nMC, T_steps]",
+        "X_aug = time_augment(X) → [nMC, T_steps, 2]   (channel 0=time, 1=X)",
+        "sig_N3 = compute_sig(X_aug, N=3) → [nMC, T_steps, 15]  (at each time step)",
+        "sig_N7 = compute_sig(X_aug, N=7) → [nMC, 255]  (at terminal T only, for Q)",
+        "stoch_int = sum_t sig_N3[:,t,:] * dZ[:,t] → [nMC, 15]   (Euler sum)",
+        "Q = assemble_Q(sig_N7) → [nMC, 15, 15]",
+        "U = cholesky(-Q) → [nMC, 15, 15]   (stored offline)"
+      ]
+    },
+    {
+      "name": "Online MC Pricing (given ℓ)",
+      "pseudocode": [
+        "l → [15]",
+        "per path j: S_T_j = S0 * exp(-‖U_j @ l‖² + l @ stoch_int_j)",
+        "C(K,T,l) = mean_j(max(S_T_j - K*exp(-rT), 0))",
+        "IV(K,T,l) = BS_implied_vol(C(K,T,l), S0, K, T, r)"
+      ]
+    },
+    {
+      "name": "Calibration Optimization Loop",
+      "pseudocode": [
+        "l ← l0   (initial guess)",
+        "while not converged:",
+        "  C_model[i] = price_call(l, U, stoch_int, Ki, Ti)  for all 20 contracts",
+        "  loss = sum_i gamma_i * (C_mkt[i] - C_model[i])²",
+        "  l ← L-BFGS-B update (gradient via finite differences or autodiff)",
+        "return l*"
+      ]
+    }
+  ],
+
+  "config_schema": {
+    "file": "configs/config.yaml",
+    "template": {
+      "model": {
+        "signature_truncation_N": "3    # paper: explicit",
+        "primary_process": "heston_variance   # options: heston_variance | fbm_raw | fbm_exp | fbm_shifted_exp",
+        "S0": "100.0",
+        "r": "0.0"
+      },
+      "heston_primary": {
+        "X0": "0.1   # paper: explicit (ambiguous — see SIR ambiguity)",
+        "nu": "0.2   # paper: Section 5.1",
+        "kappa": "2.0",
+        "theta": "0.15",
+        "rho_asset_vol": "0.0   # 0.0 for uncorrelated, -0.5 for correlated"
+      },
+      "fbm_primary": {
+        "H": "0.2   # paper: Section 6",
+        "X0": "0.1   # paper: Section 6 (shifted_exp variant)",
+        "rho_asset_vol": "-0.6"
+      },
+      "simulation": {
+        "nMC": "800000   # paper: explicit",
+        "T_steps_per_unit": "252   # ASSUMED: daily steps, paper unspecified",
+        "seed": "42   # ASSUMED",
+        "interpolation": "linear   # paper: Section 4.3"
+      },
+      "calibration": {
+        "optimizer": "L-BFGS-B   # paper: explicit",
+        "tolerance": "1.0e-8   # paper: explicit",
+        "l0_init": "zeros   # ASSUMED: paper unspecified",
+        "box_bounds": "[-10.0, 10.0]   # ASSUMED: paper mentions box constraints but not bounds",
+        "maturities": "[0.1, 0.6, 1.1, 1.6]   # paper: explicit",
+        "strikes": "[90, 95, 100, 105, 110]   # paper: explicit",
+        "weight_scheme": "inverse_vega   # paper: explicit"
+      },
+      "heston_market": {
+        "sigma0": "0.2",
+        "nu": "0.3",
+        "kappa": "3.0",
+        "theta": "0.09",
+        "rho": "0.0   # or -0.5"
+      },
+      "rbergomi_market": {
+        "sigma0": "0.2",
+        "H": "0.1",
+        "eta": "0.5",
+        "rho": "-0.7"
+      },
+      "hardware": {
+        "device": "cuda   # options: cuda | cpu",
+        "num_workers": "4   # ASSUMED"
+      }
+    }
+  },
+
+  "dependencies": {
+    "requirements.txt": [
+      "numpy>=1.24.0",
+      "scipy>=1.11.0",
+      "torch>=2.1.0",
+      "signatory==1.2.7.1.9.0   # GPU-accelerated signatures; OR use iisignature>=0.24 for CPU",
+      "pandas>=2.0.0",
+      "matplotlib>=3.7.0",
+      "pyyaml>=6.0",
+      "tqdm>=4.65.0",
+      "numba>=0.57.0   # optional JIT for fBM simulation",
+      "jupyter>=1.0.0"
+    ],
+    "requirements-dev.txt": [
+      "pytest>=7.4.0",
+      "pytest-cov>=4.1.0",
+      "black>=23.0.0",
+      "isort>=5.12.0",
+      "mypy>=1.5.0"
+    ],
+    "notes": "signatory requires PyTorch; for CPU-only use iisignature instead. For fBM, Cholesky method is O(T²) — consider FFT-based circulant embedding for large T_steps."
+  },
+
+  "entrypoints": [
+    {
+      "file": "train.py",
+      "description": "Run the full signature calibration pipeline",
+      "cli_args": [
+        "--config  PATH         Path to YAML config file",
+        "--experiment {heston_uncorr|heston_corr|rough_bergomi}",
+        "--output_dir PATH      Where to save results",
+        "--seed INT             Random seed",
+        "--nMC INT              Override nMC from config",
+        "--device {cpu|cuda}   Override device"
+      ]
+    },
+    {
+      "file": "evaluate.py",
+      "description": "Evaluate a calibrated ℓ* vector and produce IV surface comparison",
+      "cli_args": [
+        "--config PATH",
+        "--l_star PATH          .npy file with calibrated ℓ vector",
+        "--experiment STR",
+        "--output_dir PATH",
+        "--plot                 Show 3D surface plots"
+      ]
+    },
+    {
+      "file": "calibrate_heston_asv.py",
+      "description": "Run the analytical Heston ASV expansion calibration (Section 2.1)",
+      "cli_args": ["--config PATH", "--output_dir PATH"]
+    },
+    {
+      "file": "calibrate_rbergomi_vix.py",
+      "description": "Run the VIX-based rough Bergomi calibration (Section 2.2)",
+      "cli_args": ["--config PATH", "--output_dir PATH", "--T1 FLOAT", "--T2 FLOAT"]
+    }
+  ],
+
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "build-essential"],
+    "python_setup": [
+      "pip install --upgrade pip",
+      "pip install -r requirements.txt"
+    ],
+    "workdir": "/workspace",
+    "volumes": ["/workspace/data", "/workspace/results"],
+    "default_cmd": "python train.py --config configs/config.yaml"
+  },
+
+  "risk_assessment": [
+    {
+      "id": "R1",
+      "severity": "High",
+      "description": "Q matrix assembly requires shuffle products up to level 2N+1=7, spanning a 255-dimensional tensor space. Computing all shuffle combinations naively is combinatorially expensive.",
+      "mitigation": "Precompute a lookup table mapping (I,J) multi-index pairs to their shuffle expansion coefficients. Cache this table at startup. Use vectorized NumPy ops over nMC paths."
+    },
+    {
+      "id": "R2",
+      "severity": "High",
+      "description": "signatory library has strict PyTorch version compatibility constraints and may not install cleanly on all CUDA versions.",
+      "mitigation": "Provide fallback to iisignature (CPU-only) or a custom batched signature implementation using torch.einsum."
+    },
+    {
+      "id": "R3",
+      "severity": "Medium",
+      "description": "fBM simulation via naive Volterra Riemann sum is O(T²) per path — infeasible at nMC=800k and T_steps≥100.",
+      "mitigation": "Use the Hybrid scheme (Bennedsen et al. 2017) for market price generation. For primary process, use Cholesky decomposition of the covariance matrix once (amortized), then sample via matrix-vector products. Reference: McCrickerd & Pakkanen 2018."
+    },
+    {
+      "id": "R4",
+      "severity": "Medium",
+      "description": "X0 interpretation ambiguity: paper states X0=0.1 for Heston variance SDE but does not clarify if this is initial variance or initial vol.",
+      "mitigation": "Implement config flag `x0_is_variance: true/false`; default to X0=0.1 as variance. Expose as a clearly labeled config parameter."
+    },
+    {
+      "id": "R5",
+      "severity": "Medium",
+      "description": "Box constraint bounds for L-BFGS-B not specified in paper — wrong bounds could prevent convergence.",
+      "mitigation": "Default to [-10,10]; implement as configurable. Run sensitivity test with [-5,5] and [-20,20]. Log final ℓ* to check if bounds are active."
+    },
+    {
+      "id": "R6",
+      "severity": "Low",
+      "description": "VIX ATMI used in Step 2 of rough Bergomi calibration requires European option prices on the VIX index — synthetic generation requires nested simulation.",
+      "mitigation": "Implement VIX simulation using its definition: VIX_T = sqrt(E_T[∫_{T}^{T+Δ} σ²_s ds] / Δ). Use a second Monte Carlo simulation for E[VIX_T²] to compute the VIX option price."
+    },
+    {
+      "id": "R7",
+      "severity": "Low",
+      "description": "Cholesky decomposition of -Q(T) may fail if -Q(T) is not numerically positive definite (due to MC noise in signature estimates).",
+      "mitigation": "Add small diagonal regularization: -Q + ε*I before Cholesky, with ε=1e-8. Log failure count."
+    }
+  ]
+}
