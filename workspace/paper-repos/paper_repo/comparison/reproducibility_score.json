@@ -1,0 +1,102 @@
+{
+  "paper_id": "arxiv_2605_volatility_sig",
+  "comparison_date": "2026-05-13T00:00:00Z",
+  "reproducibility_score": null,
+  "score_status": "PENDING — no user results submitted",
+  "score_confidence": "low",
+  "score_confidence_reason": "No experimental results submitted. Score will be updated when user provides results from train.py.",
+
+  "paper_metrics_available": 3,
+  "paper_metrics": [
+    {
+      "id": "M1",
+      "experiment": "heston_uncorrelated",
+      "metric": "loss_at_convergence",
+      "paper_value": 1.05e-4,
+      "user_value": null,
+      "deviation_pct": null,
+      "severity": "PENDING"
+    },
+    {
+      "id": "M2",
+      "experiment": "heston_correlated",
+      "metric": "loss_at_convergence",
+      "paper_value": 1.46e-3,
+      "user_value": null,
+      "deviation_pct": null,
+      "severity": "PENDING"
+    },
+    {
+      "id": "M3",
+      "experiment": "rough_bergomi",
+      "metric": "loss_at_convergence",
+      "paper_value": 3.5e-4,
+      "user_value": null,
+      "deviation_pct": null,
+      "severity": "PENDING"
+    },
+    {
+      "id": "M4",
+      "experiment": "heston_uncorrelated",
+      "metric": "l_star_l0",
+      "paper_value": 0.201202133,
+      "description": "First coefficient ℓ[0] ≈ σ₀",
+      "user_value": null,
+      "deviation_pct": null,
+      "severity": "PENDING"
+    },
+    {
+      "id": "M5",
+      "experiment": "heston_uncorrelated",
+      "metric": "l_star_l2",
+      "paper_value": 1.08471290,
+      "description": "Third coefficient ℓ[2] (linear dependence on X_t)",
+      "user_value": null,
+      "deviation_pct": null,
+      "severity": "PENDING"
+    },
+    {
+      "id": "M6",
+      "experiment": "heston_uncorrelated",
+      "metric": "mean_IV_error_SIG",
+      "paper_value": 3.5e-4,
+      "description": "Rough estimate from Table 5.1 (most errors 1e-4 to 1e-3)",
+      "user_value": null,
+      "deviation_pct": null,
+      "severity": "PENDING"
+    }
+  ],
+
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0,
+    "pending": 6
+  },
+
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 6,
+    "omission": 1
+  },
+
+  "sir_version_used": 1,
+  "architecture_plan_version": 1,
+
+  "sir_confidence_scores": {
+    "overall": 0.86,
+    "mathematical_spec": 0.95,
+    "training_pipeline": 0.80,
+    "implementation_assumptions": 0.65
+  },
+
+  "sir_confidence_penalty": 0.021,
+  "unmatched_penalty": 0.0,
+
+  "requires_manual_review": true,
+  "manual_review_reason": "No user results submitted. Also: VIX ATMI stub (omission hallucination) requires manual verification for rough Bergomi experiment.",
+
+  "next_action": "Submit results.json from train.py run to the Results Comparator to receive a scored report."
+}
