@@ -1,0 +1,384 @@
+{
+  "paper_id": "arxiv_2605_013941",
+  "sir_version": 1,
+  "provenance": {
+    "title": "EVOLVEMEM: Self-Evolving Memory Architecture via AutoResearch for LLM Agents",
+    "authors": [
+      "Jiaqi Liu (UNC-Chapel Hill)",
+      "Xinyu Ye (UNC-Chapel Hill)",
+      "Peng Xia (UNC-Chapel Hill)",
+      "Zeyu Zheng (UC Berkeley)",
+      "Cihang Xie (UCSC)",
+      "Mingyu Ding (UNC-Chapel Hill)",
+      "Huaxiu Yao (UNC-Chapel Hill)"
+    ],
+    "arxiv_id": "2605.13941",
+    "submission_date": "2026-05-13",
+    "abstract": "Long-term memory is essential for LLM agents that operate across multiple sessions, yet existing memory systems treat retrieval infrastructure as fixed. We present EVOLVEMEM, a self-evolving memory architecture that exposes its full retrieval configuration as a structured action space optimized by an LLM-powered diagnosis module.",
+    "domain": "NLP",
+    "key_claims": [
+      "Existing memory systems freeze retrieval infrastructure while only evolving stored content",
+      "EVOLVEMEM co-evolves stored knowledge AND retrieval mechanisms via an AutoResearch loop",
+      "Self-evolution loop: EVALUATE–DIAGNOSE–PROPOSE–GUARD with automatic revert-on-regression",
+      "25.7% relative improvement over strongest baseline on LoCoMo; 18.9% on MemBench",
+      "Evolved configurations transfer across benchmarks with positive (not catastrophic) transfer"
+    ],
+    "code_url": "https://github.com/aiming-lab/SimpleMem",
+    "parsed_at": "2026-05-15T00:00:00Z"
+  },
+
+  "architecture": {
+    "confidence": 0.90,
+    "description": "Three-layer system connected by a self-evolution feedback loop",
+    "layers": {
+      "layer_1_memory_store": {
+        "name": "Structured Memory Store",
+        "components": {
+          "memory_unit": {
+            "representation": "tuple m = (c, μ, e, η)",
+            "fields": {
+              "c": "natural-language content string",
+              "mu": "memory type from six-category taxonomy T",
+              "e": "dense embedding vector in R^d (d=768 for BGE)",
+              "eta": "metadata: importance, confidence, entity-reinforcement score, entities, topics, creation_timestamp"
+            },
+            "memory_types_taxonomy": ["episodic", "semantic", "preference", "project_state", "working_summary", "procedural"]
+          },
+          "extractor": {
+            "method": "Sliding window of length W=40 turns over source conversation",
+            "backbone": "LLM (GPT-4o or GPT-5.1)",
+            "failure_guards": [
+              "Retry with increasing wait intervals on LLM call failure",
+              "Chunk-split into C=15 turn sub-windows when context exceeds limit",
+              "Coverage verifier: re-extract if reference keywords missing from extracted memories"
+            ]
+          },
+          "consolidator": {
+            "deduplication": {
+              "method": "Jaccard similarity over tokenized content",
+              "threshold": "tau_J = 0.80",
+              "action": "merge, retain higher-importance unit"
+            },
+            "importance_decay": {
+              "schedule": "linear, alpha_d = 0.05 per day",
+              "floor": "iota_min = 0.15"
+            },
+            "entity_reinforcement": {
+              "increment": "delta_rho = 0.05 per entity co-occurrence with query",
+              "cap": "rho_max = 0.30"
+            }
+          }
+        }
+      },
+      "layer_2_retrieval": {
+        "name": "Multi-View Retrieval + Answer Generation",
+        "components": {
+          "retrieval_views": {
+            "lexical": {
+              "method": "BM25",
+              "formula": "skw(q, mi) = sum_t IDF(t) * f(t,ci)*(k1+1) / (f(t,ci) + k1*(1-b+b*|ci|/|c_avg|))",
+              "constants": {"k1": 1.5, "b": 0.75},
+              "top_k_param": "kkw"
+            },
+            "semantic": {
+              "method": "Dense cosine similarity",
+              "formula": "ssem(q, mi) = cos(eq, ei) = eq^T * ei / (||eq|| * ||ei||)",
+              "model": "BAAI/bge-base-en-v1.5 (768-dim)",
+              "top_k_param": "ksem"
+            },
+            "structured_metadata": {
+              "method": "Entity/location/person filter",
+              "formula": "sstr(q, mi) = sum_{f in {persons,locations,entities}} I[extract_f(q) ∩ eta_{i,f} != empty]",
+              "top_k_param": "kstr"
+            }
+          },
+          "fusion": {
+            "modes": ["SUM", "WEIGHTED-SUM", "RRF"],
+            "rrf_formula": "sfuse(q, mi; theta) = sum_v 1/(k + r_v(mi))",
+            "final_ranking_formula": "s(q, mi; theta) = sfuse(q, mi; theta) + lambda_iota * iota_i + lambda_r * rec(mi) + rho_i",
+            "recency_function": "non-increasing function of age, parameterized by time_decay_half_life_days"
+          },
+          "query_augmentation": {
+            "entity_swap": {
+              "description": "Strip person names from query, re-search by topic, union with original",
+              "formula": "qswap = q \\ {p: p in persons(q)}, R_swap = R_fuse(qswap)",
+              "toggle": "enable_entity_swap (per-category evolvable)"
+            },
+            "query_decomposition": {
+              "description": "LLM decomposes multi-hop query into <= Nsub single-hop sub-queries, merge via RRF",
+              "formula": "{q1,...,qK} = psi_dec(q), K <= Nsub; R_dec = union_k R(qk; theta)",
+              "toggle": "enable_query_decomposition (per-category evolvable)"
+            }
+          },
+          "answer_generation": {
+            "base": "yhat_0 = psi_ans(q, R(q; theta), alpha) where alpha is style config",
+            "styles": ["concise", "explanatory", "verifying", "inferential", "strict", "nuanced"],
+            "verification": {
+              "formula": "yhat = psi_ver(q, R, yhat_0) if conf(yhat_0) < tau_ver or yhat_0 in U, else yhat_0",
+              "toggle": "enable_answer_verification"
+            }
+          }
+        },
+        "action_space": {
+          "theta_components": "theta = (ksem, kkw, kstr, Bctx, mode, {wv}, alpha, {theta_c}_{c in C})",
+          "dimensions": {
+            "semantic_top_k": {"range": [3, 30], "type": "int"},
+            "keyword_top_k": {"range": [3, 30], "type": "int"},
+            "structured_top_k": {"range": [3, 30], "type": "int"},
+            "max_context": {"range": [6, 30], "type": "int"},
+            "fusion_mode": {"values": ["sum", "rrf", "weighted_sum"], "type": "categorical"},
+            "wsem_wkw_wstr": {"range": [0.1, 2.5], "type": "float"},
+            "enable_entity_swap": {"type": "bool"},
+            "enable_query_decomposition": {"type": "bool"},
+            "reflection_rounds": {"range": [0, 3], "type": "int"},
+            "enable_answer_verification": {"type": "bool"},
+            "verification_style": {"values": ["strict", "multi_candidate"], "type": "categorical"},
+            "answer_style": {"type": "categorical", "values": "6 branches"},
+            "time_decay_half_life_days": {"type": "float/null"},
+            "per_category_overrides": {"type": "dict[category -> sub-config]"}
+          }
+        }
+      },
+      "layer_3_evolution_engine": {
+        "name": "Self-Evolution Engine (AutoResearch loop)",
+        "objective": "theta* = argmax_{theta in Theta} F(theta; K, Q) = (1/|Q|) * sum score(yhat(q;theta,K), y*)",
+        "loop_steps": ["EVALUATE", "DIAGNOSE", "PROPOSE", "GUARD"],
+        "update_rule": {
+          "revert": "if f_{r-1} - f_r > tau_rev → theta_{r+1} = theta*_{r-1} (best so far)",
+          "explore": "if |f_r - f_{r-1}| < epsilon for 2 rounds → theta_{r+1} = theta_r ⊕ eta_exp (random perturbation)",
+          "apply": "otherwise → theta_{r+1} = clamp_Theta(theta_r ⊕ Delta_theta_r)"
+        },
+        "diagnosis_module": {
+          "input": "per-question raw log L_r = {(qj, yhat_j, y*_j, score_j, R(qj; theta_r))}",
+          "output": "structured proposal Delta_theta_r with root_causes, parameter_suggestions, per_category_proposals",
+          "rubric_covers": ["wrong entity retrieved", "insufficient context", "temporal confusion", "abstention failures"]
+        },
+        "convergence": {
+          "condition": "f_r - f_{r-1} < epsilon (default 0.005) or r >= Rmax",
+          "Rmax": 7
+        },
+        "coverage_gap_handling": "if diagnosis detects missing keywords → targeted re-extraction K_{r+1} = K_r ∪ phi_ext_targeted(S, V_miss_r)"
+      }
+    },
+    "scope_hierarchy": "sigma = user:u | workspace:w | session:s"
+  },
+
+  "mathematical_spec": {
+    "confidence": 0.93,
+    "equations": [
+      {
+        "id": "eq1",
+        "name": "Final Retrieval Ranking Score",
+        "latex": "s(q, m_i; \\theta) = s_{fuse}(q, m_i; \\theta) + \\lambda_{\\iota} \\iota_i + \\lambda_r \\text{rec}(m_i) + \\rho_i",
+        "role": "Inference — ranks retrieved candidates",
+        "variables": {"sfuse": "fusion score", "iota_i": "importance", "rec": "recency factor", "rho_i": "entity-reinforcement score"}
+      },
+      {
+        "id": "eq2",
+        "name": "BM25 Lexical Score",
+        "latex": "s_{kw}(q, m_i) = \\sum_{t \\in q} \\text{IDF}(t) \\cdot \\frac{f(t,c_i)(k_1+1)}{f(t,c_i) + k_1(1-b+b|c_i|/|c|)}",
+        "role": "Inference — keyword retrieval view",
+        "constants": {"k1": 1.5, "b": 0.75}
+      },
+      {
+        "id": "eq3",
+        "name": "Semantic Cosine Similarity Score",
+        "latex": "s_{sem}(q, m_i) = \\cos(\\mathbf{e}_q, \\mathbf{e}_i) = \\frac{\\mathbf{e}_q^\\top \\mathbf{e}_i}{\\|\\mathbf{e}_q\\| \\|\\mathbf{e}_i\\|}",
+        "role": "Inference — semantic retrieval view"
+      },
+      {
+        "id": "eq4",
+        "name": "Structured Metadata Score",
+        "latex": "s_{str}(q, m_i) = \\sum_{f \\in \\{\\text{persons,locations,entities}\\}} \\mathbb{1}[\\text{extract}_f(q) \\cap \\eta_{i,f} \\neq \\emptyset]",
+        "role": "Inference — entity-aware retrieval view"
+      },
+      {
+        "id": "eq5",
+        "name": "RRF Fusion Score",
+        "latex": "s_{fuse}(q, m_i; \\theta) = \\sum_v \\frac{1}{k + r_v(m_i)}",
+        "role": "Inference — fusion of multiple views",
+        "variables": {"r_v": "rank of m_i in view v", "k": "smoothing constant"}
+      },
+      {
+        "id": "eq6",
+        "name": "Evolution Objective",
+        "latex": "\\theta^* = \\arg\\max_{\\theta \\in \\Theta} F(\\theta; K, Q) = \\frac{1}{|Q|} \\sum_{(q,y^*) \\in Q} \\text{score}(\\hat{y}(q; \\theta, K), y^*)",
+        "role": "Training/evolution — outer optimization objective"
+      },
+      {
+        "id": "eq7",
+        "name": "Update Rule (three-branch)",
+        "latex": "\\theta_{r+1} = \\begin{cases} \\theta^*_{r-1} & \\text{if } f_{r-1} - f_r > \\tau_{rev} \\\\ \\theta_r \\oplus \\eta_{exp} & \\text{if } |f_r - f_{r-1}| < \\epsilon \\text{ for 2 rounds} \\\\ \\text{clamp}_\\Theta(\\theta_r \\oplus \\Delta\\theta_r) & \\text{otherwise} \\end{cases}",
+        "role": "Evolution — meta-analyzer update with safety guards"
+      },
+      {
+        "id": "eq8",
+        "name": "Answer Verification",
+        "latex": "\\hat{y} = \\begin{cases} \\psi_{ver}(q, R(q;\\theta), \\hat{y}_0) & \\text{if } \\text{conf}(\\hat{y}_0) < \\tau_{ver} \\text{ or } \\hat{y}_0 \\in U \\\\ \\hat{y}_0 & \\text{otherwise} \\end{cases}",
+        "role": "Inference — second-pass answer verification"
+      },
+      {
+        "id": "eq9",
+        "name": "Coverage-Gap Re-extraction",
+        "latex": "K_{r+1} = K_r \\cup \\phi^{\\text{targeted}}_{ext}(S, V^{\\text{miss}}_r)",
+        "role": "Evolution — augment memory store when coverage gaps detected"
+      }
+    ]
+  },
+
+  "tensor_semantics": {
+    "confidence": 0.74,
+    "tensors": [
+      {"name": "e_q", "description": "Query dense embedding", "shape": "[d]", "d": 768, "model": "BAAI/bge-base-en-v1.5"},
+      {"name": "e_i", "description": "Memory unit dense embedding", "shape": "[d]", "d": 768},
+      {"name": "memory_store K", "description": "Set of N memory units", "shape": "[N, (c, mu, e, eta)]"},
+      {"name": "theta", "description": "Full retrieval configuration", "shape": "structured dict — see action_space"},
+      {"name": "L_r", "description": "Per-question raw log at round r", "shape": "[|Q|, 5]", "columns": ["q", "yhat", "y*", "score", "retrieved_sources"]}
+    ],
+    "notes": "Paper does not specify batch dimensions for retrieval — single-query inference implied"
+  },
+
+  "training_pipeline": {
+    "confidence": 0.55,
+    "notes": "EVOLVEMEM has no gradient-based training. The 'training' is the self-evolution loop.",
+    "evolution_loop": {
+      "initial_config_theta_0": {
+        "fusion_mode": "SUM",
+        "semantic_view": "disabled",
+        "structured_view": "disabled",
+        "kkw": 5,
+        "Bctx": 8,
+        "entity_swap": false,
+        "query_decomposition": false
+      },
+      "max_rounds": 7,
+      "convergence_epsilon": 0.005,
+      "revert_threshold_tau_rev": 0.01,
+      "metric": "Token-level F1 (LoCoMo), exact-match accuracy (MemBench)"
+    },
+    "consolidation_hyperparameters": {
+      "tau_J": 0.80,
+      "alpha_d": 0.05,
+      "iota_min": 0.15,
+      "delta_rho": 0.05,
+      "rho_max": 0.30,
+      "decay_period_days": 30
+    },
+    "extraction_hyperparameters": {
+      "window_size_W": 40,
+      "sub_window_size_C": 15,
+      "Rretry": "not specified (assumed 3)"
+    }
+  },
+
+  "evaluation_protocol": {
+    "confidence": 0.95,
+    "benchmarks": [
+      {
+        "name": "LoCoMo",
+        "description": "Multi-session dialogues, 19–32 sessions/sample, 369–689 turns",
+        "split": "LoCoMo-10: 10 conversations, 1,986 QA pairs",
+        "categories": ["single-hop", "temporal", "multi-hop/inferential", "open-domain", "adversarial name-swap"],
+        "metrics": ["token-level F1", "BLEU-1"]
+      },
+      {
+        "name": "MemBench",
+        "description": "Memory tool-use benchmark, multiple-choice",
+        "split": "28 samples (7 categories × 2 topics × 2 samples)",
+        "categories": ["simple", "comparative", "aggregative", "conditional", "knowledge_update", "post_processing", "noisy"],
+        "metrics": ["exact-match accuracy"]
+      }
+    ],
+    "baselines_locomo": ["MemVerse", "Mem0", "Claude-Mem", "A-MEM", "MemGPT", "SimpleMem"],
+    "baselines_membench": ["RecentMemory", "MemGPT", "MemoryBank", "SCMemory"],
+    "main_results": {
+      "locomo_gpt4o": {"evolvemem_f1": 0.543, "best_baseline_f1": 0.432, "relative_gain": "25.7%"},
+      "locomo_gpt51": {"evolvemem_f1": 0.572, "best_baseline_f1": 0.418, "relative_gain": "36.8%"},
+      "membench_gpt4o": {"evolvemem_acc": 0.679, "best_baseline_acc": 0.571, "relative_gain": "18.9%"},
+      "membench_gpt51": {"evolvemem_acc": 0.714, "best_baseline_acc": 0.643, "relative_gain": "11.0%"},
+      "baseline_to_evolvemem": {"locomo_r0_f1": 0.305, "locomo_r7_f1": 0.543, "relative_gain": "78.0%"}
+    },
+    "backbones": ["GPT-4o", "GPT-5.1 (via Azure OpenAI API)"],
+    "compute": "Apple M-series CPU (no GPU required for memory system); LLM calls via Azure OpenAI"
+  },
+
+  "implementation_assumptions": [
+    {
+      "assumption": "RRF smoothing constant k = 60 (standard default)",
+      "basis": "literature default for RRF; paper does not specify",
+      "confidence": 0.70,
+      "alternatives": [1, 10, 100]
+    },
+    {
+      "assumption": "Retry count Rretry = 3 for extraction",
+      "basis": "common practice; paper says 'increasing wait intervals' without count",
+      "confidence": 0.60,
+      "alternatives": [2, 5]
+    },
+    {
+      "assumption": "lambda_iota and lambda_r (weights for importance and recency in final ranking) default to 1.0",
+      "basis": "not specified in paper; equal weighting assumed",
+      "confidence": 0.50,
+      "alternatives": [0.5, 0.3]
+    },
+    {
+      "assumption": "tau_ver (verification confidence threshold) = 0.5",
+      "basis": "not explicitly stated; midpoint assumption",
+      "confidence": 0.45,
+      "alternatives": [0.3, 0.7]
+    },
+    {
+      "assumption": "PyTorch + sentence-transformers + SQLite stack",
+      "basis": "paper explicitly states SQLite/FTS5 and BAAI/bge-base-en-v1.5",
+      "confidence": 0.90,
+      "alternatives": []
+    },
+    {
+      "assumption": "BGE embedding batch size = 32",
+      "basis": "Appendix D.2 explicitly states batch size 32",
+      "confidence": 0.95,
+      "alternatives": []
+    }
+  ],
+
+  "ambiguities": [
+    {
+      "location": "Section 3.2, Equation 1",
+      "description": "lambda_iota and lambda_r are introduced but never assigned default values",
+      "primary_assumption": 1.0,
+      "alternatives": [0.3, 0.5, 0.8],
+      "confidence": 0.50
+    },
+    {
+      "location": "Section 3.3, Algorithm 1",
+      "description": "tau_ver (answer verification confidence threshold) not defined numerically",
+      "primary_assumption": 0.5,
+      "alternatives": [0.3, 0.7],
+      "confidence": 0.45
+    },
+    {
+      "location": "Appendix A, Extraction guards",
+      "description": "Rretry (max retries) unspecified",
+      "primary_assumption": 3,
+      "alternatives": [2, 5],
+      "confidence": 0.60
+    },
+    {
+      "location": "Section 3.2, RRF formula",
+      "description": "RRF smoothing constant k value not given",
+      "primary_assumption": 60,
+      "alternatives": [1, 10, 100],
+      "confidence": 0.70
+    }
+  ],
+
+  "confidence_annotations": {
+    "architecture": 0.90,
+    "mathematical_spec": 0.93,
+    "tensor_semantics": 0.74,
+    "training_pipeline": 0.55,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.62,
+    "overall_sir_confidence": 0.78
+  }
+}
