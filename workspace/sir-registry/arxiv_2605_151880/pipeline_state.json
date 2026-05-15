@@ -1,0 +1,24 @@
+{
+  "paper_id": "arxiv_2605_151880",
+  "paper_title": "FutureSim: Replaying World Events to Evaluate Adaptive Agents",
+  "current_stage": 6,
+  "stages_completed": [1, 2, 3, 4, 5],
+  "sir_path": "sir-registry/arxiv_2605_151880/sir.json",
+  "repo_path": "paper-repos/arxiv_2605_151880/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2605_151880/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2605_151880/architecture_plan_summary.md",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2605_151880/notebooks/reproduce_arxiv_2605_151880.ipynb",
+    "comparison_report": null
+  },
+  "confidence_flags": {
+    "hybrid_retrieval_fusion": 0.55,
+    "embedding_dimension": 0.62,
+    "bwrap_full_config": 0.65
+  },
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-15T00:00:00Z",
+  "last_updated": "2026-05-15T00:10:00Z"
+}
