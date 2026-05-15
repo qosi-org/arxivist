@@ -1,0 +1,16 @@
+{
+  "paper_id": "arxiv_2605_013941",
+  "title": "EVOLVEMEM: Self-Evolving Memory Architecture via AutoResearch for LLM Agents",
+  "arxiv_id": "2605.13941",
+  "authors": ["Jiaqi Liu", "Xinyu Ye", "Peng Xia", "Zeyu Zheng", "Cihang Xie", "Mingyu Ding", "Huaxiu Yao"],
+  "institutions": ["UNC-Chapel Hill", "UC Berkeley", "UCSC"],
+  "submission_date": "2026-05-13",
+  "domain": "NLP / LLM Agents / Memory Systems",
+  "code_url": "https://github.com/aiming-lab/SimpleMem",
+  "sir_path": "sir-registry/arxiv_2605_013941/sir.json",
+  "repo_path": "paper-repos/arxiv_2605_013941/",
+  "overall_sir_confidence": 0.78,
+  "human_review_required": false,
+  "created_at": "2026-05-15T00:00:00Z",
+  "last_updated": "2026-05-15T00:00:00Z"
+}
