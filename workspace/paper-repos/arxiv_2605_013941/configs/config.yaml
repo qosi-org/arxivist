@@ -1,0 +1,60 @@
+# EVOLVEMEM Configuration
+# Paper: "EVOLVEMEM: Self-Evolving Memory Architecture via AutoResearch for LLM Agents"
+# ArXiv: 2605.13941
+# Values marked ASSUMED were not explicitly stated in the paper; basis given in comment.
+
+memory:
+  db_path: "evolvemem.db"                   # SQLite database path (Appendix D.1)
+  embedding_model: "BAAI/bge-base-en-v1.5"  # 768-dim; stated explicitly in paper
+  embedding_batch_size: 32                  # Appendix D.2 states batch_size=32
+  window_size: 40                           # Section 3.1: W=40 turns per extraction window
+  sub_window_size: 15                       # Appendix A: C=15 turn sub-windows for fallback
+  max_retries: 3                            # ASSUMED: paper says "increasing wait intervals" without count
+  tau_j: 0.80                              # Section 3.1 / Appendix A: Jaccard dedup threshold
+  alpha_d: 0.05                            # Appendix A: importance decay rate per day
+  iota_min: 0.15                           # Appendix A: minimum importance floor
+  delta_rho: 0.05                          # Appendix A: entity reinforcement increment
+  rho_max: 0.30                            # Appendix A: entity reinforcement cap
+  decay_period_days: 30                    # Appendix A: D=30d decay period
+
+retrieval_initial:                          # theta_0: minimal starting configuration (Section 4.1)
+  semantic_top_k: 0                         # disabled at start
+  keyword_top_k: 5                          # Section 4.1: kkw=5 initial
+  structured_top_k: 0                      # disabled at start
+  max_context: 8                            # Section 4.1: Bctx=8 initial
+  fusion_mode: "sum"                        # Section 4.1: SUM initial (BM25-only)
+  w_sem: 1.0                               # ASSUMED: equal default weights
+  w_kw: 1.0                               # ASSUMED: equal default weights
+  w_str: 1.0                               # ASSUMED: equal default weights
+  enable_entity_swap: false                 # Section 4.1: disabled at start
+  enable_query_decomposition: false         # Section 4.1: disabled at start
+  decomposition_max_subqs: 3               # ASSUMED: reasonable default
+  reflection_rounds: 0                     # Table 7: range [0,3]
+  enable_answer_verification: false         # disabled at start
+  verification_style: "strict"             # Appendix A default
+  answer_style: "concise"                  # default style
+  time_decay_half_life_days: null          # null = no recency weighting initially
+  per_category_overrides: {}               # empty: no per-category specialization initially
+
+evolution:
+  max_rounds: 7                            # Section 4.1: Rmax=7
+  epsilon: 0.005                           # Appendix A: 0.5pp convergence threshold
+  tau_rev: 0.01                            # Algorithm 1: revert-on-regression threshold
+  rrf_k: 60                               # ASSUMED: standard RRF default; paper gives formula but not k
+
+llm:
+  provider: "openai"                       # openai or anthropic
+  extraction_model: "gpt-4o"              # Section 4.1 + paper uses GPT-4o/5.1
+  answer_model: "gpt-4o"                  # Section 4.1
+  diagnosis_model: "gpt-4o"              # Section 3.3
+  max_tokens: 2048                        # ASSUMED: reasonable for response length
+  lambda_iota: 1.0                        # ASSUMED: Eq.1 importance weight; paper omits value
+  lambda_r: 1.0                           # ASSUMED: Eq.1 recency weight; paper omits value
+  tau_ver: 0.5                            # ASSUMED: Appendix A mentions threshold but omits value
+
+paths:
+  output_dir: "outputs/"
+  log_dir: "logs/"
+  checkpoint_dir: "checkpoints/"
+
+seed: 42
