@@ -1,0 +1,330 @@
+{
+  "paper_id": "arxiv_2605_012532",
+  "framework": {
+    "primary": "Python 3.11 (asyncio-based; no ML framework needed — LLM inference is API-based)",
+    "llm_backend": "Ollama REST API (qwen3.5:9b)",
+    "database": "SQLite via aiosqlite (WAL mode)",
+    "exchange": "ccxt (async) — pluggable; abstract base for DEX adapters",
+    "config_management": "YAML + pydantic v2 settings",
+    "cuda_required": false,
+    "rationale": "This is an LLM orchestration system, not a neural network training framework. The core is asyncio event loops, SQLite persistence, Ollama REST calls, and exchange connectivity."
+  },
+
+  "module_hierarchy": {
+    "root": "agenticaita/",
+    "files": [
+      {
+        "path": "src/agenticaita/__init__.py",
+        "classes": [],
+        "description": "Package init"
+      },
+      {
+        "path": "src/agenticaita/azte.py",
+        "classes": ["AdaptiveZScoreTriggerEngine"],
+        "methods": [
+          "async def update(asset: str, price: float, timestamp: datetime) -> TriggerEvent | None",
+          "def compute_z_score(asset: str) -> float",
+          "async def load_history(asset: str) -> None",
+          "async def persist_history(asset: str) -> None"
+        ],
+        "sir_modules": ["AZTE"],
+        "description": "Rolling Z-score computation and pipeline trigger logic"
+      },
+      {
+        "path": "src/agenticaita/cbd.py",
+        "classes": ["CorrelationBreakDiversification"],
+        "methods": [
+          "def compute_rho_cb(asset: str, window: int) -> float",
+          "def compute_z_tilde(z_score: float, kappa: float) -> float",
+          "def compute_omega(z_tilde: float, rho_cb: float, alpha: float) -> float"
+        ],
+        "sir_modules": ["CBD"],
+        "description": "Composite CBD score: decorrelation + saturated anomaly"
+      },
+      {
+        "path": "src/agenticaita/igp.py",
+        "classes": ["InferenceGatingProtocol"],
+        "methods": [
+          "async def acquire() -> bool",
+          "async def release() -> None",
+          "def is_locked() -> bool",
+          "async def log_busy(asset: str, z_score: float, timestamp: datetime) -> None"
+        ],
+        "sir_modules": ["IGP"],
+        "description": "Binary semaphore (asyncio.Lock) + global cooldown enforcement"
+      },
+      {
+        "path": "src/agenticaita/memory.py",
+        "classes": ["EpisodicMemory"],
+        "methods": [
+          "async def initialize_db() -> None",
+          "async def store_trade(trade: TradeRecord) -> None",
+          "async def get_briefing(asset: str, limit: int) -> str",
+          "async def log_pipeline_event(event: PipelineEvent) -> None",
+          "async def log_ollama_call(call: OllamaCallRecord) -> None",
+          "async def store_vol_sample(asset: str, z_score: float, price: float) -> None"
+        ],
+        "sir_modules": ["EpisodicMemory"],
+        "description": "SQLite WAL-mode persistence: trades, vol_history, pipeline_log, ollama_calls"
+      },
+      {
+        "path": "src/agenticaita/agents/analyst.py",
+        "classes": ["AnalystAgent"],
+        "methods": [
+          "async def analyze(context: MarketContext, memory_briefing: str, omega: float) -> AnalystOutput | None"
+        ],
+        "sir_modules": ["Analyst Agent"],
+        "description": "Zero-shot LLM call with structured JSON output; self-abstention via wait signal"
+      },
+      {
+        "path": "src/agenticaita/agents/risk_manager.py",
+        "classes": ["RiskManagerAgent"],
+        "methods": [
+          "def hard_gate_check(analyst_output: AnalystOutput) -> GateResult",
+          "async def llm_validate(analyst_output: AnalystOutput) -> RiskManagerOutput"
+        ],
+        "sir_modules": ["Risk Manager Agent"],
+        "description": "Layer A: 4 deterministic hard gates. Layer B: LLM position sizing."
+      },
+      {
+        "path": "src/agenticaita/agents/executor.py",
+        "classes": ["ExecutorAgent"],
+        "methods": [
+          "async def execute(rm_output: RiskManagerOutput, mode: Literal['DRY_RUN', 'LIVE']) -> ExecutionRecord"
+        ],
+        "sir_modules": ["Executor Agent"],
+        "description": "DRY_RUN: log without order. LIVE: route through privacy channel."
+      },
+      {
+        "path": "src/agenticaita/pipeline.py",
+        "classes": ["SequentialDeliberativePipeline"],
+        "methods": [
+          "async def run(trigger: TriggerEvent) -> PipelineResult"
+        ],
+        "sir_modules": ["SDP"],
+        "description": "Orchestrates Analyst → RiskManager → Executor with IGP gating"
+      },
+      {
+        "path": "src/agenticaita/market_data.py",
+        "classes": ["MarketDataFeed"],
+        "methods": [
+          "async def get_ohlcv(asset: str, limit: int) -> list[OHLCVBar]",
+          "async def get_l2_orderbook(asset: str) -> L2Orderbook",
+          "async def get_funding_rate(asset: str) -> float",
+          "async def get_price(asset: str) -> float"
+        ],
+        "sir_modules": ["Market Data"],
+        "description": "Async market data fetcher; direct HTTPS public channel"
+      },
+      {
+        "path": "src/agenticaita/exchange.py",
+        "classes": ["ExchangeAdapter", "DEXAdapter"],
+        "methods": [
+          "async def place_order(order: OrderSpec) -> OrderResult",
+          "async def health_check() -> bool",
+          "def is_tor_active() -> bool"
+        ],
+        "sir_modules": ["Privacy Layer", "Executor Agent"],
+        "description": "Abstract exchange adapter + DEX implementation with Tor/VPN routing"
+      },
+      {
+        "path": "src/agenticaita/ollama_client.py",
+        "classes": ["OllamaClient"],
+        "methods": [
+          "async def complete(system_prompt: str, user_prompt: str, model: str) -> str",
+          "async def health_check() -> bool"
+        ],
+        "sir_modules": ["Analyst Agent", "Risk Manager Agent"],
+        "description": "Thin async wrapper around Ollama REST API with telemetry logging"
+      },
+      {
+        "path": "src/agenticaita/schemas.py",
+        "classes": ["AnalystOutput", "RiskManagerOutput", "TradeRecord", "TriggerEvent", "MarketContext", "PipelineResult", "OHLCVBar", "L2Orderbook", "ExecutionRecord", "GateResult", "PipelineEvent", "OllamaCallRecord"],
+        "methods": [],
+        "sir_modules": ["all"],
+        "description": "Pydantic v2 typed schemas — the JSON contracts between agents"
+      },
+      {
+        "path": "src/agenticaita/config.py",
+        "classes": ["AgenticAITAConfig"],
+        "methods": ["@classmethod def from_yaml(path: str) -> AgenticAITAConfig"],
+        "sir_modules": ["all"],
+        "description": "Pydantic settings model loading from config.yaml"
+      },
+      {
+        "path": "src/agenticaita/monitor.py",
+        "classes": ["MonitoringPoller"],
+        "methods": [
+          "async def poll_loop() -> None",
+          "async def poll_asset(asset: str) -> None"
+        ],
+        "sir_modules": ["AZTE"],
+        "description": "60-second polling loop across all monitored assets"
+      }
+    ]
+  },
+
+  "data_flow": {
+    "main_loop": [
+      "MonitoringPoller.poll_loop() → every 60s per asset",
+      "  → MarketDataFeed.get_price(asset) → price float",
+      "  → AZTE.update(asset, price) → TriggerEvent | None",
+      "  if TriggerEvent:",
+      "    → IGP.acquire() → bool (discard if False, log pipeline_busy)",
+      "    → CBD.compute_omega(asset) → float Omega",
+      "    → MarketDataFeed.get_ohlcv + get_l2 + get_funding → MarketContext",
+      "    → EpisodicMemory.get_briefing(asset) → str",
+      "    → AnalystAgent.analyze(context, briefing, omega) → AnalystOutput | None",
+      "    if AnalystOutput is None (wait): log self-abstention, IGP.release()",
+      "    else:",
+      "      → RiskManagerAgent.hard_gate_check(output) → GateResult",
+      "      if rejected: log rejection, IGP.release()",
+      "      else:",
+      "        → RiskManagerAgent.llm_validate(output) → RiskManagerOutput",
+      "        → ExecutorAgent.execute(rm_output, mode) → ExecutionRecord",
+      "        → EpisodicMemory.store_trade(record)",
+      "    → IGP.release()"
+    ]
+  },
+
+  "config_schema": {
+    "template_path": "configs/config.yaml",
+    "sections": {
+      "system": {
+        "mode": "DRY_RUN",
+        "log_level": "INFO"
+      },
+      "azte": {
+        "polling_interval_s": 60,
+        "z_score_threshold": 2.0,
+        "rolling_window": 30,
+        "absolute_return_floor": 0.003
+      },
+      "igp": {
+        "global_cooldown_s": 1800,
+        "per_asset_cooldown_s": 300
+      },
+      "risk_manager": {
+        "confidence_gate": 0.60,
+        "max_stop_loss_pct": 0.02,
+        "max_position_usd": 500
+      },
+      "cbd": {
+        "alpha": 0.5,
+        "kappa": 0.5
+      },
+      "ollama": {
+        "base_url": "http://localhost:11434",
+        "model": "qwen3.5:9b",
+        "temperature": 0,
+        "max_tokens": 512
+      },
+      "database": {
+        "path": "data/episodic_memory.db",
+        "wal_mode": true
+      },
+      "exchange": {
+        "adapter": "dex_perpetuals",
+        "api_key_env": "DEX_API_KEY",
+        "api_secret_env": "DEX_API_SECRET"
+      },
+      "privacy": {
+        "tor_socks_host": "127.0.0.1",
+        "tor_socks_port": 9050,
+        "vpn_interface": null,
+        "require_tor_for_live": true
+      },
+      "assets": {
+        "monitor_list_path": "configs/assets.txt"
+      }
+    }
+  },
+
+  "dependencies": {
+    "requirements": [
+      "aiohttp>=3.9",
+      "aiosqlite>=0.20",
+      "pydantic>=2.7",
+      "ccxt>=4.3",
+      "pyyaml>=6.0",
+      "numpy>=1.26",
+      "python-dotenv>=1.0",
+      "aiofiles>=23.0",
+      "uvloop>=0.19"
+    ],
+    "requirements_dev": [
+      "pytest>=8.0",
+      "pytest-asyncio>=0.23",
+      "pytest-cov>=5.0",
+      "ruff>=0.4",
+      "mypy>=1.10",
+      "httpx>=0.27"
+    ]
+  },
+
+  "entrypoints": [
+    {
+      "file": "run.py",
+      "description": "Main trading loop entrypoint",
+      "cli_args": ["--config PATH (default: configs/config.yaml)", "--mode [DRY_RUN|LIVE]", "--assets PATH (override asset list)"]
+    },
+    {
+      "file": "backtest_costs.py",
+      "description": "Retroactive transaction cost sensitivity analysis (Table 7 reproduction)",
+      "cli_args": ["--db PATH", "--scenario [zero|conservative|realistic|adverse]"]
+    },
+    {
+      "file": "inspect_trades.py",
+      "description": "Query and export trades from episodic memory SQLite",
+      "cli_args": ["--db PATH", "--asset SYMBOL", "--output [json|csv]"]
+    },
+    {
+      "file": "compute_metrics.py",
+      "description": "Compute all Table 5 performance metrics from trades DB",
+      "cli_args": ["--db PATH", "--output PATH"]
+    }
+  ],
+
+  "docker_spec": {
+    "base_image": "python:3.11-slim",
+    "system_deps": ["tor", "curl", "ca-certificates"],
+    "python_setup": ["pip install --no-cache-dir -r requirements.txt"],
+    "workdir": "/app",
+    "volumes": ["/app/data (SQLite DB)", "/app/configs (config files)"],
+    "env_vars": ["DEX_API_KEY", "DEX_API_SECRET", "OLLAMA_BASE_URL"],
+    "cmd": ["python", "run.py", "--config", "configs/config.yaml"]
+  },
+
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "Agno framework is custom and not publicly available; must reimplement orchestration with asyncio",
+      "mitigation": "Use asyncio.Lock for IGP, simple async function chaining for SDP; no framework needed"
+    },
+    {
+      "severity": "High",
+      "description": "DEX exchange identity not specified; ccxt may not support the exact exchange",
+      "mitigation": "Abstract ExchangeAdapter base class; provide Hyperliquid + dYdX implementations as examples; mark as TODO"
+    },
+    {
+      "severity": "Medium",
+      "description": "Full agent prompts not given beyond excerpts; reasoning quality depends on prompt engineering",
+      "mitigation": "Implement the excerpted prompts exactly; add TODO markers for prompt tuning"
+    },
+    {
+      "severity": "Medium",
+      "description": "LLM temperature not specified; non-zero temp breaks determinism claims",
+      "mitigation": "Default temperature=0 with comment; make configurable"
+    },
+    {
+      "severity": "Medium",
+      "description": "Tor availability at runtime is environment-dependent",
+      "mitigation": "Safety gate: tor_active check before LIVE orders; DRY_RUN works without Tor"
+    },
+    {
+      "severity": "Low",
+      "description": "Correlation method for CBD not specified (Pearson assumed)",
+      "mitigation": "Implement Pearson via numpy; add config flag for Spearman alternative"
+    }
+  ]
+}

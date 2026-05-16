@@ -1,0 +1,21 @@
+{
+  "paper_id": "arxiv_2605_012532",
+  "arxiv_id": "2605.12532v1",
+  "title": "AGENTICAITA: A Proof-of-Concept About Deliberative Multi-Agent Reasoning for Autonomous Trading Systems",
+  "authors": [
+    "Ivan Letteri"
+  ],
+  "institution": "University of L'Aquila, Italy",
+  "submission_date": "2026-05-01",
+  "domain": "Agentic AI / Autonomous Trading / Multi-Agent Systems",
+  "sir_version": 1,
+  "sir_path": "sir-registry/arxiv_2605_012532/sir.json",
+  "pipeline_state_path": "sir-registry/arxiv_2605_012532/pipeline_state.json",
+  "overall_sir_confidence": 0.9,
+  "human_review_required": false,
+  "created_at": "2026-05-16T00:00:00Z",
+  "last_updated": "2026-05-16T00:15:00Z",
+  "has_comparison_report": true,
+  "has_notebook": true,
+  "has_repo": true
+}
