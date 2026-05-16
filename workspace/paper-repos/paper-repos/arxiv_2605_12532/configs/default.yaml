@@ -1,0 +1,51 @@
+# AGENTICAITA — Default Configuration
+# Paper: arxiv:2605.12532
+# Confidence annotations: [conf: X.XX] from SIR; ASSUMED if inferred
+
+polling:
+  interval_s: 60           # [conf: 0.99] explicit Table 2
+  assets: []               # Populate with symbol list at runtime; e.g. ["BTC", "ETH", "SOL"]
+
+trigger:                   # AZTE parameters (Section 4.1)
+  z_threshold: 2.0         # [conf: 0.99] explicit Table 2 / Eq. 3
+  r_floor: 0.003           # [conf: 0.99] explicit Table 2 / Eq. 3
+  window_bars: 30          # [conf: 0.99] explicit Table 2
+  per_asset_cooldown_s: 300  # [conf: 0.99] explicit Table 2
+
+igp:                       # Inference Gating Protocol (Section 4.4)
+  global_cooldown_s: 1800  # [conf: 0.99] explicit Table 2
+
+risk_manager:              # Risk Manager hard gates (Section 4.2 / Eqs. 4-7)
+  min_confidence: 0.60     # [conf: 0.99] explicit Table 2 / Eq. 5
+  max_risk_pct: 0.02       # [conf: 0.99] explicit Table 2 / Eq. 6
+  max_size_usd: 500        # [conf: 0.99] explicit Table 2 / Eq. 7
+
+cbd:                       # Correlation-Break Diversification (Section 4.5)
+  alpha: 0.5               # [conf: 0.99] explicit Eq. 11 — equal weighting by design
+  kappa: 0.5               # [conf: 0.99] explicit Eq. 10 — exponential saturation rate
+  window_bars: 30          # [conf: 0.99] same W as trigger window
+
+llm:
+  ollama_base_url: "http://localhost:11434"  # ASSUMED: standard Ollama port; override for remote
+  model: "qwen3:8b"        # [conf: 0.95] paper uses qwen3.5:9b; closest public equivalent
+  max_tokens: 512          # ASSUMED: reasonable default for JSON output
+  timeout_s: 30            # ASSUMED: generous timeout for inference
+
+execution:
+  mode: "DRY_RUN"          # DRY_RUN | LIVE — always start with DRY_RUN
+  tor_socks_host: "localhost"  # ASSUMED: standard Tor daemon address
+  tor_socks_port: 9050         # ASSUMED: standard Tor SOCKS5h port
+
+cost_model:                # Eq. 12+13 — applied retroactively in evaluate.py
+  f_taker: 0.0005          # [conf: 0.60] ASSUMED: 0.05% taker fee; verify for your target DEX
+  lambda_impact: 0.8       # [conf: 0.85] explicit in Section 4.6; calibrated to crypto perps
+
+database:
+  path: "data/agenticaita.db"
+  wal_mode: true
+
+logging:
+  level: "INFO"            # DEBUG | INFO | WARNING | ERROR
+  log_file: null           # null = stdout only; set path for file logging
+
+seed: 42                   # For any stochastic components (reproducibility utility)

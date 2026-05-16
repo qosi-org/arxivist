@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  agenticaita:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: agenticaita_dryrun
+    volumes:
+      - agenticaita_data:/app/data
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - EXECUTION_MODE=DRY_RUN
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  notebook:
+    image: jupyter/base-notebook:python-3.11
+    container_name: agenticaita_notebook
+    volumes:
+      - ..:/home/jovyan/work
+      - agenticaita_data:/home/jovyan/work/data
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+
+volumes:
+  agenticaita_data:
