@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  agenticaita:
+    build: ..
+    container_name: agenticaita_dryryn
+    environment:
+      - DEX_API_KEY=${DEX_API_KEY}
+      - DEX_API_SECRET=${DEX_API_SECRET}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    volumes:
+      - ../data:/app/data
+      - ../configs:/app/configs
+    restart: unless-stopped
+    network_mode: bridge
+    command: ["python", "run.py", "--config", "configs/config.yaml", "--mode", "DRY_RUN"]
+
+  # Tor service for LIVE order routing (Section 4.7)
+  # Only needed for LIVE mode
+  tor:
+    image: osminogin/tor-simple
+    container_name: agenticaita_tor
+    restart: unless-stopped
+    profiles: ["live"]
+
+  notebook:
+    build: ..
+    container_name: agenticaita_notebook
+    volumes:
+      - ../notebooks:/app/notebooks
+      - ../data:/app/data
+    ports:
+      - "8888:8888"
+    command: ["jupyter", "notebook", "--ip=0.0.0.0", "--no-browser", "--allow-root", "--notebook-dir=/app/notebooks"]
+    profiles: ["dev"]

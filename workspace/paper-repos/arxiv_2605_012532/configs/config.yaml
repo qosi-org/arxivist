@@ -1,0 +1,55 @@
+# AGENTICAITA Configuration
+# arxiv:2605.12532 — Letteri (2026)
+# All values from Table 2 / equations unless marked ASSUMED
+
+system:
+  mode: DRY_RUN           # DRY_RUN | LIVE
+  log_level: INFO
+
+azte:
+  polling_interval_s: 60  # Section 4.1 — 60-second polling loop
+  z_score_threshold: 2.0  # Section 4.1 — 2σ anomaly gate (Table 2)
+  rolling_window: 30       # Table 2 — W=30 bars (~30 min at 60s polling)
+  absolute_return_floor: 0.003  # Eq. 3 — non-parametric safety net
+
+igp:
+  global_cooldown_s: 1800  # Table 2 — 30 min global inter-pipeline cooldown
+  per_asset_cooldown_s: 300  # Table 2 — 5 min per-asset cooldown
+
+risk_manager:
+  confidence_gate: 0.60    # Table 2 / Eq. 5
+  max_stop_loss_pct: 0.02  # Table 2 / Eq. 6 — max 2% risk
+  max_position_usd: 500    # Table 2 / Eq. 7
+
+cbd:
+  alpha: 0.5   # Eq. 11 — equal weighting anomaly / decorrelation
+  kappa: 0.5   # Eq. 10 — exponential saturation rate
+  correlation_method: pearson  # ASSUMED: not specified in paper
+
+ollama:
+  base_url: http://localhost:11434  # ASSUMED: standard Ollama endpoint
+  model: qwen3.5:9b                 # Section 5 — confirmed
+  temperature: 0                    # ASSUMED: 0 for determinism (paper implies determinism)
+  max_tokens: 512                   # ASSUMED: sufficient for JSON response
+
+database:
+  path: data/episodic_memory.db
+  wal_mode: true
+
+exchange:
+  adapter: stub              # ASSUMED: exchange not named; stub requires implementation
+  api_key_env: DEX_API_KEY
+  api_secret_env: DEX_API_SECRET
+  # STUB: Replace 'stub' with 'hyperliquid', 'dydx', etc. See src/agenticaita/exchange.py
+
+privacy:
+  tor_socks_host: "127.0.0.1"
+  tor_socks_port: 9050
+  require_tor_for_live: true  # Section 4.7 — safety gate
+
+market_data:
+  ohlcv_limit: 20         # Section 4.2 — 20-bar 1-minute OHLCV context
+  l2_depth: 20            # ASSUMED: standard orderbook depth
+
+assets:
+  monitor_list_path: configs/assets.txt

@@ -1,0 +1,35 @@
+{
+  "paper_id": "arxiv_2605_012532",
+  "comparison_date": "2026-05-16",
+  "status": "PENDING_USER_RESULTS",
+  "reproducibility_score": null,
+  "score_confidence": null,
+  "metrics_compared": 0,
+  "metrics_matched": 0,
+  "paper_metrics_available": 13,
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 6,
+    "omission": 2
+  },
+  "sir_version_used": 1,
+  "sir_overall_confidence": 0.90,
+  "requires_manual_review": true,
+  "manual_review_reasons": [
+    "No user results submitted — comparison not yet run",
+    "Exchange adapter is STUB — live trading not possible without implementation",
+    "PnL metrics are market-dependent and cannot be reproduced exactly"
+  ],
+  "reproducibility_notes": [
+    "Deterministic metrics (RM gate rejection rate, IGP cooldown behavior) ARE reproducible",
+    "Stochastic metrics (win rate, PnL, Analyst outputs) are NOT reproducible across market periods",
+    "Friction rate F is semi-deterministic: gates are exact, LLM abstention varies by market context"
+  ]
+}

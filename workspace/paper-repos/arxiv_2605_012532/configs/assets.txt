@@ -1,0 +1,9 @@
+# Asset list for AGENTICAITA monitoring
+# One symbol per line, using your DEX's symbol format
+# Example format for Hyperliquid-style perpetuals: BTC/USDT:USDT
+# The paper monitored 117 assets; replace with your target universe.
+
+BTC/USDT:USDT
+ETH/USDT:USDT
+SOL/USDT:USDT
+# Add more assets here...
