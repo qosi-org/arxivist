@@ -1,0 +1,387 @@
+{
+  "paper_id": "arxiv_2605_12532",
+  "sir_version": 1,
+  "provenance": {
+    "title": "AGENTICAITA: A Proof-of-Concept About Deliberative Multi-Agent Reasoning for Autonomous Trading Systems",
+    "authors": ["Ivan Letteri"],
+    "affiliations": [
+      "Department of Information Engineering, Computer Science, and Mathematics, Center of Excellence for Research DEWS, University of L'Aquila, Italy"
+    ],
+    "arxiv_id": "2605.12532",
+    "doi": null,
+    "submission_date": "2026-05-01",
+    "abstract": "AGENTICAITA is an agentic AI framework replacing the signal-then-execute paradigm with a fully autonomous deliberative loop using multiple specialized LLM agents that reason, negotiate, and act without offline training or human intervention. Four contributions: AZTE, SDP, IGP, CBD.",
+    "domain": "Other",
+    "key_claims": [
+      "Training-free, deterministic safety-constrained multi-agent orchestration is feasible in financial decision loops",
+      "Sequential Deliberative Pipeline (SDP) with Analyst → Risk Manager → Executor achieves genuine inter-agent negotiation (11.5% agentic friction rate)",
+      "AZTE provides regime-invariant cognitive resource allocation via rolling Z-score anomaly detection",
+      "CBD composite score enables portfolio-level diversification incentive within individual agent reasoning",
+      "System achieved 14.94pp alpha over BTC buy-and-hold during a 5-day dry-run with 157 zero-intervention invocations"
+    ],
+    "parsed_at": "2026-05-16T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "AGENTICAITA (full pipeline)",
+    "modules": [
+      {
+        "name": "AZTE",
+        "full_name": "Adaptive Z-Score Trigger Engine",
+        "type": "statistical_trigger",
+        "input": "raw OHLCV price stream per asset (60s polling)",
+        "output": "binary trigger signal T_t per asset",
+        "operation": "rolling Z-score anomaly detection + absolute return floor",
+        "confidence": 0.95
+      },
+      {
+        "name": "IGP",
+        "full_name": "Inference Gating Protocol",
+        "type": "mutex_scheduler",
+        "input": "concurrent trigger activations",
+        "output": "serialized single pipeline admission or pipeline_busy discard",
+        "operation": "binary semaphore L; admit iff L=0, set L=1 on entry, L=0 on exit",
+        "confidence": 0.95
+      },
+      {
+        "name": "Analyst",
+        "full_name": "Analyst LLM Agent",
+        "type": "llm_agent",
+        "input": "20-bar 1-min OHLCV, L2 orderbook, funding rate, market snapshot, CBD score Omega_t, episodic memory briefing",
+        "output": "JSON: {signal: long|short|wait, confidence: float[0,1], entry_price, stop_loss, take_profit, size_usd, reasoning: string}",
+        "operation": "zero-shot LLM reasoning (qwen3.5:9b) with structured output prompt",
+        "confidence": 0.95
+      },
+      {
+        "name": "RiskManager",
+        "full_name": "Risk Manager LLM Agent (Hybrid Gate)",
+        "type": "hybrid_validator",
+        "input": "Analyst JSON output",
+        "output": "JSON: {approved: bool, size_usd: float, negotiation_summary: string}",
+        "operation": "Layer A: 4 deterministic hard gates; Layer B (if A passes): LLM contextual validation + position sizing",
+        "hard_gates": [
+          "signal in {long, short}",
+          "confidence >= 0.60",
+          "|entry - stop_loss| / entry <= 0.02",
+          "size_usd <= 500"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "name": "Executor",
+        "full_name": "Executor Agent",
+        "type": "execution_agent",
+        "input": "Risk Manager approved JSON",
+        "output": "DRY_RUN log or LIVE order routed via privacy channel",
+        "operation": "Writes to pipeline_log and trades; in LIVE mode routes via Tor+VPN SOCKS5h channel",
+        "confidence": 0.95
+      },
+      {
+        "name": "CBD",
+        "full_name": "Correlation-Break Diversification Score",
+        "type": "scoring_module",
+        "input": "asset price series {p_a_t}, BTC price series {p_BTC_t} over rolling window W=30",
+        "output": "composite score Omega_a in [0,1) fed to Analyst context",
+        "operation": "Convex combination of normalized anomaly magnitude z_tilde and decorrelation score rho_cb",
+        "confidence": 0.95
+      },
+      {
+        "name": "EpisodicMemory",
+        "full_name": "Episodic Memory (SQLite WAL)",
+        "type": "persistence",
+        "tables": ["trades", "vol_history", "pipeline_log", "ollama_calls"],
+        "operation": "SQLite in WAL mode on Docker volume; enables hot restart and cross-episode narrative memory",
+        "confidence": 0.95
+      },
+      {
+        "name": "DualChannelExecution",
+        "full_name": "Privacy-Preserving Dual-Channel Execution",
+        "type": "network_routing",
+        "public_channel": "Agent -> direct HTTPS -> DEX API (market data retrieval)",
+        "private_channel": "Agent -> SOCKS5h -> Tor circuit -> VPN -> DEX API (authenticated order placement)",
+        "safety_gate": "safe = tor_active AND exchange_reachable; blocks execution if false",
+        "confidence": 0.90
+      }
+    ],
+    "connections": [
+      {"from": "MarketData", "to": "AZTE", "data": "price stream"},
+      {"from": "AZTE", "to": "IGP", "data": "trigger T_t"},
+      {"from": "IGP", "to": "CBD", "data": "admitted trigger"},
+      {"from": "IGP", "to": "Analyst", "data": "market context + lock"},
+      {"from": "CBD", "to": "Analyst", "data": "Omega_a score"},
+      {"from": "EpisodicMemory", "to": "Analyst", "data": "past trade reasoning for same asset"},
+      {"from": "Analyst", "to": "RiskManager", "data": "typed JSON signal"},
+      {"from": "RiskManager", "to": "Executor", "data": "approved typed JSON"},
+      {"from": "Executor", "to": "EpisodicMemory", "data": "full decision trace"},
+      {"from": "Executor", "to": "DualChannelExecution", "data": "order (LIVE mode only)"}
+    ],
+    "variants": []
+  },
+  "mathematical_spec": [
+    {
+      "name": "Instantaneous Return Magnitude",
+      "eq_id": "eq1",
+      "latex": "r_t = \\left|\\frac{p_t - p_{t-1}}{p_{t-1}}\\right|",
+      "role": "inference",
+      "description": "Per-asset absolute return computed each polling cycle",
+      "hyperparameters": [],
+      "confidence": 1.0
+    },
+    {
+      "name": "Rolling Anomaly Z-Score",
+      "eq_id": "eq2",
+      "latex": "z_t = \\frac{r_t - \\hat{\\mu}_W}{\\hat{s}_W}",
+      "role": "inference",
+      "description": "Z-score of return relative to rolling window of W=30 observations",
+      "hyperparameters": ["W=30"],
+      "confidence": 1.0
+    },
+    {
+      "name": "Pipeline Trigger",
+      "eq_id": "eq3",
+      "latex": "\\mathcal{T}_t = \\mathbf{1}[z_t \\geq 2.0] \\vee \\mathbf{1}[r_t \\geq 0.003]",
+      "role": "inference",
+      "description": "Disjunctive trigger: Z-score gate OR absolute return floor",
+      "hyperparameters": ["z_threshold=2.0", "r_floor=0.003"],
+      "confidence": 1.0
+    },
+    {
+      "name": "Agentic Friction",
+      "eq_id": "eq4_def1",
+      "latex": "F = \\frac{N_{rej} + N_{wait}}{N}",
+      "role": "evaluation",
+      "description": "Fraction of pipeline invocations that result in non-execution (Risk Manager rejections + Analyst self-abstentions)",
+      "hyperparameters": [],
+      "confidence": 1.0
+    },
+    {
+      "name": "IGP Lock Semaphore",
+      "eq_id": "eq5_def2",
+      "latex": "L \\in \\{0,1\\}; \\text{ admit iff } L=0; L \\leftarrow 1 \\text{ on admit}; L \\leftarrow 0 \\text{ on complete}",
+      "role": "inference",
+      "description": "Binary mutex controlling pipeline admission; discards concurrent triggers",
+      "hyperparameters": ["IGP_cooldown=1800s"],
+      "confidence": 1.0
+    },
+    {
+      "name": "BTC Decorrelation Score",
+      "eq_id": "eq9",
+      "latex": "\\rho^a_{cb} = 1 - \\left|\\rho\\left(\\{p^a_\\tau\\}^t_{\\tau=t-W}, \\{p^{BTC}_\\tau\\}^t_{\\tau=t-W}\\right)\\right|",
+      "role": "inference",
+      "description": "Asset decorrelation from BTC over rolling window W",
+      "hyperparameters": ["W=30"],
+      "confidence": 1.0
+    },
+    {
+      "name": "Exponential Saturation of Z-Score",
+      "eq_id": "eq10",
+      "latex": "\\tilde{z}^a_t = \\left(1 - e^{-\\kappa(|z^a_t| - 2.0)}\\right) \\cdot \\mathbf{1}[|z^a_t| \\geq 2.0]",
+      "role": "inference",
+      "description": "Maps unbounded Z-score to [0,1) to make it commensurable with rho_cb; kappa=0.5",
+      "hyperparameters": ["kappa=0.5"],
+      "confidence": 1.0
+    },
+    {
+      "name": "CBD Composite Score",
+      "eq_id": "eq11",
+      "latex": "\\Omega^a = \\alpha \\tilde{z}^a_t + (1 - \\alpha) \\rho^a_{cb}, \\quad \\alpha = 0.5",
+      "role": "inference",
+      "description": "Convex combination of normalized anomaly and decorrelation; equal weighting as design choice",
+      "hyperparameters": ["alpha=0.5"],
+      "confidence": 1.0
+    },
+    {
+      "name": "Net PnL with Transaction Costs",
+      "eq_id": "eq12",
+      "latex": "\\Pi_{net} = \\Pi_{gross} - \\sum_{i=1}^N C^{rt}_i",
+      "role": "evaluation",
+      "description": "Net profit after round-trip transaction costs",
+      "hyperparameters": [],
+      "confidence": 1.0
+    },
+    {
+      "name": "Round-Trip Cost Decomposition",
+      "eq_id": "eq13",
+      "latex": "C^{rt}_i = Q_i P_i f_{taker} + \\frac{1}{2Q_i}|P_{ask} - P_{bid}| + \\lambda \\sigma_i \\sqrt{\\frac{Q_i}{V_i P_i}}",
+      "role": "evaluation",
+      "description": "Exchange fee + half-spread + square-root market impact. Lambda=0.8 calibrated to crypto perpetuals.",
+      "hyperparameters": ["lambda=0.8", "ftaker=exchange_schedule"],
+      "confidence": 0.85,
+      "note": "Lambda value and exact fee schedule not fully specified for reproduction; exchange=DEX perpetuals implied"
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "r_t", "shape": "[num_assets]", "dtype": "float64",
+      "role": "intermediate", "description": "Absolute return per asset per polling cycle"
+    },
+    {
+      "name": "z_t", "shape": "[num_assets]", "dtype": "float64",
+      "role": "intermediate", "description": "Z-score of return per asset"
+    },
+    {
+      "name": "T_t", "shape": "[num_assets]", "dtype": "bool",
+      "role": "output", "description": "Trigger flag per asset"
+    },
+    {
+      "name": "Omega_a", "shape": "[1]", "dtype": "float64",
+      "role": "input_to_analyst", "description": "CBD composite score per triggered asset, in [0,1)"
+    },
+    {
+      "name": "analyst_output", "shape": "JSON dict", "dtype": "structured",
+      "role": "intermediate", "description": "Typed JSON contract from Analyst to Risk Manager"
+    },
+    {
+      "name": "rm_output", "shape": "JSON dict", "dtype": "structured",
+      "role": "intermediate", "description": "Typed JSON contract from Risk Manager to Executor"
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {"name": null, "learning_rate": null, "beta1": null, "beta2": null, "weight_decay": null, "confidence": 0.0},
+    "lr_schedule": {"type": null, "warmup_steps": null, "total_steps": null, "confidence": 0.0},
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.0,
+    "note": "TRAINING-FREE system. No gradient-based training. LLM (qwen3.5:9b) used via inference only. All parameters fixed before experiment and not tuned during session."
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {
+        "name": "Live DEX Perpetual Futures Market",
+        "description": "Decentralized perpetual futures exchange with >150 active markets; live data April 6–11 2026",
+        "split": "dry-run (no real order placement)",
+        "size": "143,807 volatility samples; 76 assets with at least one trade"
+      }
+    ],
+    "metrics": [
+      {"name": "Agentic Friction F", "value": 0.115, "description": "(Nrej + Nwait) / N"},
+      {"name": "Total invocations", "value": 157},
+      {"name": "Total trades executed (DRY_RUN)", "value": 139},
+      {"name": "Win rate", "value": 0.518},
+      {"name": "Net PnL (USD)", "value": -15.07},
+      {"name": "Net PnL (%)", "value": -0.058, "notional": 26079},
+      {"name": "Profit factor", "value": 0.841},
+      {"name": "Max cumulative drawdown (USD)", "value": 32.30},
+      {"name": "Mean win (USD)", "value": 1.11},
+      {"name": "Mean loss (USD)", "value": -1.41},
+      {"name": "Mean risk/reward", "value": 3.02},
+      {"name": "Break-even WR at RR=3.02", "value": 0.249},
+      {"name": "Alpha vs BTC buy-and-hold", "value": "+14.94pp"},
+      {"name": "Binomial p-value (H0: WR=0.5)", "value": 0.34, "significant": false},
+      {"name": "Analyst self-abstain rate", "value": 0.083},
+      {"name": "Risk Manager rejection rate (of reaching RM)", "value": 0.035},
+      {"name": "Long signal rate", "value": 0.904},
+      {"name": "Short signal rate", "value": 0.013}
+    ],
+    "reported_results": [
+      {"strategy": "AGENTICAITA (DRY_RUN)", "net_pnl_usd": -15.07, "return_pct": -0.058},
+      {"strategy": "BTC buy-and-hold", "net_pnl_usd": -3912, "return_pct": -15.0},
+      {"strategy": "Cash / stablecoin", "net_pnl_usd": 0, "return_pct": 0.0}
+    ],
+    "baselines": ["BTC buy-and-hold (funding-adjusted)", "Cash/stablecoin"],
+    "compute": "qwen3.5:9b via remote Ollama instance; containerized microservices on isolated private network",
+    "special_conditions": ["DRY_RUN mode — no real order placement", "5-day window April 6-11 2026", "Single LLM model throughout"],
+    "confidence": 0.95
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "LLM: qwen3.5:9b via Ollama REST API at configurable remote endpoint",
+      "basis": "Explicitly stated in paper; model-agnostic design noted",
+      "confidence": 0.95,
+      "alternatives": ["Any Ollama-compatible model (FinMA, InvestLM, etc.)"]
+    },
+    {
+      "assumption": "Orchestration framework is 'Agno' (custom multi-agent framework wrapping Ollama)",
+      "basis": "Stated in paper; no open-source link provided",
+      "confidence": 0.70,
+      "alternatives": ["AutoGen", "LangGraph", "custom asyncio orchestrator"]
+    },
+    {
+      "assumption": "SQLite in WAL mode for persistence; Docker volume mount for durability",
+      "basis": "Explicitly stated",
+      "confidence": 0.98,
+      "alternatives": ["PostgreSQL", "DuckDB"]
+    },
+    {
+      "assumption": "DEX is a crypto perpetual futures exchange (likely Hyperliquid or similar decentralized perp DEX given Tor+VPN routing and OHLCV+L2 data feed)",
+      "basis": "Inferred from 'decentralized perpetual futures exchange with over 150 active markets'",
+      "confidence": 0.55,
+      "alternatives": ["dYdX", "Hyperliquid", "GMX"]
+    },
+    {
+      "assumption": "Per-asset cooldown of 300s prevents burst re-triggering on same asset",
+      "basis": "Table 2 explicitly lists per-asset cooldown 300s",
+      "confidence": 0.99,
+      "alternatives": []
+    },
+    {
+      "assumption": "Rolling window W=30 bars at 60s polling = 30 minutes of history in memory",
+      "basis": "Explicitly stated",
+      "confidence": 0.99,
+      "alternatives": []
+    },
+    {
+      "assumption": "JSON schema validation implemented for all inter-agent contracts; exact schema not published",
+      "basis": "Implied by 'typed JSON contracts'; specific fields listed for each agent",
+      "confidence": 0.80,
+      "alternatives": ["Pydantic models", "jsonschema library", "manual validation"]
+    },
+    {
+      "assumption": "Tor SOCKS5h proxy at localhost:9050 (standard Tor daemon port) for private channel",
+      "basis": "SOCKS5h protocol named; standard Tor configuration assumed",
+      "confidence": 0.70,
+      "alternatives": ["Custom Tor port", "Tor via Docker container"]
+    },
+    {
+      "assumption": "Exchange API uses authenticated REST endpoints; WebSocket used for real-time L2 orderbook",
+      "basis": "Standard DEX API pattern; OHLCV + L2 data described as inputs",
+      "confidence": 0.65,
+      "alternatives": ["Polling-only REST", "gRPC"]
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 3 / System Architecture",
+      "description": "Exact DEX exchange not named; cannot reproduce live data feed without knowing the exchange API",
+      "primary_assumption": "Public DEX perpetuals with REST+WebSocket API; mock data acceptable for dry-run reproduction",
+      "alternatives": ["Hyperliquid", "dYdX v4", "GMX"],
+      "confidence": 0.45
+    },
+    {
+      "location": "Section 4.2 / Analyst agent prompt",
+      "description": "Only partial system prompt shown; full prompt engineering (including episodic memory briefing format) not fully specified",
+      "primary_assumption": "Reproduce with documented fields; use reasonable prompt structure",
+      "alternatives": [],
+      "confidence": 0.60
+    },
+    {
+      "location": "Section 4.6 / Eq.13",
+      "description": "ftaker (exact fee schedule) and lambda=0.8 origin not specified; labeled 'calibrated to crypto perpetuals'",
+      "primary_assumption": "Use 0.05% taker fee (common for DEX perpetuals); lambda=0.8 as stated",
+      "alternatives": ["0.02% maker, 0.07% taker", "0.1% taker"],
+      "confidence": 0.60
+    },
+    {
+      "location": "Section 3 / Agno framework",
+      "description": "'Agno' is described as a custom multi-agent orchestration framework; no repository link or detailed API provided",
+      "primary_assumption": "Implement equivalent orchestration using asyncio + direct Ollama API calls",
+      "alternatives": ["AutoGen", "LangGraph"],
+      "confidence": 0.55
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.90,
+    "mathematical_spec": 0.95,
+    "tensor_semantics": 0.82,
+    "training_pipeline": 0.99,
+    "evaluation_protocol": 0.93,
+    "implementation_assumptions": 0.72,
+    "overall_sir_confidence": 0.88
+  }
+}
