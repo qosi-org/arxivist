@@ -1,0 +1,6 @@
+pytest>=7.0
+black>=23.0
+isort>=5.12
+flake8>=6.0
+jupyter>=1.0
+ipykernel>=6.0

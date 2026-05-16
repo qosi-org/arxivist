@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  train:
+    build: ..
+    image: spg-uvm:latest
+    volumes:
+      - ..:/workspace
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      python train.py
+        --config configs/default.yaml
+        --policy continuous
+        --d 2
+        --payoff geo_outperformer
+        --device cuda
+
+  notebook:
+    build: ..
+    image: spg-uvm:latest
+    volumes:
+      - ..:/workspace
+    ports:
+      - "8888:8888"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      jupyter notebook
+        --ip=0.0.0.0
+        --port=8888
+        --no-browser
+        --allow-root
+        --notebook-dir=/workspace/notebooks
