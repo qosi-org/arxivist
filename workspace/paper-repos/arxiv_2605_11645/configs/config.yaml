@@ -1,0 +1,111 @@
+# GeomHerd Configuration
+# Paper: "GeomHerd: A Forward-looking Herding Quantification via Ricci Flow Geometry
+#         on Agent Interactive Simulations" (arXiv:2605.11645)
+# All values from paper unless marked [ASSUMED: <basis>]
+
+graph:
+  Tw: 100              # Section 2.1: windowed agreement window (steps)
+  w0: 0.5              # Section 2.1: sparsification threshold (above chance ~1/|A|≈0.33)
+  delta_t: 10          # Section 2.1: snapshot reconstruction stride (steps)
+  overlap_pct: 0.5     # Section 2.1: 50% temporal overlap between snapshots
+  action_alphabet_size: 3  # |A| = {buy, hold, sell}
+
+curvature:
+  alpha: 0.5           # Section 2.2: lazy-walk laziness; matches Sandhu et al. 2016
+  kappa_plus_thresh: 0.1    # Section 2.2: E+ threshold (within-clique / herding edges)
+  kappa_minus_thresh: -0.1  # Section 2.2: E- threshold (bridge / contagion edges)
+  use_lp_wasserstein: true  # Appendix C: exact LP W1 via POT; Sinkhorn ablated (fails)
+
+ricci_flow:
+  step_size: 0.01      # [ASSUMED: not in paper] multiplicative Ricci flow step size
+  max_iter: 1000       # [ASSUMED: not in paper] max flow iterations before timeout
+  flow_variant: "multiplicative"  # [ASSUMED: R1] swappable: multiplicative | additive
+  # multiplicative: w <- w * (1 - step_size * kappa)
+  # neckpinch criterion: first step where any edge kappa -> -inf (proxy: kappa < -50)
+  neckpinch_threshold: -50.0  # [ASSUMED: not in paper] kappa threshold for neckpinch detection
+
+detection:
+  baseline_window: 35  # Appendix D: W=35 samples of subsampled curvature trace
+  skip_initial: 50     # Appendix G: skip first 50 steps for baseline estimation
+  # Two operating points (Table 8 / Appendix D):
+  operating_point: "precision"  # recall | precision (choose deployment mode)
+  recall_oriented:
+    k_sigma: 0.5       # Appendix D: kσ for recall-oriented point (272-step lead)
+    h_sigma: 4.0       # Appendix D: hσ
+    recall_super: 0.52
+    far_sub: 0.76
+    median_lead_steps: 272
+  precision_oriented:
+    k_sigma: 2.0       # Appendix D: kσ for precision-oriented point (178-step lead)
+    h_sigma: 4.0       # Appendix D: hσ
+    recall_super: 0.04
+    far_sub: 0.07
+    median_lead_steps: 178
+  # Contagion-bridge detector (beta_minus)
+  beta_minus:
+    k_sigma: 0.5       # [ASSUMED: not specified] CUSUM k for beta_minus
+    h_sigma: 4.0       # [ASSUMED: not specified] CUSUM h for beta_minus
+  # Kendall-tau trend detector
+  kendall_tau_thresh: -0.4    # [ASSUMED: inferred from Table 3 'tau_neg=-0.4' label]
+  kendall_window: 20          # [ASSUMED: not in paper] rolling window for Kendall-tau
+  herding_event_threshold: 0.5   # Section 2.3: theta_event for order parameter V_a(t)
+  geom_alarm_threshold: 0.30     # Figure 1: theta_geom
+
+vocabulary:
+  codebook_dims: 3      # Section 2.4: 3D FSQ codebook (explicitly stated)
+  levels_per_dim: 4     # Section 2.4: Ld=4 (explicitly stated)
+  K: 64                 # K = Ld^3 = 64 (explicitly stated)
+  # Non-learned codebook: uniform grid over [-1,1]^3 (ASSUMED placement)
+
+simulation:
+  llm_mode: false        # Set true to use real LLM agents (requires ANTHROPIC_API_KEY)
+  llm_model: "claude-sonnet-4-20250514"   # [ASSUMED: smaller model for cost; paper used Opus 4.6]
+  llm_temperature: 0.7   # [ASSUMED: standard LLM temperature]
+  # CWS substrate (Cividino-Sornette)
+  cws:
+    N_agents: 66           # Section 3.2: explicitly stated
+    N_assets: 4            # Section 3.2: explicitly stated
+    kappa_values: [0.5, 0.8, 1.2, 1.8, 2.5]   # Section 3.2: coupling sweep
+    seeds_per_kappa: 80    # Section 3.2: explicitly stated
+    T_steps: 1200          # [ASSUMED: inferred from Figure 3 x-axis]
+    sbase: 0.6             # Appendix C: CWS sbase parameter
+    spost: 1.6             # Appendix C: spost (scaled by sweep_value/1.3)
+  # Vicsek substrate
+  vicsek:
+    N_particles: 600       # Section 3.2: explicitly stated
+    eta_values: [0.5, 1.0, 1.6, 2.0, 2.5]  # Section 3.2: noise sweep
+    eta_critical: 1.6      # Section 3.2: eta_c ≈ 1.6
+    seeds_per_eta: 20      # Section 3.2: explicitly stated
+    T_steps: 1000          # Section 3.2: explicitly stated
+    snapshot_stride: 50    # Appendix G: downsample to one snapshot every 50 steps
+    knn_k: 10              # Section 3.3.3: k-NN k=10 for heading-based agent graph
+    speed: 0.3             # [ASSUMED: standard Vicsek parameter]
+    radius: 1.0            # [ASSUMED: interaction radius]
+    polarisation_threshold: 0.5  # Appendix G: rolling polarisation threshold
+
+kronos:
+  # STUB — Architecture not specified in paper (Risk R2)
+  d_model: 64            # [ASSUMED: not in paper] transformer hidden dim
+  n_layers: 2            # [ASSUMED: not in paper] transformer depth
+  n_heads: 4             # [ASSUMED: not in paper] attention heads
+  tokeniser_codebook_size: 512   # [ASSUMED: not in paper] VQ-VAE price tokeniser
+  context_len: 64        # [ASSUMED: not in paper] OHLCV context window length
+  train_epochs: 50       # [ASSUMED: not in paper]
+  lr: 1.0e-4             # [ASSUMED: not in paper]
+  batch_size: 32         # [ASSUMED: not in paper]
+  cascade_window_steps: 100   # [ASSUMED: not in paper] window for MAE evaluation
+
+evaluation:
+  n_boot: 5000           # Section 3.2: explicitly stated
+  alpha_level: 0.05      # standard significance level
+
+hardware:
+  device: "cpu"          # cpu | cuda (cuda only needed for Kronos head training)
+  num_workers: 4         # [ASSUMED]
+  seed: 42               # global random seed
+
+paths:
+  data_dir: "data/"
+  output_dir: "results/"
+  checkpoint_dir: "results/checkpoints/"
+  log_dir: "results/logs/"

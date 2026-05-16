@@ -1,0 +1,436 @@
+{
+  "paper_id": "arxiv_2605_11645",
+  "provenance": {
+    "title": "GeomHerd: A Forward-looking Herding Quantification via Ricci Flow Geometry on Agent Interactive Simulations",
+    "authors": [
+      {"name": "Lake Yang", "affiliation": "Imperial College London"},
+      {"name": "Junwei Su", "affiliation": "University of Science and Technology of China"},
+      {"name": "Jingfeng Zeng", "affiliation": "MaxQuant"},
+      {"name": "Wenhao Lu", "affiliation": "The University of Hong Kong"},
+      {"name": "Xingzhi Qian", "affiliation": "University College London"},
+      {"name": "Weitong Zhang", "affiliation": "MaxQuant / Imperial College London"},
+      {"name": "Chuan Wu", "affiliation": "The University of Hong Kong"},
+      {"name": "Dunhong Jin", "affiliation": "The University of Hong Kong"}
+    ],
+    "arxiv_id": "2605.11645",
+    "submission_date": "2026-05-12",
+    "abstract_truncated": "GeomHerd is a forward-looking geometric framework for herding quantification. By tracking Ollivier-Ricci curvature of agent-action graphs in LLM-driven multi-agent financial simulators, it anticipates herding earlier than price-correlation or trading-flow baselines, with median lead of 272 steps before order-parameter onset.",
+    "primary_domain": "Multimodal (Finance / Graph Geometry / Multi-Agent Systems)",
+    "key_claims": [
+      "GeomHerd fires a median 272 steps before order-parameter herding onset on the CWS substrate (recall-oriented operating point)",
+      "Contagion detector beta_minus recalls 65% of critical trajectories with 318-step lead",
+      "Agent-graph curvature signal precedes price-correlation-graph baselines by 40 steps on co-firing trajectories",
+      "Mean-field bridge to CSAD established: CSAD_t = sigma_xi * sqrt(2/pi) * (1 - kappa_OR)^(1/2) + O(N^{-1/2})",
+      "Curvature transfers out-of-domain to Vicsek particle model with AUROC 0.99; GeomHerd-conditioned forecasting head reduces cascade-window log-return MAE"
+    ],
+    "parsed_at": "2026-05-13T00:00:00Z"
+  },
+
+  "architecture": {
+    "description": "A four-stage geometric pipeline operating on dynamic agent-action graphs. Components: (1) graph construction, (2) Ollivier-Ricci curvature computation via LP-Wasserstein, (3) sign-decomposed CUSUM/Kendall-tau detection, (4) forward-looking Ricci-flow singularity time and effective vocabulary.",
+    "components": [
+      {
+        "name": "AgentGraphConstructor",
+        "type": "Graph builder",
+        "inputs": "Action sequences a_i(t) in {buy, hold, sell} for N agents over T steps",
+        "outputs": "Weighted sparse graph G_t = (V, E_t, w_t), |V|=N=66",
+        "operation": "Windowed agreement frequency w_t(i,j) = (1/Tw) * sum_{s=t-Tw+1}^{t} 1[a_i(s)=a_j(s)]; sparsify at w0=0.5; reconstruct every dt=10 steps with Tw=100",
+        "hyperparameters": {"Tw": 100, "w0": 0.5, "delta_t": 10, "overlap_pct": 0.5},
+        "confidence": 0.97
+      },
+      {
+        "name": "OllivierRicciCurvatureEngine",
+        "type": "Curvature computation",
+        "inputs": "G_t with weights w_t(i,j)",
+        "outputs": "Per-edge curvature kappa_OR(i,j;t) in R; mean curvature kappa_bar_OR(t); sign decomposition (kappa_bar_plus, beta_minus)",
+        "operation": "Lazy-walk kernel mu_i(j) = alpha*delta_ij + (1-alpha)*w_t(i,j)/sum_k(w_t(i,k)); alpha=0.5. Edge distance d(i,j)=w_t(i,j). kappa_OR(i,j;t) = 1 - W1(mu_i, mu_j)/d(i,j). W1 solved via LP (POT library). Sign split: E+ if kappa>0.1, E- if kappa<-0.1",
+        "hyperparameters": {"alpha": 0.5, "kappa_plus_threshold": 0.1, "kappa_minus_threshold": -0.1},
+        "library": "POT (Python Optimal Transport)",
+        "confidence": 0.95
+      },
+      {
+        "name": "CUSUMDetector",
+        "type": "Statistical process control",
+        "inputs": "Time series kappa_bar_plus_OR(t) and beta_minus(t)",
+        "outputs": "Binary alarm signals A_plus_t, A_minus_t",
+        "operation": "S_plus_t = max(0, S_plus_{t-1} + (kappa_bar_plus_OR(t) - mu_plus_base - k_plus)); A_plus_t = 1[S_plus_t > h_plus]. Contagion: S_minus_t = max(0, S_minus_{t-1} + (beta_minus(t) - mu_minus_base - k_minus)); A_minus_CUSUM_t = 1[S_minus_t > h_minus]; A_minus_t = A_minus_CUSUM_t OR 1[Kendall_{[t-W_tau,t]}(beta_minus) > tau_thresh]",
+        "hyperparameters": {
+          "recall_oriented": {"k_sigma": 0.5, "h_sigma": 4.0},
+          "precision_oriented": {"k_sigma": 2.0, "h_sigma": 4.0},
+          "baseline_window_W": 35,
+          "tau_thresh": "calibrated (see Appendix D)",
+          "W_tau": "calibrated"
+        },
+        "confidence": 0.90
+      },
+      {
+        "name": "RicciFlowSingularityDescriptor",
+        "type": "Forward-looking scalar",
+        "inputs": "Snapshot G_t",
+        "outputs": "tau_sing(t): first neckpinch time under discrete Ricci flow starting from G_t",
+        "operation": "At every snapshot, run a fresh discrete Ricci flow on G_t. Record tau_sing(t) = inf{s>0 : exists e in E_t, kappa_OR^(s)(e) -> -inf}. Produces a forward-looking time-to-coordination series.",
+        "confidence": 0.82
+      },
+      {
+        "name": "EffectiveVocabularyTracker",
+        "type": "Information-theoretic signal",
+        "inputs": "Agent action distribution at time t",
+        "outputs": "V_eff(t) = exp(H(p_t))",
+        "operation": "Fixed 3D FSQ codebook with Ld=4 levels per dimension => K=64 codewords total (non-learned). H(p_t) is entropy of codebook utilization distribution. V_eff contracts as herding develops.",
+        "hyperparameters": {"codebook_dims": 3, "levels_per_dim": 4, "K": 64},
+        "confidence": 0.88
+      },
+      {
+        "name": "KronosForecasting Head",
+        "type": "Conditional forecasting",
+        "inputs": "GeomHerd triplet (kappa_bar_OR, tau_sing, V_eff); OHLCV sequences via frozen price tokeniser",
+        "outputs": "Next-step log-return forecast",
+        "operation": "Frozen learned vector-quantiser tokenises OHLCV -> token vocabulary. Transformer conditioned on GeomHerd triplet via AdaLN-Zero (adaptive layer-norm, zero-initialised gating). Only conditioning layers trained.",
+        "confidence": 0.72
+      }
+    ],
+    "substrate_models": {
+      "CWS": {
+        "name": "Cividino-Sornette continuous-spin agent-based model",
+        "N_agents": 66,
+        "N_assets": 4,
+        "action_alphabet": ["buy", "hold", "sell"],
+        "coupling_sweep": [0.5, 0.8, 1.2, 1.8, 2.5],
+        "seeds_per_level": 80,
+        "total_trajectories": 400,
+        "supercritical": 240,
+        "subcritical": 160,
+        "reference": "Cividino, Westphal, Sornette 2023 (Phys Rev Research)"
+      },
+      "Vicsek": {
+        "name": "Vicsek self-driven particle model",
+        "N_particles": 600,
+        "noise_sweep": [0.5, 1.0, 1.6, 2.0, 2.5],
+        "critical_noise": 1.6,
+        "seeds_per_level": 20,
+        "total_trajectories": 100,
+        "agent_graph": "k-NN (k=10) on heading sequence, binary edge weights",
+        "reference": "Vicsek et al. 1995 (PRL)"
+      }
+    },
+    "ambiguities": [
+      {
+        "location": "Section 2.4, Ricci flow",
+        "description": "Discrete Ricci flow iteration rule not fully specified — only the stopping criterion (neckpinch) is given",
+        "primary_assumption": "Standard Hamilton-type discrete Ricci flow: w_{t+1}(e) = w_t(e) - kappa_OR(e;t) * w_t(e) * step_size",
+        "alternatives": ["Lin-Lu-Yau variant", "Forman-Ricci flow"],
+        "confidence": 0.60
+      },
+      {
+        "location": "Section 2.3, Kendall-tau parameters",
+        "description": "tau_thresh and W_tau values deferred to Appendix D which gives only the CUSUM sweep, not explicit Kendall values",
+        "primary_assumption": "tau_thresh=-0.4 (inferred from Table 3 beta_minus row label)",
+        "alternatives": ["Other negative tau thresholds"],
+        "confidence": 0.65
+      },
+      {
+        "location": "Section 3.3.3, Kronos forecasting head",
+        "description": "Architecture of Kronos-style transformer (number of layers, heads, hidden dim) not specified",
+        "primary_assumption": "Small transformer: 2-4 layers, 4-8 heads, d_model=64 or 128 (typical for financial tabular tasks)",
+        "alternatives": ["Larger transformer", "MLP head"],
+        "confidence": 0.45
+      }
+    ],
+    "confidence": 0.82
+  },
+
+  "mathematical_spec": {
+    "equations": [
+      {
+        "id": "eq1",
+        "name": "Windowed action-agreement edge weight",
+        "latex": "w_t(i,j) = \\frac{1}{T_w} \\sum_{s=t-T_w+1}^{t} \\mathbf{1}[a_i(s) = a_j(s)]",
+        "role": "Graph construction — edge weight between agents i and j",
+        "hyperparameters": ["Tw=100"],
+        "confidence": 0.99
+      },
+      {
+        "id": "eq2",
+        "name": "Lazy-walk transition kernel",
+        "latex": "\\mu_i^t(j) = \\alpha \\delta_{ij} + (1-\\alpha) \\frac{w_t(i,j)}{\\sum_k w_t(i,k)}",
+        "role": "Node measure for Wasserstein transport in Ricci curvature computation; alpha=0.5",
+        "hyperparameters": ["alpha=0.5"],
+        "confidence": 0.99
+      },
+      {
+        "id": "eq3",
+        "name": "Ollivier-Ricci curvature",
+        "latex": "\\kappa_{OR}(i,j;t) = 1 - \\frac{W_1(\\mu_i^t, \\mu_j^t)}{d_t(i,j)}",
+        "role": "Core herding signal; d_t(i,j) = w_t(i,j)",
+        "confidence": 0.99
+      },
+      {
+        "id": "eq4_cusum_plus",
+        "name": "CUSUM statistic for herding (kappa_bar_plus)",
+        "latex": "S_t^+ = \\max\\left(0, S_{t-1}^+ + (\\bar{\\kappa}_{OR}^+(t) - \\mu^+_{\\text{base}} - k_+)\\right), \\quad A_t^+ = \\mathbf{1}[S_t^+ > h_+]",
+        "role": "Detection alarm for within-clique coordination (herding)",
+        "hyperparameters": ["k_plus (0.5 or 2.0)", "h_plus=4.0", "baseline_window W=35"],
+        "confidence": 0.95
+      },
+      {
+        "id": "eq5_cusum_minus",
+        "name": "CUSUM statistic for contagion (beta_minus)",
+        "latex": "S_t^- = \\max\\left(0, S_{t-1}^- + (\\beta_-(t) - \\mu^-_{\\text{base}} - k_-)\\right), \\quad A_t^{-,\\text{cusum}} = \\mathbf{1}[S_t^- > h_-]",
+        "role": "CUSUM component of contagion bridge detector",
+        "confidence": 0.95
+      },
+      {
+        "id": "eq6_combined_alarm",
+        "name": "Combined contagion alarm",
+        "latex": "A_t^- = A_t^{-,\\text{cusum}} \\vee \\mathbf{1}\\left[\\text{Kendall}_{[t-W_\\tau, t]}(\\beta_-) > \\tau_{\\text{thresh}}\\right]",
+        "role": "OR-combination of CUSUM level and Kendall-tau trend for bridge detection",
+        "confidence": 0.93
+      },
+      {
+        "id": "eq7_csad_bridge",
+        "name": "Mean-field bridge to CSAD (Proposition 1)",
+        "latex": "\\text{CSAD}_t = \\sigma_\\xi \\sqrt{2/\\pi} \\left(1 - \\bar{\\kappa}_{OR}(t)\\right)^{1/2} + O(N^{-1/2})",
+        "role": "Theoretical link between agent-graph curvature and classical CSAD herding measure",
+        "confidence": 0.80,
+        "note": "Stated as dominant-order scaling identity; full rigorous proof deferred to follow-on work"
+      },
+      {
+        "id": "eq8_cck_augmented",
+        "name": "Augmented CCK regression",
+        "latex": "\\text{CSAD}_t = \\alpha + \\gamma_1 |R_{m,t}| + \\gamma_2 R_{m,t}^2 + \\gamma_3 \\bar{\\kappa}_{OR}(t) + \\varepsilon_t",
+        "role": "Empirical validation: gamma_3 < 0 confirms sign-consistency with Proposition 1",
+        "confidence": 0.97
+      },
+      {
+        "id": "eq_veff",
+        "name": "Effective vocabulary",
+        "latex": "V_{\\text{eff}}(t) = \\exp(H(p_t))",
+        "role": "Behavioral homogenisation signal; H(p_t) is entropy of FSQ codebook utilization distribution",
+        "confidence": 0.95
+      }
+    ],
+    "confidence": 0.91
+  },
+
+  "tensor_semantics": {
+    "tensors": [
+      {
+        "name": "action_sequence",
+        "shape": "[N, T]",
+        "dtype": "int (categorical index in {0=buy,1=hold,2=sell})",
+        "role": "input",
+        "notes": "N=66 agents, T=simulation steps (up to ~1200 in CWS traces)"
+      },
+      {
+        "name": "edge_weight_matrix",
+        "shape": "[N, N]",
+        "dtype": "float32 in [0,1]",
+        "role": "intermediate",
+        "notes": "Sparse after sparsification at w0=0.5; reconstructed every dt=10 steps"
+      },
+      {
+        "name": "lazy_walk_kernel",
+        "shape": "[N, N]",
+        "dtype": "float32",
+        "role": "intermediate",
+        "notes": "Row-stochastic after alpha=0.5 laziness; passed pairwise to W1 solver"
+      },
+      {
+        "name": "per_edge_curvature",
+        "shape": "[|E_t|]",
+        "dtype": "float32",
+        "role": "intermediate",
+        "notes": "One scalar per retained edge; sign-decomposed into E+, E0, E-"
+      },
+      {
+        "name": "curvature_time_series",
+        "shape": "[T//delta_t]",
+        "dtype": "float32",
+        "role": "output (detection input)",
+        "notes": "kappa_bar_plus_OR(t) and beta_minus(t); subsampled at stride delta_t=10"
+      },
+      {
+        "name": "CUSUM_statistic",
+        "shape": "[T//delta_t]",
+        "dtype": "float32",
+        "role": "intermediate",
+        "notes": "S_plus_t and S_minus_t maintained as running scalars"
+      },
+      {
+        "name": "geomherd_triplet",
+        "shape": "[T//delta_t, 3]",
+        "dtype": "float32",
+        "role": "forecasting input",
+        "notes": "(kappa_bar_OR, tau_sing, V_eff) used as conditioning for Kronos head via AdaLN-Zero"
+      }
+    ],
+    "confidence": 0.78
+  },
+
+  "training_pipeline": {
+    "note": "GeomHerd is primarily an inference/detection pipeline, not a trained model. The only trained component is the Kronos forecasting head.",
+    "geometric_pipeline": {
+      "optimizer": null,
+      "training_steps": null,
+      "note": "No training required; pure algorithmic pipeline"
+    },
+    "kronos_forecasting_head": {
+      "optimizer": "Not specified",
+      "loss": "Log-return MAE (mean absolute error on cascade window)",
+      "price_tokeniser": "Frozen learned vector-quantiser on OHLCV; trained separately",
+      "conditioning": "AdaLN-Zero on GeomHerd triplet",
+      "trainable_params": "Only conditioning layers",
+      "substrate": "CWS trajectories",
+      "note": "Architecture details (layers, heads, hidden dim) not specified in paper"
+    },
+    "cusum_calibration": {
+      "method": "Sweep over (k_sigma, h_sigma) grid on binary-edge replay set (400 trajectories)",
+      "baseline_window": "W=35 samples of subsampled curvature trace (W*delta_t = 350 simulator steps)",
+      "grid": "5x5 over k_sigma in {0.25,0.5,1.0,1.5,2.0} x h_sigma in {3,4,5,6,8}",
+      "two_operating_points": {
+        "recall_oriented": {"k_sigma": 0.5, "h_sigma": 4.0, "recall": 0.52, "FAR_sub": 0.76, "median_lead_steps": 272},
+        "precision_oriented": {"k_sigma": 2.0, "h_sigma": 4.0, "recall": 0.04, "FAR_sub": 0.07, "median_lead_steps": 178}
+      }
+    },
+    "confidence": 0.68
+  },
+
+  "evaluation_protocol": {
+    "datasets": [
+      {
+        "name": "CWS replay set",
+        "type": "Simulated (agent-based model)",
+        "size": "400 trajectories (240 supercritical, 160 subcritical)",
+        "splits": "No train/test split noted for detection; Kronos head training split not specified",
+        "generation": "80 seeds x 5 coupling levels kappa in {0.5,0.8,1.2,1.8,2.5}"
+      },
+      {
+        "name": "Vicsek transfer set",
+        "type": "Simulated (physics particle model)",
+        "size": "100 trajectories (20 seeds x 5 noise levels eta in {0.5,1.0,1.6,2.0,2.5}), 95 valid",
+        "N_particles": 600,
+        "T_steps": 1000,
+        "snapshot_stride": 50
+      }
+    ],
+    "metrics": [
+      "Precision", "Recall (supercritical)", "FAR (subcritical false alarm rate)",
+      "AUROC", "AUPRC",
+      "Conditional median lead time (steps) with 95% bootstrap CI",
+      "Rare-event-stable metric (Nikolopoulos 2025)",
+      "Paired-bootstrap lead difference (n_boot=5000)",
+      "Cascade-window log-return MAE (IQM, rliable)"
+    ],
+    "baselines": [
+      {"name": "LSV 1992", "type": "Trading-flow", "precision": 0.60, "recall_super": 1.00, "FAR_sub": 1.00, "AUROC": 0.48, "median_lead": 355},
+      {"name": "CSAD (CCK)", "type": "Return cross-section", "precision": 0.69, "recall_super": 1.00, "FAR_sub": 0.68, "AUROC": 0.75, "median_lead": 180},
+      {"name": "Srinivasan 2026", "type": "Price-correlation geometry (ORC+neckpinch)", "precision": 0.71, "recall_super": 0.79, "FAR_sub": 0.49, "AUROC": 0.66, "median_lead": 20},
+      {"name": "Sandhu 2016", "type": "Price-correlation geometry (ORC)", "precision": 0.72, "recall_super": 0.95, "FAR_sub": 0.55, "AUROC": 0.72, "median_lead": 80},
+      {"name": "Lap-CSAD (Huang 2023)", "type": "Price-correlation geometry", "precision": 0.85, "recall_super": 0.85, "FAR_sub": 0.23, "AUROC": 0.80, "median_lead": -42},
+      {"name": "Jiang 2023", "type": "Point-process geometry", "precision": 0.60, "recall_super": 1.00, "FAR_sub": 1.00, "AUROC": 0.50, "median_lead": 306},
+      {"name": "AA-MI (Tessera 2026)", "type": "Agent-graph information-theoretic", "note": "Degenerate output on all 400 trajectories under binary-edge configuration"}
+    ],
+    "geomherd_results": {
+      "kappa_plus_recall_oriented": {"precision": 0.45, "recall_super": 0.52, "FAR_sub": 0.76, "AUROC": 0.48, "median_lead": 272, "CI_95": [236, 313]},
+      "kappa_plus_precision_oriented": {"precision": 0.45, "recall_super": 0.04, "FAR_sub": 0.07, "AUROC": 0.48, "median_lead": 178, "CI_95": [71, 407]},
+      "beta_minus_contagion": {"precision": 0.55, "recall_super": 0.65, "FAR_sub": 0.81, "AUROC": 0.80, "median_lead": 318, "CI_95": [272, 344]},
+      "tau_sing": {"precision": 0.42, "recall_super": 0.03, "FAR_sub": 0.07, "AUROC": 0.48, "median_lead": -93},
+      "vicsek_transfer_AUROC": 0.99,
+      "CCK_gamma3_median": -0.0072,
+      "CCK_gamma3_CI": [-0.00769, -0.00602]
+    },
+    "confidence": 0.95
+  },
+
+  "implementation_assumptions": [
+    {
+      "assumption": "Discrete Ricci flow update rule: w_{t+1}(e) = w_t(e) * (1 - step_size * kappa_OR(e;t))",
+      "basis": "Standard formulation in curvature-based graph rewiring literature; Lin-Lu-Yau or Ollivier variant",
+      "confidence": 0.60,
+      "alternatives": ["Forman-Ricci flow", "normalized flow with surgery"]
+    },
+    {
+      "assumption": "LLM agent simulator: each of N=66 agents is a separate persona-conditioned call to Bedrock Claude Opus 4.6 (stated in paper body for headline runs); for reproduction, a smaller Claude model or open-source LLM may substitute without affecting the geometric pipeline",
+      "basis": "Explicitly stated in paper for CWS experiments",
+      "confidence": 0.85,
+      "alternatives": ["GPT-4o", "open-source LLM (LLaMA-3, Mistral)", "hardcoded rule-based traders"]
+    },
+    {
+      "assumption": "FSQ codebook: 3D, 4 levels per dim, K=64 codewords; non-learned; agents' actions projected into this space for entropy computation",
+      "basis": "Explicitly stated in Section 2.4",
+      "confidence": 0.88,
+      "alternatives": ["Learned VQ-VAE codebook"]
+    },
+    {
+      "assumption": "POT library (Python Optimal Transport) for exact LP Wasserstein-1 computation",
+      "basis": "Explicitly stated in Section 2.2 and Appendix C",
+      "confidence": 0.99,
+      "alternatives": ["Sinkhorn (ablated — fails; see Table 4)"]
+    },
+    {
+      "assumption": "SciPy CSR-graph Dijkstra for all-pairs shortest paths (stated in Appendix C)",
+      "basis": "Explicitly stated",
+      "confidence": 0.99,
+      "alternatives": ["NetworkX shortest path"]
+    },
+    {
+      "assumption": "Kronos forecasting head architecture: small transformer ~2-4 layers with AdaLN-Zero conditioning; price tokeniser is a VQ-VAE on OHLCV sequences",
+      "basis": "Inferred from 'Kronos-style' reference and AdaLN-Zero mention; no layer/head counts given",
+      "confidence": 0.45,
+      "alternatives": ["MLP conditioning head", "larger transformer"]
+    },
+    {
+      "assumption": "HAC standard errors for CCK regression use Newey-West with automatic bandwidth selection",
+      "basis": "Stated as 'Newey-West' in Section 3.3.2; bandwidth not specified",
+      "confidence": 0.80,
+      "alternatives": ["Fixed lag Newey-West", "Andrews kernel"]
+    },
+    {
+      "assumption": "CWS substrate dynamics: each agent's action drawn from a distribution driven by private signal + neighbor-average weighted by coupling kappa + idiosyncratic Gaussian noise; linear price impact rule",
+      "basis": "Described in Section 3.2 and referenced to Cividino et al. 2023",
+      "confidence": 0.75,
+      "alternatives": ["Refer to original CWS paper for full mechanics"]
+    }
+  ],
+
+  "confidence_annotations": {
+    "architecture": 0.82,
+    "mathematical_spec": 0.91,
+    "tensor_semantics": 0.78,
+    "training_pipeline": 0.68,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.65,
+    "overall_sir_confidence": 0.80
+  },
+
+  "ambiguities": [
+    {
+      "location": "Section 2.4",
+      "description": "Discrete Ricci flow iteration rule (how curvature drives edge weight update) is not written out; only stopping criterion (neckpinch) is given",
+      "primary_assumption": "Standard multiplicative update: w(e) <- w(e) - eta * kappa(e) * w(e)",
+      "alternatives": ["Additive update", "Lin-Lu-Yau normalization"],
+      "confidence": 0.60
+    },
+    {
+      "location": "Section 2.3 / Appendix D",
+      "description": "Kendall-tau threshold tau_thresh and window W_tau are not given numerically in the main text or Appendix D table",
+      "primary_assumption": "tau_thresh = -0.4 (inferred from Table 3 row label 'tau_neg=-0.4')",
+      "alternatives": ["Other thresholds"],
+      "confidence": 0.65
+    },
+    {
+      "location": "Section 3.3.3",
+      "description": "Kronos forecasting head architecture (layers, hidden dim, heads) not specified",
+      "primary_assumption": "Small transformer with AdaLN-Zero conditioning, frozen VQ-VAE price tokeniser",
+      "alternatives": ["MLP", "linear head"],
+      "confidence": 0.45
+    },
+    {
+      "location": "Section 2.1 / Appendix A",
+      "description": "LLM persona prompts intentionally withheld by authors; reproduction requires designing persona-conditioned prompts",
+      "primary_assumption": "Generic risk-appetite / momentum / herding-tendency persona prompts can approximate the paper's setup",
+      "alternatives": ["Contact authors", "Use rule-based trader archetypes"],
+      "confidence": 0.55
+    }
+  ]
+}

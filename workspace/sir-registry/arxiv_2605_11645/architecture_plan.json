@@ -1,0 +1,406 @@
+{
+  "paper_id": "arxiv_2605_11645",
+  "project_name": "geomherd",
+  "framework": {
+    "primary": "PyTorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "reasoning": "Paper uses POT (Python Optimal Transport) for LP-Wasserstein, SciPy for graph ops, and a transformer-based forecasting head. PyTorch is standard for the forecasting head. The core geometric pipeline is pure NumPy/SciPy/POT and is CPU-sufficient. CUDA optional for Kronos head training.",
+    "config_management": "YAML + dataclasses",
+    "huggingface_integration": false
+  },
+
+  "module_hierarchy": {
+    "root": "src/geomherd/",
+    "files": [
+      {
+        "path": "src/geomherd/__init__.py",
+        "classes": [],
+        "description": "Package init"
+      },
+      {
+        "path": "src/geomherd/graph/agent_graph.py",
+        "sir_mapping": "AgentGraphConstructor",
+        "classes": [
+          {
+            "name": "AgentGraph",
+            "methods": [
+              "update(actions: np.ndarray[N, Tw]) -> scipy.sparse.csr_matrix",
+              "get_weight_matrix(t: int) -> np.ndarray[N, N]",
+              "get_edge_list() -> List[Tuple[int, int, float]]"
+            ],
+            "description": "Maintains rolling windowed action-agreement graph. Sparsifies at w0=0.5."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/geometry/ricci_curvature.py",
+        "sir_mapping": "OllivierRicciCurvatureEngine",
+        "classes": [
+          {
+            "name": "OllivierRicciComputer",
+            "methods": [
+              "compute(G: scipy.sparse.csr_matrix, alpha: float=0.5) -> Dict[Tuple[int,int], float]",
+              "mean_curvature(kappa_dict: Dict, sign: str='positive') -> float",
+              "beta_minus(kappa_dict: Dict) -> float"
+            ],
+            "description": "Computes per-edge ORC via LP W1 (POT). Returns kappa dict keyed by (i,j). Sign split at ±0.1."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/geometry/ricci_flow.py",
+        "sir_mapping": "RicciFlowSingularityDescriptor",
+        "classes": [
+          {
+            "name": "DiscreteRicciFlow",
+            "methods": [
+              "run(G: scipy.sparse.csr_matrix, kappa_dict: Dict, step_size: float=0.01, max_iter: int=1000) -> Tuple[float, List[float]]",
+              "singularity_time(flow_history: List) -> float"
+            ],
+            "description": "Runs discrete Ricci flow from snapshot G_t. Returns tau_sing = first neckpinch time. Update rule: w(e) <- w(e) * (1 - step_size * kappa(e)). ASSUMED: multiplicative update; see risk R1."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/geometry/vocabulary.py",
+        "sir_mapping": "EffectiveVocabularyTracker",
+        "classes": [
+          {
+            "name": "FSQVocabularyTracker",
+            "methods": [
+              "encode(actions: np.ndarray[N, 3]) -> np.ndarray[N]",
+              "effective_vocab(actions: np.ndarray) -> float"
+            ],
+            "description": "Fixed 3D FSQ codebook (Ld=4, K=64). Projects agent action vectors to nearest codeword index. V_eff = exp(H(p_t)) where H is entropy of codebook utilization counts."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/detection/cusum.py",
+        "sir_mapping": "CUSUMDetector",
+        "classes": [
+          {
+            "name": "CUSUMDetector",
+            "methods": [
+              "update(value: float) -> Tuple[float, bool]",
+              "reset() -> None",
+              "set_baseline(baseline_mean: float, k: float, h: float) -> None"
+            ],
+            "description": "One-sided Page CUSUM (1954). Maintains running S_t. Returns (S_t, alarm_fired). Baseline estimated from first W=35 observations."
+          },
+          {
+            "name": "KendallTauDetector",
+            "methods": [
+              "update(value: float) -> Tuple[float, bool]",
+              "reset() -> None"
+            ],
+            "description": "Rolling Kendall-tau trend test over window W_tau. Fires alarm if tau > tau_thresh=-0.4."
+          },
+          {
+            "name": "ContagionDetector",
+            "methods": [
+              "update(beta_minus: float) -> bool"
+            ],
+            "description": "OR-combination of CUSUMDetector and KendallTauDetector on beta_minus series."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/pipeline/geomherd_pipeline.py",
+        "sir_mapping": "Full pipeline orchestrator",
+        "classes": [
+          {
+            "name": "GeomHerdPipeline",
+            "methods": [
+              "step(actions: np.ndarray[N], t: int) -> GeomHerdOutput",
+              "reset() -> None",
+              "get_triplet(t: int) -> Tuple[float, float, float]"
+            ],
+            "description": "Top-level pipeline. Calls graph construction -> ORC -> flow -> V_eff -> detectors. Returns GeomHerdOutput dataclass containing all scalars and alarm booleans."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/simulation/cws_substrate.py",
+        "sir_mapping": "CWS agent-based model substrate",
+        "classes": [
+          {
+            "name": "CWSSubstrate",
+            "methods": [
+              "reset(seed: int) -> np.ndarray",
+              "step(actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, dict]",
+              "get_order_parameter() -> float"
+            ],
+            "description": "Cividino-Sornette continuous-spin model. N=66 agents, na=4 assets. Coupling kappa controls herding strength. Each agent's action drawn from P(a_i | M_t, kappa, noise). Linear price impact."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/simulation/llm_agent.py",
+        "sir_mapping": "LLM-driven persona-conditioned agent",
+        "classes": [
+          {
+            "name": "PersonaAgent",
+            "methods": [
+              "decide(market_state: dict, persona: dict) -> str",
+              "set_persona(risk_appetite: float, momentum_horizon: int, herding_tendency: float) -> None"
+            ],
+            "description": "Wraps an LLM call (default: Claude via Anthropic API or stub rule-based fallback). Returns action in {buy, hold, sell}. ASSUMED: persona prompt template; actual prompts withheld by authors."
+          },
+          {
+            "name": "RuleBasedAgentFallback",
+            "methods": [
+              "decide(market_state: dict, persona: dict) -> str"
+            ],
+            "description": "Deterministic fallback (no LLM): noise trader / fundamental / momentum archetypes. Used when LLM_MODE=false in config."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/simulation/vicsek_substrate.py",
+        "sir_mapping": "Vicsek particle model for OOD transfer",
+        "classes": [
+          {
+            "name": "VicsekSubstrate",
+            "methods": [
+              "reset(seed: int) -> np.ndarray",
+              "step() -> np.ndarray",
+              "get_polarisation() -> float"
+            ],
+            "description": "N=600 particles, constant speed, heading alignment under angular noise eta. kNN graph (k=10) on heading sequence for agent graph construction."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/forecasting/kronos_head.py",
+        "sir_mapping": "KronosForecasting Head",
+        "classes": [
+          {
+            "name": "PriceTokeniser",
+            "methods": [
+              "encode(ohlcv: torch.Tensor) -> torch.Tensor",
+              "decode(tokens: torch.Tensor) -> torch.Tensor"
+            ],
+            "description": "Learned VQ-VAE tokeniser on OHLCV sequences. Frozen during Kronos head training. ASSUMED architecture: 2-layer MLP encoder + codebook of size 512."
+          },
+          {
+            "name": "AdaLNZero",
+            "methods": [
+              "forward(x: torch.Tensor, condition: torch.Tensor) -> torch.Tensor"
+            ],
+            "description": "Adaptive layer-norm with zero-init gating, conditioned on GeomHerd triplet. Modulates transformer hidden states."
+          },
+          {
+            "name": "KronosHead",
+            "methods": [
+              "forward(ohlcv: torch.Tensor, triplet: torch.Tensor) -> torch.Tensor",
+              "predict_log_return(ohlcv: torch.Tensor, triplet: torch.Tensor) -> float"
+            ],
+            "description": "Small transformer (ASSUMED: 2 layers, 4 heads, d_model=64) conditioned on GeomHerd triplet via AdaLN-Zero. Only conditioning layers trained; price tokeniser frozen."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/evaluation/metrics.py",
+        "classes": [
+          {
+            "name": "DetectionMetrics",
+            "methods": [
+              "precision_recall_far(alarms: List, events: List, subcritical_mask: List) -> dict",
+              "auroc_auprc(scores: List, labels: List) -> dict",
+              "conditional_lead_time(alarm_times: List, event_times: List) -> dict",
+              "paired_bootstrap_lead(lead_A: List, lead_B: List, n_boot: int=5000) -> dict"
+            ],
+            "description": "All detection metrics from Table 2/3: precision, recall_super, FAR_sub, AUROC, AUPRC, conditional median lead time with 95% CI, paired bootstrap difference."
+          },
+          {
+            "name": "ForecastMetrics",
+            "methods": [
+              "iqm_mae(preds: np.ndarray, targets: np.ndarray) -> float",
+              "rliable_iqm(results: dict) -> dict"
+            ],
+            "description": "Interquartile-mean MAE (rliable library) for cascade-window forecasting comparison."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/evaluation/baselines.py",
+        "classes": [
+          {
+            "name": "LSVBaseline",
+            "methods": ["compute(buy_flow: np.ndarray, sell_flow: np.ndarray) -> float"],
+            "description": "Lakonishok-Shleifer-Vishny (1992) institutional buy/sell imbalance statistic."
+          },
+          {
+            "name": "CSADBaseline",
+            "methods": ["compute(returns: np.ndarray) -> float", "cck_regression(csad: np.ndarray, rm: np.ndarray, kappa_or: np.ndarray) -> dict"],
+            "description": "CCK (2000) cross-sectional absolute deviation. Also implements augmented regression (Eq. 8) with HAC Newey-West SEs."
+          }
+        ]
+      },
+      {
+        "path": "src/geomherd/utils/config.py",
+        "classes": [
+          {
+            "name": "GeomHerdConfig",
+            "methods": ["from_yaml(path: str) -> GeomHerdConfig", "to_yaml(path: str) -> None"],
+            "description": "Dataclass holding all hyperparameters. Loaded from config.yaml."
+          }
+        ]
+      }
+    ]
+  },
+
+  "tensor_flow": [
+    {
+      "name": "GeomHerd core forward pass (per snapshot)",
+      "pseudocode": [
+        "INPUT: actions[N, Tw] int — rolling window of agent actions",
+        "STEP 1 (AgentGraph): w[N,N] = windowed_agreement(actions, Tw=100); sparsify at w0=0.5 → G_t sparse",
+        "STEP 2 (LazyWalk): for each edge (i,j): mu_i[N], mu_j[N] = alpha*delta + (1-alpha)*w_row_normalized",
+        "STEP 3 (ORC via LP-W1): kappa[(i,j)] = 1 - W1(mu_i, mu_j) / w[i,j]  for each edge; uses POT ot.emd2",
+        "STEP 4 (Sign decomp): E_plus = {e: kappa[e]>0.1}; E_minus = {e: kappa[e]<-0.1}",
+        "STEP 5 (Scalars): kappa_bar_plus = mean(kappa[e] for e in E_plus); beta_minus = |E_minus|/|E|",
+        "STEP 6 (Ricci flow): fresh flow from G_t → tau_sing scalar (first neckpinch step)",
+        "STEP 7 (V_eff): p_t = FSQ_codebook.utilization(actions[:, -1]); V_eff = exp(entropy(p_t))",
+        "OUTPUT: GeomHerdOutput(kappa_bar_plus: float, beta_minus: float, tau_sing: float, V_eff: float, alarm_plus: bool, alarm_minus: bool)"
+      ]
+    },
+    {
+      "name": "Kronos forecasting head forward pass",
+      "pseudocode": [
+        "INPUT: ohlcv[B, T_ctx, 5] float32 — OHLCV context window",
+        "INPUT: triplet[B, 3] float32 — (kappa_bar_OR, tau_sing, V_eff)",
+        "STEP 1 (PriceTokeniser, frozen): tokens[B, T_ctx] int = vq_encode(ohlcv)",
+        "STEP 2 (Embedding): h[B, T_ctx, d_model] = embed(tokens) + pos_enc",
+        "STEP 3 (AdaLN-Zero): scale, shift = linear(triplet) → [B, 2*d_model]; zero-init weights",
+        "STEP 4 (Transformer layers): for each layer: h = adaLN_zero(h, scale, shift); h = attn(h); h = ffn(h)",
+        "STEP 5 (Head): log_return_pred[B] = linear(h[:, -1, :])",
+        "OUTPUT: log_return_pred[B] float32"
+      ]
+    }
+  ],
+
+  "config_schema": {
+    "path": "configs/config.yaml",
+    "content_description": "See architecture_plan_summary.md for full YAML template"
+  },
+
+  "dependencies": {
+    "requirements_txt": [
+      "numpy>=1.24",
+      "scipy>=1.11",
+      "POT>=0.9.3",
+      "torch>=2.1.0",
+      "networkx>=3.2",
+      "pandas>=2.0",
+      "scikit-learn>=1.3",
+      "statsmodels>=0.14",
+      "scipy>=1.11",
+      "pyyaml>=6.0",
+      "tqdm>=4.65",
+      "rliable>=1.0.0",
+      "anthropic>=0.25.0"
+    ],
+    "requirements_dev_txt": [
+      "pytest>=7.4",
+      "pytest-cov>=4.1",
+      "black>=23.0",
+      "isort>=5.12",
+      "mypy>=1.5",
+      "jupyter>=1.0",
+      "matplotlib>=3.7",
+      "seaborn>=0.12"
+    ],
+    "rationale": {
+      "POT": "LP Wasserstein-1 via ot.emd2 — explicitly required (Appendix C)",
+      "scipy": "CSR graph, Dijkstra all-pairs paths, Kendall-tau (scipy.stats)",
+      "statsmodels": "HAC Newey-West standard errors for CCK regression",
+      "rliable": "IQM MAE computation (cited as rliable [41])",
+      "anthropic": "LLM agent calls (Claude API); can be mocked with rule-based fallback"
+    }
+  },
+
+  "entrypoints": [
+    {
+      "script": "run_detection.py",
+      "description": "Run GeomHerd detection pipeline on CWS or Vicsek substrate",
+      "cli_args": ["--substrate {cws,vicsek}", "--kappa FLOAT (CWS coupling)", "--eta FLOAT (Vicsek noise)", "--seeds INT", "--operating_point {recall,precision}", "--llm_mode BOOL", "--output_dir PATH", "--config PATH"]
+    },
+    {
+      "script": "run_baselines.py",
+      "description": "Run all baseline detectors (LSV, CSAD, Sandhu, Srinivasan, Lap-CSAD, Jiang, AA-MI)",
+      "cli_args": ["--substrate {cws,vicsek}", "--baseline {lsv,csad,sandhu,srinivasan,lap_csad,jiang,aa_mi,all}", "--output_dir PATH"]
+    },
+    {
+      "script": "run_evaluation.py",
+      "description": "Compute all metrics (Table 2, Table 3) from saved detector outputs",
+      "cli_args": ["--results_dir PATH", "--n_boot INT (default 5000)", "--output PATH"]
+    },
+    {
+      "script": "train_kronos.py",
+      "description": "Train Kronos forecasting head on CWS trajectories",
+      "cli_args": ["--data_dir PATH", "--config PATH", "--epochs INT", "--device {cpu,cuda}", "--output_dir PATH"]
+    },
+    {
+      "script": "run_ccck_regression.py",
+      "description": "Augmented CCK regression (Eq. 8) across supercritical seeds",
+      "cli_args": ["--data_dir PATH", "--output PATH"]
+    }
+  ],
+
+  "docker_spec": {
+    "base_image": "python:3.10-slim",
+    "system_deps": ["build-essential", "git"],
+    "steps": [
+      "COPY requirements.txt .",
+      "RUN pip install --no-cache-dir -r requirements.txt",
+      "COPY src/ src/",
+      "COPY configs/ configs/",
+      "COPY *.py ."
+    ],
+    "workdir": "/app",
+    "default_cmd": "python run_detection.py --help",
+    "note": "No GPU base needed for geometric pipeline; use pytorch/pytorch:2.1.0-cuda11.8-... base if training Kronos head"
+  },
+
+  "risk_assessment": [
+    {
+      "id": "R1",
+      "severity": "High",
+      "description": "Discrete Ricci flow update rule not specified in paper (confidence 0.60). Neckpinch stopping criterion given but not per-step update.",
+      "mitigation": "Implement DiscreteRicciFlow as abstract base class with swappable update strategy. Default to multiplicative: w <- w*(1 - lr*kappa). Add --flow_variant config flag."
+    },
+    {
+      "id": "R2",
+      "severity": "High",
+      "description": "Kronos head architecture (layers, hidden dim, heads) absent from paper (confidence 0.45). Any implementation is approximate.",
+      "mitigation": "Use small configurable transformer (n_layers, n_heads, d_model all in config.yaml with ASSUMED comments). Accept that forecasting MAE numbers may not reproduce exactly."
+    },
+    {
+      "id": "R3",
+      "severity": "Medium",
+      "description": "LLM persona prompts intentionally withheld (confidence 0.55). Geometric pipeline is LLM-agnostic, but richer action diversity requires good prompts.",
+      "mitigation": "Implement RuleBasedAgentFallback as default. Provide example persona prompt template in configs/persona_template.yaml. Allow --llm_mode flag to swap in real LLM."
+    },
+    {
+      "id": "R4",
+      "severity": "Medium",
+      "description": "Kendall-tau threshold tau_thresh and W_tau not given numerically (confidence 0.65).",
+      "mitigation": "Default tau_thresh=-0.4 (inferred from Table 3). Expose as config param. Include calibration sweep script."
+    },
+    {
+      "id": "R5",
+      "severity": "Medium",
+      "description": "CWS substrate mechanics described at high level; full parameterization requires Cividino et al. 2023 paper.",
+      "mitigation": "Implement CWS from paper description + supplementary. Add reference comment pointing to original paper. Validate that simulated returns reproduce stylized facts (tail index, vol-ACF) cited in paper."
+    },
+    {
+      "id": "R6",
+      "severity": "Low",
+      "description": "POT LP Wasserstein is O(N^3 log N) per edge pair. For N=66 agents with ~200 edges per snapshot, this may be slow at scale.",
+      "mitigation": "Use POT's sparse/batch API. Add optional --fast_ot flag for Sinkhorn approximation (though ablation shows Sinkhorn fails; LP is required for correctness)."
+    }
+  ]
+}
