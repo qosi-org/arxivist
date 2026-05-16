@@ -1,0 +1,23 @@
+{
+  "paper_id": "arxiv_2605_12532",
+  "paper_title": "AGENTICAITA: A Proof-of-Concept About Deliberative Multi-Agent Reasoning for Autonomous Trading Systems",
+  "current_stage": 6,
+  "stages_completed": ["01_paper_parser", "02_sir_registry", "03_architecture_planner", "04_code_generator", "05_notebook_generator"],
+  "sir_path": "sir-registry/arxiv_2605_12532/sir.json",
+  "repo_path": "paper-repos/arxiv_2605_12532/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2605_12532/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2605_12532/architecture_plan_summary.md",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2605_12532/notebooks/reproduce_arxiv_2605_12532.ipynb",
+    "comparison_report": null
+  },
+  "confidence_flags": {
+    "overall_sir_confidence": 0.88,
+    "low_confidence_sections": ["DEX exchange identity (0.45)", "Agno framework details (0.55)"]
+  },
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-16T00:00:00Z",
+  "last_updated": "2026-05-16T00:00:00Z"
+}
