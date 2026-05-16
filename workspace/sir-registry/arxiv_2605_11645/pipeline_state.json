@@ -1,0 +1,20 @@
+{
+  "paper_id": "arxiv_2605_11645",
+  "paper_title": "GeomHerd: A Forward-looking Herding Quantification via Ricci Flow Geometry on Agent Interactive Simulations",
+  "current_stage": 1,
+  "stages_completed": [],
+  "sir_path": "sir-registry/arxiv_2605_11645/sir.json",
+  "repo_path": "paper-repos/arxiv_2605_11645/",
+  "artifacts": {
+    "sir": null,
+    "architecture_plan": null,
+    "repo_initialized": false,
+    "notebook_path": null,
+    "comparison_report": null
+  },
+  "confidence_flags": {},
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-13T00:00:00Z",
+  "last_updated": "2026-05-13T00:00:00Z"
+}
