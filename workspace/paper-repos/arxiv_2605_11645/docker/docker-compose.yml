@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../results:/workspace/results
+      - ../data:/workspace/data
+      - ../configs:/workspace/configs
+    command: python run_detection.py --substrate cws --seeds 80 --kappa 1.8
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+  notebook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../notebooks:/workspace/notebooks
+      - ../results:/workspace/results
+      - ../data:/workspace/data
+    ports:
+      - "8888:8888"
+    command: >
+      jupyter notebook --ip=0.0.0.0 --port=8888
+      --no-browser --allow-root
+      --notebook-dir=/workspace/notebooks

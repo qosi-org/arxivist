@@ -1,0 +1,11 @@
+numpy>=1.24
+scipy>=1.11
+POT>=0.9.3
+torch>=2.1.0
+networkx>=3.2
+pandas>=2.0
+scikit-learn>=1.3
+statsmodels>=0.14
+pyyaml>=6.0
+tqdm>=4.65
+anthropic>=0.25.0
