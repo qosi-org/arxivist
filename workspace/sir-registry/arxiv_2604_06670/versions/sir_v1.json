@@ -1,0 +1,435 @@
+{
+  "paper_id": "arxiv_2604_06670",
+  "sir_version": 1,
+
+  "provenance": {
+    "title": "Stochastic Policy Gradient Methods in the Uncertain Volatility Model",
+    "authors": [
+      "Lokman A. Abbas-Turki",
+      "Jean-François Chassagneux",
+      "Jean-Philippe Lemor",
+      "Grégoire Loeper",
+      "Simon Sananes"
+    ],
+    "affiliations": [
+      "Université Paris Cité and Sorbonne Université (LPSM, UMR CNRS 8001)",
+      "ENSAE-CREST and Institut Polytechnique de Paris",
+      "BNP Paribas Global Markets",
+      "BNP Paribas Global Markets",
+      "BNP Paribas Global Markets + LPSM"
+    ],
+    "arxiv_id": "2605.06670",
+    "submission_date": "2026-04-01",
+    "last_revised": "2026-05-11",
+    "abstract_truncated": "Backward actor-critic stochastic policy gradient scheme for multidimensional Uncertain Volatility Model. Combines discrete dynamic programming with PPO and shallow neural networks. Policy uses C-vine representation enforcing positive semidefiniteness. Numerical experiments show accurate robust option prices.",
+    "domain": "RL / Quantitative Finance / Stochastic Control",
+    "key_claims": [
+      "Backward actor-critic SPG scheme for multi-dimensional UVM combining DPP with PPO yields accurate prices with moderate runtimes",
+      "C-vine parameterization of correlation matrices enforces positive semidefiniteness by construction without projections or Cholesky checks",
+      "Squashed Gaussian (continuous) and factorized Bernoulli (bang-bang) policy classes tailored to UVM structural constraints",
+      "Method compares favorably with GTU and NNU benchmarks from Goudenège, Molent, Zanette (2024)",
+      "Scales to d=80 assets in fixed-correlation setting; tested up to d=5 with uncertain correlations (15-dim control)"
+    ],
+    "parsed_at": "2026-05-15T00:00:00Z"
+  },
+
+  "architecture": {
+    "description": "Backward actor-critic framework with two shallow feedforward neural networks per time step: Actor (policy net) and Critic (value net). N time steps processed sequentially backward.",
+    "components": [
+      {
+        "name": "Actor (Policy Network)",
+        "type": "Feedforward MLP",
+        "input_shape": "[B, d]",
+        "output_shape_continuous": "[B, d*(d+1)/2]",
+        "output_shape_bangbang": "[B, d]",
+        "hidden_layers": 1,
+        "hidden_units": 32,
+        "activation": "ELU",
+        "output_activation": "identity",
+        "normalization": "LayerNorm on inputs",
+        "role": "Outputs latent Gaussian mean (continuous policy) or Bernoulli probabilities (bang-bang policy)"
+      },
+      {
+        "name": "Critic (Value Network)",
+        "type": "Feedforward MLP",
+        "input_shape": "[B, d]",
+        "output_shape": "[B, 1]",
+        "hidden_layers": 1,
+        "hidden_units": 32,
+        "activation": "ELU",
+        "output_activation": "identity",
+        "normalization": "LayerNorm on inputs",
+        "role": "Approximates value function V_n(x) at each backward time step"
+      },
+      {
+        "name": "TUVM Transform (Continuous Policy)",
+        "type": "Deterministic bijection (no learnable params)",
+        "input_shape": "[B, d*(d+1)/2]",
+        "output_shape": "[B, d + d*(d-1)/2]",
+        "operations": [
+          "tanh squashing of full latent vector",
+          "Volatility components: affine rescaling from (-1,1) to (sigma_min^i, sigma_max^i)",
+          "Correlation components: C-vine parameterization mapping partial correlations to valid PSD correlation matrix"
+        ],
+        "role": "Enforces admissible action constraints; output (sigma, rho) used directly in log-Euler scheme"
+      },
+      {
+        "name": "Bang-Bang Policy Layer",
+        "type": "Bernoulli sampler (factorized)",
+        "input_shape": "[B, d]",
+        "output_shape": "[B, d]",
+        "operations": [
+          "Sigmoid activation to produce Bernoulli parameters q_i in (0,1)",
+          "Independent Bernoulli draws per asset",
+          "Map a_i in {0,1} to sigma_i = sigma_min + a_i*(sigma_max - sigma_min)"
+        ],
+        "role": "Discrete volatility selection; linear in d (not exponential)"
+      },
+      {
+        "name": "Log-Euler Scheme (F)",
+        "type": "Transition function (no params)",
+        "input_shape": "[B, d] x [B, d, d] x [B, d]",
+        "output_shape": "[B, d]",
+        "formula": "X_{n+1} = X_n * exp((r - 0.5*diag(aa^T)) * T/N + a*sqrt(T/N)*xi)",
+        "role": "Simulates one discrete time step of multi-asset GBM under control a"
+      }
+    ],
+    "training_variants": [
+      {
+        "name": "Continuous (Squashed Gaussian)",
+        "description": "Full correlation and volatility uncertainty; uses TUVM + C-vine; correlation penalty for constraint enforcement",
+        "applicable_dimensions": "d >= 2"
+      },
+      {
+        "name": "Bang-Bang (Bernoulli)",
+        "description": "Volatility uncertainty only at extremes; correlation handled separately (exact in d<=2); lighter and faster",
+        "applicable_dimensions": "d >= 1, theoretically optimal in d=1"
+      }
+    ],
+    "confidence": 0.92,
+    "ambiguities": [
+      {
+        "location": "Section 3.2.1",
+        "description": "Covariance matrix Lambda of latent Gaussian is scalar lambda*I; exact annealing schedule values not uniformly specified",
+        "primary_assumption": "lambda annealed from 1.0 to 0.01 via sigmoid schedule",
+        "alternatives": ["different initial/final values per experiment"],
+        "confidence": 0.85
+      }
+    ]
+  },
+
+  "mathematical_spec": {
+    "equations": [
+      {
+        "name": "Asset dynamics (continuous-time UVM)",
+        "latex": "dX^\\alpha_s = r X^\\alpha_s ds + \\mathrm{diag}(X^\\alpha_s) \\alpha_s dW_s",
+        "role": "Model definition; alpha_s is the volatility matrix control",
+        "hyperparams": ["r (risk-free rate)", "alpha in A (admissible set)"]
+      },
+      {
+        "name": "Admissible control set A",
+        "latex": "A = \\{a \\in \\mathbb{R}^{d\\times d}: aa^T = \\mathrm{diag}(\\sigma)\\rho\\,\\mathrm{diag}(\\sigma),\\; \\sigma^i \\in [\\sigma^i_{\\min}, \\sigma^i_{\\max}],\\; \\rho \\in \\mathcal{E}^d,\\; \\rho^{ij} \\in [\\rho^{ij}_{\\min}, \\rho^{ij}_{\\max}]\\}",
+        "role": "Defines feasible control space for volatilities and correlations"
+      },
+      {
+        "name": "Robust pricing / value function",
+        "latex": "V(t,x) = \\sup_{\\nu_t} \\sup_{\\alpha \\in \\mathcal{A}^{\\nu_t}} \\mathbb{E}^{\\nu_t}[e^{-r(T-t)} g(X^{\\alpha,t,x}_T)]",
+        "role": "The option's worst-case (robust) price under uncertain volatility"
+      },
+      {
+        "name": "Black-Scholes-Barenblatt PDE (HJB)",
+        "latex": "\\partial_t V + r(x^\\top \\nabla_x V - V) + \\frac{1}{2}\\sup_{a\\in A} \\mathrm{Tr}[\\nabla^2_x V \\,\\mathrm{diag}(x)\\, aa^\\top\\, \\mathrm{diag}(x)] = 0",
+        "role": "PDE characterization (used for motivation; NOT used in numerical scheme)"
+      },
+      {
+        "name": "Log-Euler transition",
+        "latex": "F(x, a, \\xi) = x \\odot \\exp\\!\\left[\\left(r - \\tfrac{1}{2}\\mathrm{diag}(aa^\\top)\\right)\\tfrac{T}{N} + a\\sqrt{\\tfrac{T}{N}}\\,\\xi\\right]",
+        "role": "Discrete-time transition; xi ~ N(0, I_d)"
+      },
+      {
+        "name": "Discrete-time DPP (Bellman recursion)",
+        "latex": "V^\\star_n(x) = \\max_{a\\in A} \\mathbb{E}_\\xi\\!\\left[e^{-r T/N} V^\\star_{n+1}(F(x,a,\\xi))\\right]",
+        "role": "Core backward recursion; replaced by PPO actor-critic approximation"
+      },
+      {
+        "name": "Statewise performance criterion",
+        "latex": "J_n(x;\\theta) = \\mathbb{E}_{a\\sim\\pi_\\theta(\\cdot|x), \\xi}\\!\\left[e^{-rT/N} V^\\star_{n+1}(F(x,a,\\xi))\\right]",
+        "role": "Actor objective at each time step n"
+      },
+      {
+        "name": "Score function / REINFORCE gradient",
+        "latex": "\\nabla_\\theta J_n(x;\\theta) = \\mathbb{E}\\!\\left[e^{-rT/N} V^{\\phi^\\star}_{n+1}(F(x,a,\\xi)) \\cdot \\nabla_\\theta \\log p_\\theta(a|x)\\right]",
+        "role": "Policy gradient estimator; baseline-subtracted with critic V_phi"
+      },
+      {
+        "name": "Advantage",
+        "latex": "\\mathrm{Adv}_n(x,a,\\xi) = e^{-rT/N} V^{\\phi^\\star}_{n+1}(F(x,a,\\xi)) - V^{\\phi}_n(x)",
+        "role": "Reduces variance in policy gradient; used in PPO clipped objective"
+      },
+      {
+        "name": "PPO clipped surrogate objective",
+        "latex": "J^{\\mathrm{PPO}}_n(x, \\theta^{(\\ell)}_n; \\theta) = \\mathbb{E}\\!\\left[\\min\\!\\left(r_\\theta \\cdot \\mathrm{Adv}, \\mathrm{clip}(r_\\theta, 1-\\varepsilon, 1+\\varepsilon)\\cdot \\mathrm{Adv}\\right)\\right]",
+        "role": "Main actor loss; r_theta = p_theta / p_theta_old is likelihood ratio",
+        "hyperparams": ["epsilon = 0.2 (clipping range)"]
+      },
+      {
+        "name": "Critic loss",
+        "latex": "\\mathcal{L}^C_n(\\phi) = \\mathbb{E}\\!\\left[\\left(V_\\phi(X_n) - e^{-rT/N} V^{\\phi^\\star}_{n+1}(F(X_n, a_n, \\xi_n))\\right)^2\\right]",
+        "role": "MSE regression loss for value network"
+      },
+      {
+        "name": "Continuous policy volatility squashing",
+        "latex": "\\sigma^i = \\frac{\\sigma^i_{\\max}+\\sigma^i_{\\min}}{2} + \\frac{\\sigma^i_{\\max}-\\sigma^i_{\\min}}{2}\\tanh(z^i_\\sigma)",
+        "role": "Maps unconstrained latent z to bounded volatility"
+      },
+      {
+        "name": "C-vine correlation map (d=3 example)",
+        "latex": "\\rho^{12}=y_{12},\\quad \\rho^{13}=y_{13},\\quad \\rho^{23}=y_{23|1}\\sqrt{(1-\\rho^{12}{}^2)(1-\\rho^{13}{}^2)}+\\rho^{12}\\rho^{13}",
+        "role": "Converts partial correlations to standard correlations, ensuring PSD"
+      },
+      {
+        "name": "Likelihood ratio (continuous policy)",
+        "latex": "\\frac{p_\\theta(a|x)}{p_{\\theta^{(\\ell)}}(a|x)} = \\exp\\!\\left[(m_\\theta(x)-m_{\\theta^{(\\ell)}}(x))^\\top \\Lambda^{-1}\\left(Z - \\tfrac{1}{2}(m_\\theta(x)+m_{\\theta^{(\\ell)}}(x))\\right)\\right]",
+        "role": "Simplifies to Gaussian ratio (Jacobians cancel)"
+      },
+      {
+        "name": "Correlation penalty (Huber)",
+        "latex": "\\Psi(\\rho) = \\frac{\\beta}{d(d-1)}\\sum_{i<j}\\left[\\mathrm{Hub}\\!\\left(\\frac{(\\rho^{ij}-\\rho^{ij}_{\\max})_+}{\\rho^{ij}_{\\max}-\\rho^{ij}_{\\min}}\\right)+\\mathrm{Hub}\\!\\left(\\frac{(\\rho^{ij}_{\\min}-\\rho^{ij})_+}{\\rho^{ij}_{\\max}-\\rho^{ij}_{\\min}}\\right)\\right]",
+        "role": "Penalizes pairwise correlation bound violations in actor loss",
+        "hyperparams": ["beta = 10", "delta = 0.05 (Huber threshold)"]
+      },
+      {
+        "name": "Bang-bang policy density",
+        "latex": "p_\\theta(a|x) = \\prod_{i=1}^d (q^i_\\theta(x))^{a^i}(1-q^i_\\theta(x))^{1-a^i}",
+        "role": "Factorized Bernoulli; q^i output by actor network via sigmoid"
+      },
+      {
+        "name": "Bang-bang entropy regularization",
+        "latex": "\\mathcal{L}^A_n(\\theta) = \\mathcal{L}^{A,\\mathrm{PPO}}_n(\\theta) + \\gamma^{(\\ell)} \\mathbb{E}\\left[H(\\pi_\\theta(\\cdot|X_n))\\right]",
+        "role": "Encourages exploration; gamma annealed from 0.01 to 0"
+      }
+    ],
+    "confidence": 0.95
+  },
+
+  "tensor_semantics": {
+    "tensors": [
+      {"name": "X_n (state)", "shape": "[B, d]", "dtype": "float32", "role": "Asset prices at time step n", "type": "input/intermediate"},
+      {"name": "z (latent action)", "shape": "[B, d*(d+1)/2]", "dtype": "float32", "role": "Unconstrained Gaussian sample before squashing", "type": "intermediate"},
+      {"name": "sigma (volatility)", "shape": "[B, d]", "dtype": "float32", "role": "Volatility vector output of actor policy", "type": "intermediate"},
+      {"name": "rho (correlation matrix)", "shape": "[B, d, d]", "dtype": "float32", "role": "PSD correlation matrix from C-vine", "type": "intermediate"},
+      {"name": "a (action / volatility matrix)", "shape": "[B, d, d]", "dtype": "float32", "role": "Lower-triangular Cholesky factor a = diag(sigma)*L; used in log-Euler step", "type": "intermediate"},
+      {"name": "xi (Gaussian noise)", "shape": "[B, d]", "dtype": "float32", "role": "i.i.d. N(0,I_d) increments for path simulation", "type": "input"},
+      {"name": "V_phi(X_n)", "shape": "[B, 1]", "dtype": "float32", "role": "Critic value estimate at current state", "type": "output"},
+      {"name": "m_theta(X_n)", "shape": "[B, d*(d+1)/2]", "dtype": "float32", "role": "Actor network output: mean of latent Gaussian", "type": "output"},
+      {"name": "q_theta(X_n)", "shape": "[B, d]", "dtype": "float32", "role": "Bang-bang Bernoulli parameters from actor", "type": "output"},
+      {"name": "Adv", "shape": "[B, 1]", "dtype": "float32", "role": "Advantage: discounted next value minus current value", "type": "intermediate"},
+      {"name": "ratio", "shape": "[B, 1]", "dtype": "float32", "role": "Likelihood ratio p_theta/p_theta_old for PPO", "type": "intermediate"}
+    ],
+    "confidence": 0.87
+  },
+
+  "training_pipeline": {
+    "optimizer": "Adam",
+    "optimizer_hyperparams": {
+      "lr_initial": 5e-3,
+      "lr_final": 1e-4,
+      "schedule": "sigmoid annealing (same schedule as exploration param)",
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "note": "beta1/beta2 not explicitly stated; using PyTorch Adam defaults"
+    },
+    "batch_size": {
+      "monte_carlo_samples_training": 32768,
+      "minibatch_size": 1024,
+      "gradient_updates_per_epoch": 32,
+      "antithetic_variates": true,
+      "note": "M=2^15=32768 samples; minibatch 2^10=1024; antithetic doubles effective samples"
+    },
+    "epochs": {
+      "first_time_step_n_equals_N_minus_1": 500,
+      "subsequent_time_steps": 10,
+      "reason_for_10": "Transfer learning from previous time step; fast convergence observed"
+    },
+    "time_discretization": {
+      "N_uncertain_correlation": 128,
+      "N_fixed_correlation_high_d": 32,
+      "N_call_sharpe": 192,
+      "note": "N specified per experiment; value N=192 ensures monitoring dates on grid for Sharpe option"
+    },
+    "exploration_annealing": {
+      "continuous_policy_temperature": {
+        "lambda_initial": 1.0,
+        "lambda_final": 0.01,
+        "schedule": "sigmoid decay over epochs"
+      },
+      "bangbang_entropy_coeff": {
+        "gamma_initial": 0.01,
+        "gamma_final": 0.0,
+        "schedule": "sigmoid decay over epochs"
+      }
+    },
+    "ppo_clipping": {"epsilon": 0.2},
+    "advantage_normalization": "zero mean, unit variance within each epoch",
+    "transfer_learning": "Initialize time step n weights from trained time step n+1 weights",
+    "hardware": "NVIDIA RTX 4090 (16GB VRAM), PyTorch 2.6.0, CUDA 12.6",
+    "framework": "PyTorch",
+    "precision": "float32 (mixed precision not mentioned)",
+    "correlation_penalty": {
+      "beta": 10,
+      "delta": 0.05,
+      "applied_to": "Continuous policy, d >= 3",
+      "evaluated_at": "Deterministic actor mean TUVM(m_theta(x))"
+    },
+    "confidence": 0.91
+  },
+
+  "evaluation_protocol": {
+    "datasets": "Synthetic (Monte Carlo simulation under UVM model; no external datasets)",
+    "metrics": [
+      "Actor price (lower bound; 95% MC confidence interval, 2^19 paths)",
+      "Critic price (pointwise value function evaluation, no bias guarantee)",
+      "Relative error vs. reference price",
+      "Runtime (seconds, full backward loop + final MC)"
+    ],
+    "options_tested": [
+      {
+        "name": "Geo-outperformer",
+        "payoff": "max(0, (prod_{i=2}^d X^i_T)^{1/(d-1)} - X^1_T)",
+        "dimensions": [2, 3, 4, 5],
+        "regime": "uncertain correlation"
+      },
+      {
+        "name": "Outperformer spread",
+        "payoff": "max(0, X^2_T - 0.9*X^1_T) - max(0, X^2_T - 1.1*X^1_T)",
+        "dimensions": [2],
+        "regime": "uncertain correlation"
+      },
+      {
+        "name": "Best-of butterfly",
+        "payoff": "max(0, X^max_T - K1) - 2*max(0, X^max_T - (K1+K2)/2) + max(0, X^max_T - K2)",
+        "parameters": "K1=85, K2=115; sigma in [0.3,0.5], rho in [0.3,0.5], T=0.25, r=0.05",
+        "dimensions": [2],
+        "regime": "uncertain correlation"
+      },
+      {
+        "name": "Geo-call spread",
+        "payoff": "max(0, (prod X^i_T)^{1/d} - K1) - max(0, (prod X^i_T)^{1/d} - K2); K1=90, K2=110",
+        "dimensions": [2, 5, 10, 20, 40, 80],
+        "regime": "fixed correlation (rho=0)"
+      },
+      {
+        "name": "Call Sharpe",
+        "payoff": "max(0, X_T - K) / sqrt(V_T); K=100, V_T = realized monthly volatility",
+        "dimensions": [1],
+        "regime": "fixed correlation (path-dependent; state augmented with A1, A2)"
+      }
+    ],
+    "default_model_params": {
+      "x0": 100,
+      "sigma_min": 0.1,
+      "sigma_max": 0.2,
+      "rho_min": -0.5,
+      "rho_max": 0.5,
+      "T": 1.0,
+      "r": 0.0
+    },
+    "baselines": ["GTU (Goudenège et al. 2024)", "NNU (Goudenège et al. 2024)"],
+    "key_results_table": {
+      "geo_outperformer_d2_actor": "13.75 ± 0.06",
+      "geo_outperformer_d2_reference": "13.75",
+      "geo_outperformer_d5_actor": "12.50 ± 0.05",
+      "geo_outperformer_d5_reference": "12.64",
+      "geo_call_spread_d80_actor": "9.51 ± 0.00",
+      "geo_call_spread_d80_reference": "9.51",
+      "call_sharpe_bangbang_critic": "57.66",
+      "call_sharpe_reference": "58.40"
+    },
+    "confidence": 0.96
+  },
+
+  "implementation_assumptions": [
+    {
+      "assumption": "Adam beta1=0.9, beta2=0.999, epsilon=1e-8 (PyTorch defaults)",
+      "basis": "Paper says Adam but does not specify beta1/beta2",
+      "confidence": 0.85,
+      "alternatives": ["beta2=0.99 sometimes used in RL"]
+    },
+    {
+      "assumption": "Layer normalization applied to inputs before passing to hidden layer (not post-activation)",
+      "basis": "Paper mentions layer normalization to improve stability; standard pre-norm usage",
+      "confidence": 0.75,
+      "alternatives": ["post-activation layer norm"]
+    },
+    {
+      "assumption": "Sigmoid annealing schedule: lambda(l) = lambda_min + (lambda_max - lambda_min) * sigmoid((l_mid - l) * slope); l_mid ~ E/2",
+      "basis": "Described as 'sigmoid-type decay' with two phases; Figure 1 shows shape",
+      "confidence": 0.72,
+      "alternatives": ["cosine annealing", "exponential decay"]
+    },
+    {
+      "assumption": "Weight initialization: PyTorch default (Kaiming uniform for linear layers)",
+      "basis": "Not stated; standard for PyTorch ELU networks",
+      "confidence": 0.70,
+      "alternatives": ["Xavier initialization", "orthogonal initialization"]
+    },
+    {
+      "assumption": "C-vine parameterization follows Joe (2006) / Joe, Kurowicka, Lewandowski (2009) recursive formula for d>=4",
+      "basis": "Explicitly cited; d=3 formula given in paper; d>=4 recursive",
+      "confidence": 0.88,
+      "alternatives": []
+    },
+    {
+      "assumption": "Correlation penalty evaluated only at mean action (not averaged over stochastic samples) during actor update",
+      "basis": "Explicitly stated in Section 4.1.1",
+      "confidence": 0.97,
+      "alternatives": []
+    },
+    {
+      "assumption": "State-sampling distribution uses zero correlation between assets (diagonal covariance) for log-normal sampling",
+      "basis": "Explicitly stated in Section 4.1.3",
+      "confidence": 0.97,
+      "alternatives": []
+    },
+    {
+      "assumption": "No gradient clipping; no weight decay applied",
+      "basis": "Not mentioned in paper; omission implies not used",
+      "confidence": 0.65,
+      "alternatives": ["gradient norm clipping common in RL"]
+    }
+  ],
+
+  "confidence_annotations": {
+    "architecture": 0.92,
+    "mathematical_spec": 0.95,
+    "tensor_semantics": 0.87,
+    "training_pipeline": 0.91,
+    "evaluation_protocol": 0.96,
+    "implementation_assumptions": 0.78,
+    "overall_sir_confidence": 0.90
+  },
+
+  "ambiguities": [
+    {
+      "location": "Section 4.1.3",
+      "description": "Exact sigmoid annealing formula not given; only shape described and Figure 1 shown",
+      "primary_assumption": "f(l) = sigma((l_mid - l) * k) scaled to [lambda_min, lambda_max]",
+      "alternatives": ["piecewise linear", "exponential"],
+      "confidence": 0.72
+    },
+    {
+      "location": "Section 4.1.3",
+      "description": "Adam beta1 and beta2 not specified",
+      "primary_assumption": "PyTorch defaults: beta1=0.9, beta2=0.999",
+      "alternatives": ["beta2=0.99"],
+      "confidence": 0.85
+    },
+    {
+      "location": "Section 3.2.2 / 4.1.2",
+      "description": "Entropy coefficient schedule for bang-bang policy: initial value 0.01 specified; decay schedule shares sigmoid shape with temperature",
+      "primary_assumption": "Same sigmoid schedule, gamma: 0.01 -> 0.0",
+      "alternatives": ["different sigmoid slope"],
+      "confidence": 0.82
+    }
+  ]
+}
