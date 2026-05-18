@@ -1,0 +1,346 @@
+{
+  "paper_id": "arxiv_2604_06677",
+  "version": 1,
+  "provenance": {
+    "title": "Extrema, Barrier Options, and Semi-Analytic Leverage Corrections in Stochastic-Clock Volatility Models",
+    "authors": ["Tristan Guillaume"],
+    "affiliations": ["CY Cergy Paris Université, Laboratoire Thema"],
+    "arxiv_id": "2605.06677v1",
+    "submission_date": "2026-04-22",
+    "domain": "Quantitative Finance / Computational Finance",
+    "parsed_at": "2026-05-16T00:00:00Z",
+    "abstract_excerpt": "Barrier derivatives depend on extrema and first-passage events and are therefore highly sensitive to volatility dynamics—especially to the instantaneous return–volatility correlation ρ, often called 'leverage'. We study a class of continuous-path stochastic-clock volatility models and develop a systematic small-ρ expansion around the ρ=0 backbone.",
+    "key_claims": [
+      "Transform-only pricing formulas for single- and double-barrier contracts under independent stochastic clocks (ρ=0)",
+      "Systematic small-ρ leverage expansion around ρ=0 yielding a forced PDE hierarchy",
+      "Padé resummation extends accuracy to equity-like correlations (|ρ|≈0.7–0.9) with errors below 0.3%",
+      "Calibration workflow: vanilla fit → barrier backbone → leverage ρ scan with cached coefficients",
+      "Transform-only framework is orders of magnitude faster than Monte Carlo (0.12s vs 20–35min)"
+    ]
+  },
+
+  "architecture": {
+    "confidence": 0.93,
+    "description": "Mathematical pricing library, NOT a neural network. Composed of independent computational modules.",
+    "components": [
+      {
+        "name": "ClockLaplaceTransform",
+        "role": "Computes Phi_T(lambda) = E[exp(-lambda * Gamma_T)] for various clock families",
+        "inputs": ["lambda (scalar or array)", "clock_params (dict)", "T (maturity)"],
+        "outputs": ["Phi_T values on real grid"],
+        "sub_families": ["IntegratedCIR", "SquaredOU", "MarkovSwitching", "AffineJump"]
+      },
+      {
+        "name": "SingleBarrierPricer",
+        "role": "Price UOP and DOC via single real integral (Theorems 2.1, 2.2)",
+        "inputs": ["F0", "K", "H_or_L", "T", "r", "q", "Phi_T_callable"],
+        "outputs": ["option_price (float)"],
+        "key_formulas": ["Eq 2.33 (UOP)", "Eq 2.40 (DOC)"]
+      },
+      {
+        "name": "DoubleBarrierPricer",
+        "role": "Price DKO call via Dirichlet sine series (Theorem 3.1)",
+        "inputs": ["F0", "K", "L", "H", "T", "r", "q", "Phi_T_callable", "N_terms"],
+        "outputs": ["dko_price (float)"],
+        "key_formulas": ["Eq 3.9"]
+      },
+      {
+        "name": "LeverageExpansion",
+        "role": "Compute rho-expansion coefficients u0, u1, ..., uN via Duhamel Monte Carlo",
+        "inputs": ["rho", "barrier_type", "clock_model", "baseline_pricer", "N_order", "n_paths"],
+        "outputs": ["coefficients list [C0...CN]", "approximated_price"]
+      },
+      {
+        "name": "PadeAccelerator",
+        "role": "Resum Taylor series into [L/M] Pade approximant, check poles",
+        "inputs": ["coefficients list", "rho", "L", "M"],
+        "outputs": ["pade_price", "pole_distance", "is_safe"]
+      },
+      {
+        "name": "MonteCarloPricer",
+        "role": "Reference MC pricer under correlated CIR/OU dynamics with bridge correction",
+        "inputs": ["rho", "clock_params", "contract_params", "n_paths", "n_steps"],
+        "outputs": ["mc_price", "mc_stderr"]
+      },
+      {
+        "name": "CalibrationEngine",
+        "role": "4-stage calibration: vanilla fit → barrier backbone → leverage scan → joint refine",
+        "inputs": ["vanilla_surface", "barrier_quotes", "clock_family"],
+        "outputs": ["calibrated_params (dict)"]
+      }
+    ]
+  },
+
+  "mathematical_spec": {
+    "confidence": 0.97,
+    "equations": [
+      {
+        "id": "log_price_dynamics",
+        "latex": "X_t = x_0 + \\beta \\Gamma_t + B_{\\Gamma_t}, \\quad \\beta := -\\frac{1}{2}",
+        "role": "Core time-change representation of log-forward price",
+        "section": "2.1, Eq 2.9",
+        "symbols": {"X_t": "log-forward price", "beta": "-1/2 (Ito drift)", "Gamma_t": "integrated variance (stochastic clock)", "B": "Brownian motion independent of clock"}
+      },
+      {
+        "id": "clock_laplace_transform",
+        "latex": "\\Phi_T(\\lambda) := E^{Q^T}[e^{-\\lambda \\Gamma_T}], \\quad \\lambda \\geq 0",
+        "role": "Core pricing primitive — all model dependence enters via this transform",
+        "section": "1.1, Eq 1.2 / 2.1 Eq 2.10"
+      },
+      {
+        "id": "killed_density_prop2_1",
+        "latex": "j^{(h)}_\\beta(x) = \\frac{2}{\\pi} e^{\\beta(x-x_0)} \\int_0^\\infty \\sin(u(h-x_0))\\sin(u(h-x)) \\Phi_T\\!\\left(\\frac{u^2+\\beta^2}{2}\\right) du",
+        "role": "Killed terminal density under upper barrier h",
+        "section": "Proposition 2.1, Eq 2.20"
+      },
+      {
+        "id": "joint_survival_cdf_prop2_2",
+        "latex": "J_\\beta(x;h) = \\frac{2}{\\pi} e^{\\beta(x-x_0)} \\int_0^\\infty \\sin(u(h-x_0)) \\frac{u\\cos(u(h-x)) - \\beta\\sin(u(h-x))}{u^2+\\beta^2} \\Phi_T\\!\\left(\\frac{u^2+\\beta^2}{2}\\right) du",
+        "role": "Joint survival CDF: P(X_T <= x, M_T < h)",
+        "section": "Proposition 2.2, Eq 2.30"
+      },
+      {
+        "id": "uop_formula",
+        "latex": "UOP_0 = P(0,T)\\frac{2}{\\pi}\\sqrt{KF_0} \\int_0^\\infty \\frac{\\sin(u(h-x_0))\\sin(u(h-k))}{u^2 + \\frac{1}{4}} \\Phi_T\\!\\left(\\frac{u^2+\\frac{1}{4}}{2}\\right) du",
+        "role": "Up-and-out put price as single real integral",
+        "section": "Theorem 2.1, Eq 2.33",
+        "parameters": {"H": "upper barrier", "K": "strike", "h=log(H)": "log barrier", "k=log(K)": "log strike"}
+      },
+      {
+        "id": "doc_formula",
+        "latex": "DOC_0 = P(0,T)\\frac{2}{\\pi}\\sqrt{KF_0} \\int_0^\\infty \\frac{\\sin(u(x_0-l))\\sin(u(k-l))}{u^2 + \\frac{1}{4}} \\Phi_T\\!\\left(\\frac{u^2+\\frac{1}{4}}{2}\\right) du",
+        "role": "Down-and-out call price as single real integral",
+        "section": "Theorem 2.2, Eq 2.40",
+        "parameters": {"L": "lower barrier", "l=log(L)": "log lower barrier"}
+      },
+      {
+        "id": "dko_series",
+        "latex": "DKO_0 = P(0,T)\\frac{2}{a} e^{-\\beta x_0} \\sum_{n=1}^\\infty \\sin(\\omega_n(x_0-l)) A_n \\Phi_T(\\lambda_n)",
+        "role": "Double knock-out call price as Dirichlet sine series",
+        "section": "Theorem 3.1, Eq 3.9",
+        "parameters": {
+          "omega_n": "n*pi/a, Dirichlet eigenfrequencies",
+          "a": "h - l, corridor width",
+          "lambda_n": "(omega_n^2 + beta^2)/2",
+          "A_n": "payoff projection coefficients (Eq 3.5-3.7)"
+        }
+      },
+      {
+        "id": "payoff_coeff_An",
+        "latex": "A_n = [F_{\\beta+1,n}(x)]_{x=c}^{x=h} - K[F_{\\beta,n}(x)]_{x=c}^{x=h}, \\quad F_{\\alpha,n}(x) = \\frac{e^{\\alpha x}}{\\alpha^2+\\omega_n^2}(\\alpha\\sin(\\omega_n(x-l)) - \\omega_n\\cos(\\omega_n(x-l)))",
+        "role": "Explicit payoff projection coefficients for DKO series",
+        "section": "Eq 3.5-3.8"
+      },
+      {
+        "id": "cir_clock_transform",
+        "latex": "\\Phi_T(\\lambda) = \\exp(-A(T;\\lambda) - B(T;\\lambda)v_0)",
+        "role": "Laplace transform for integrated CIR variance",
+        "section": "Section 4.1, Eq 4.2",
+        "riccati": "dB/dt = kappa*B + lambda - (xi^2/2)*B^2, dA/dt = kappa*theta*B"
+      },
+      {
+        "id": "sq_ou_clock_transform",
+        "latex": "\\Phi_T(\\lambda) = \\exp(-A(T;\\lambda) - B(T;\\lambda)Y_0^2)",
+        "role": "Laplace transform for squared OU variance",
+        "section": "Section 4.2, Eq 4.9",
+        "riccati": "dB/dt = 2*sigma^2*B^2 - 2*alpha*B + lambda, dA/dt = sigma^2*B"
+      },
+      {
+        "id": "generator_splitting",
+        "latex": "\\mathcal{L}_\\rho = \\mathcal{L}_0 + \\rho \\mathcal{L}_1, \\quad \\mathcal{L}_1 f = a(y)\\sqrt{v(y)} f_{xy}",
+        "role": "Generator decomposition for leverage expansion",
+        "section": "Section 5.3, Eq 5.8-5.10"
+      },
+      {
+        "id": "rho_expansion",
+        "latex": "u^\\rho(t,x,y) = \\sum_{n=0}^\\infty \\rho^n u_n(t,x,y)",
+        "role": "Formal power series expansion around rho=0",
+        "section": "Section 5.4, Eq 5.11"
+      },
+      {
+        "id": "duhamel_representation",
+        "latex": "u_n(t,x,y) = -E^{Q^T}_{t,x,y}\\left[\\int_t^T (\\mathcal{L}_1 u_{n-1})(s, X_s^{(0)}, Y_s^{(0)}) 1_{\\{\\tau^{(0)}>s\\}} ds \\right]",
+        "role": "Stochastic (Duhamel) representation of n-th correction coefficient",
+        "section": "Proposition 5.1, Eq 5.17"
+      },
+      {
+        "id": "pade_11",
+        "latex": "u^\\rho \\approx \\mathcal{P}_{[1/1]}(\\rho) = \\frac{u_0 + \\rho(u_1 - u_0 u_2/u_1)}{1 - \\rho u_2/u_1}",
+        "role": "[1/1] Padé approximant from first 3 coefficients",
+        "section": "Section 5.8, Eq 5.22"
+      },
+      {
+        "id": "characteristic_function",
+        "latex": "\\phi_{X_T}(u) = e^{iux_0} \\Phi_T\\!\\left(\\frac{1}{2}u^2 - i\\beta u\\right)",
+        "role": "Characteristic function for vanilla pricing via FFT/COS",
+        "section": "Section 7.2, Eq 7.2"
+      }
+    ]
+  },
+
+  "tensor_semantics": {
+    "confidence": 0.85,
+    "note": "This is a mathematical finance library — tensors are numerical arrays not DL tensors",
+    "key_arrays": [
+      {"name": "u_quad", "shape": "[N_quad]", "dtype": "float64", "role": "quadrature nodes for single-barrier integrals"},
+      {"name": "Phi_T_values", "shape": "[N_quad] or [N_series]", "dtype": "float64", "role": "cached Laplace transform evaluations"},
+      {"name": "lambda_n", "shape": "[N_series]", "dtype": "float64", "role": "discrete Laplace grid for DKO series"},
+      {"name": "omega_n", "shape": "[N_series]", "dtype": "float64", "role": "Dirichlet eigenfrequencies"},
+      {"name": "A_n", "shape": "[N_series]", "dtype": "float64", "role": "payoff projection coefficients, independent of clock"},
+      {"name": "expansion_coefficients", "shape": "[N_order+1]", "dtype": "float64", "role": "C_0..C_N for Taylor/Pade"},
+      {"name": "mc_paths_X", "shape": "[N_paths, N_steps]", "dtype": "float64", "role": "log-price paths in Monte Carlo"},
+      {"name": "mc_paths_v", "shape": "[N_paths, N_steps]", "dtype": "float64", "role": "variance paths in Monte Carlo"}
+    ]
+  },
+
+  "training_pipeline": {
+    "confidence": 0.72,
+    "note": "No training in the ML sense. Calibration is the analogue — least-squares fitting of model parameters.",
+    "calibration_workflow": {
+      "stage1": "Fit clock params theta to vanilla surface using Fourier/COS pricing and least-squares",
+      "stage2": "Refine with small barrier/no-touch set at rho=0",
+      "stage3": "Fit rho via cached expansion coefficients (polynomial/Pade evaluation)",
+      "stage4": "Joint refinement with regularization",
+      "optimizer": "Standard least-squares (scipy.optimize or similar)",
+      "objective": "Weighted sum of squared errors in implied vols (Eq 7.4)"
+    },
+    "regularization": [
+      "Ordering constraints on fast/slow mean-reversion: kappa_f > kappa_s",
+      "Mild penalties on extreme parameters",
+      "Smoothness penalties for time-dependent parameters"
+    ]
+  },
+
+  "evaluation_protocol": {
+    "confidence": 0.98,
+    "reported_results": {
+      "baseline_params": {
+        "S0": 100, "K": 100, "r": 0.03, "q": 0,
+        "L": 70, "H": 130,
+        "maturities": [0.25, 1.0],
+        "regimes": ["moderate", "stressed"]
+      },
+      "cir_regime1": {"v0": 0.18, "theta": 0.20, "kappa": 0.6, "xi": 0.4},
+      "cir_regime2": {"v0": 0.48, "theta": 0.45, "kappa": 0.5, "xi": 0.6},
+      "sq_ou_regime1": {"nu0": 0.4243, "a": 0.6, "eta": 0.490},
+      "sq_ou_regime2": {"nu0": 0.6928, "a": 0.5, "eta": 0.671},
+      "doc_cir_regime1": [
+        {"T": 0.25, "semi_analytic": 3.8247, "mc": 3.8293, "mc_se": 0.0069, "rel_error_pct": 0.12},
+        {"T": 1.0,  "semi_analytic": 6.4521, "mc": 6.4582, "mc_se": 0.0116, "rel_error_pct": 0.09}
+      ],
+      "uop_cir_regime1": [
+        {"T": 0.25, "semi_analytic": 2.9873, "mc": 2.9842, "mc_se": 0.0056, "rel_error_pct": 0.10},
+        {"T": 1.0,  "semi_analytic": 4.1056, "mc": 4.1097, "mc_se": 0.0104, "rel_error_pct": 0.10}
+      ],
+      "doc_cir_regime2": [
+        {"T": 0.25, "semi_analytic": 5.2134, "mc": 5.2195, "mc_se": 0.0102, "rel_error_pct": 0.12},
+        {"T": 1.0,  "semi_analytic": 7.8923, "mc": 7.8856, "mc_se": 0.0174, "rel_error_pct": 0.09}
+      ],
+      "uop_cir_regime2": [
+        {"T": 0.25, "semi_analytic": 4.6521, "mc": 4.6589, "mc_se": 0.0098, "rel_error_pct": 0.15},
+        {"T": 1.0,  "semi_analytic": 5.8234, "mc": 5.8337, "mc_se": 0.0159, "rel_error_pct": 0.18}
+      ],
+      "doc_sq_ou_regime1": [
+        {"T": 0.25, "semi_analytic": 3.8512, "mc": 3.8486, "mc_se": 0.0091, "rel_error_pct": 0.07},
+        {"T": 1.0,  "semi_analytic": 6.5234, "mc": 6.5339, "mc_se": 0.0162, "rel_error_pct": 0.16}
+      ],
+      "doc_sq_ou_regime2": [
+        {"T": 0.25, "semi_analytic": 5.3456, "mc": 5.3492, "mc_se": 0.0148, "rel_error_pct": 0.07},
+        {"T": 1.0,  "semi_analytic": 8.1234, "mc": 8.1406, "mc_se": 0.0245, "rel_error_pct": 0.21}
+      ],
+      "expansion_coefficients_doc_cir_regime1_T1": [6.4521, 1.6468, -0.4123, 0.2845, -0.1523, 0.0892],
+      "pade_vs_taylor_T1": [
+        {"rho": -0.9, "mc": 4.2134, "taylor5": 3.9182, "pade22": 4.1827, "pade32": 4.2053},
+        {"rho": -0.7, "mc": 4.9234, "taylor5": 4.2916, "pade22": 4.8757, "pade32": 4.9082},
+        {"rho": -0.5, "mc": 5.5923, "taylor5": 5.7391, "pade22": 5.5612, "pade32": 5.5838},
+        {"rho": -0.3, "mc": 5.9456, "taylor5": 5.9672, "pade22": 5.9378, "pade32": 5.9432},
+        {"rho":  0.3, "mc": 6.9845, "taylor5": 6.9646, "pade22": 6.9776, "pade32": 6.9819},
+        {"rho":  0.5, "mc": 7.3412, "taylor5": 7.3276, "pade22": 7.3308, "pade32": 7.3385},
+        {"rho":  0.7, "mc": 7.7089, "taylor5": 7.7227, "pade22": 7.6852, "pade32": 7.6991},
+        {"rho":  0.9, "mc": 8.0912, "taylor5": 8.1497, "pade22": 8.0612, "pade32": 8.0806}
+      ],
+      "error_reduction_pade": [
+        {"rho_range": "0.0-0.3", "taylor5_max_err_pct": 0.36, "best_pade_max_err_pct": 0.04, "improvement_factor": 9},
+        {"rho_range": "0.3-0.5", "taylor5_max_err_pct": 2.62, "best_pade_max_err_pct": 0.15, "improvement_factor": 17},
+        {"rho_range": "0.5-0.7", "taylor5_max_err_pct": 12.83, "best_pade_max_err_pct": 0.31, "improvement_factor": 41},
+        {"rho_range": "0.7-0.9", "taylor5_max_err_pct": 7.0, "best_pade_max_err_pct": 0.19, "improvement_factor": 36}
+      ],
+      "speed": {"semi_analytic_avg_seconds": 0.12, "monte_carlo_range_minutes": "20-35"}
+    },
+    "mc_params": {
+      "n_paths": 1000000,
+      "n_steps_per_year": 2080,
+      "scheme_cir": "full_truncation_euler",
+      "clock_integration": "trapezoidal",
+      "barrier_correction": "Broadie-Glasserman-Kou continuity correction"
+    }
+  },
+
+  "implementation_assumptions": [
+    {
+      "assumption": "Quadrature: adaptive Gauss-Legendre with compactification [0,inf) -> [0,1) via substitution u=t/(1-t)",
+      "basis": "Paper states 'adaptive quadrature on compactified domain mapping [0,inf) to [0,1)' — standard technique",
+      "confidence": 0.90,
+      "alternatives": ["Gauss-Laguerre quadrature", "truncated Gaussian quadrature"]
+    },
+    {
+      "assumption": "Riccati ODEs solved by scipy.integrate.solve_ivp with RK45",
+      "basis": "Standard practice; paper does not specify solver",
+      "confidence": 0.80,
+      "alternatives": ["Explicit analytical CIR solution (Cox 1985)", "custom 4th-order Runge-Kutta"]
+    },
+    {
+      "assumption": "DKO series truncated at N_series=100 terms; convergence checked",
+      "basis": "O(1/omega_n^2) decay of coefficients ensures rapid convergence; 50-100 terms standard",
+      "confidence": 0.80,
+      "alternatives": ["N_series=50", "adaptive truncation by coefficient magnitude"]
+    },
+    {
+      "assumption": "Pade approximant computed via linear system (Berlekamp-Massey style coefficient matching)",
+      "basis": "Standard Pade computation algorithm",
+      "confidence": 0.85,
+      "alternatives": ["numpy.linalg Toeplitz solve", "scipy Pade function"]
+    },
+    {
+      "assumption": "Phi_T computed in log space (log_phi) to avoid overflow for large lambda",
+      "basis": "Paper mentions 'computed in log form and cached' in Section 6.2",
+      "confidence": 0.95
+    },
+    {
+      "assumption": "float64 throughout — financial precision requirement",
+      "basis": "Financial computing standard; prices are O(1-10) so float32 insufficient",
+      "confidence": 0.95
+    }
+  ],
+
+  "ambiguities": [
+    {
+      "location": "Section 6.3.1",
+      "description": "Exact formula for partial_y Phi_{t,T}(lambda; y) for squared OU case not given explicitly (only CIR case Eq 6.8)",
+      "primary_assumption": "For squared OU: d/dY0 exp(-A - B*Y0^2) = -2*B*Y0 * Phi_T",
+      "confidence": 0.85
+    },
+    {
+      "location": "Section 5.8",
+      "description": "Higher-order Pade [2/2] and [3/2] construction algorithm not stated beyond Eq 6.11",
+      "primary_assumption": "Standard Pade construction via linear system from Taylor coefficients",
+      "confidence": 0.88
+    },
+    {
+      "location": "Section 6.3.1, step (iv)",
+      "description": "Time grid for Duhamel Monte Carlo integral not fully specified",
+      "primary_assumption": "Uniform time grid with same n_steps as MC paths",
+      "confidence": 0.75
+    }
+  ],
+
+  "confidence_annotations": {
+    "architecture": 0.93,
+    "mathematical_spec": 0.97,
+    "tensor_semantics": 0.85,
+    "training_pipeline": 0.72,
+    "evaluation_protocol": 0.98,
+    "implementation_assumptions": 0.84,
+    "overall_sir_confidence": 0.88
+  }
+}
