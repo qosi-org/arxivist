@@ -1,0 +1,41 @@
+# ResNet-56 for CIFAR-10 (n=9). ~0.85M parameters.
+
+model:
+  name: resnet56
+  num_classes: 10
+  shortcut_option: A
+
+training:
+  optimizer: sgd
+  learning_rate: 0.1
+  momentum: 0.9
+  weight_decay: 0.0001
+  apply_wd_to_bn: false
+  batch_size: 128
+  total_iterations: 64000
+  lr_drop_iterations: [32000, 48000]
+  lr_drop_factor: 10.0
+  use_warmup: false
+  warmup_lr: 0.01
+  warmup_iterations: 400
+  gradient_clipping: null
+  init: kaiming_normal_fan_in_relu
+
+data:
+  dataset_root: ./data/cifar10
+  download: true
+  num_workers: 2
+  augment_train: true
+  mean_subtraction: per_pixel
+  val_size: 0
+
+evaluation:
+  eval_every_n_epochs: 1
+  log_every_n_iterations: 100
+  save_best_checkpoint: true
+
+hardware:
+  device: auto
+  mixed_precision: false
+  deterministic: true
+  seed: 42

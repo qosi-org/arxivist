@@ -1,0 +1,367 @@
+{
+  "paper_id": "arxiv_1512_003385",
+  "plan_version": 1,
+  "created_at": "2026-05-18T12:00:00Z",
+  "scope": "CIFAR-10 only — ResNet-20/32/44/56/110. ImageNet bottleneck blocks (ResNet-50/101/152) and 7x7 stem are out of scope.",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10",
+    "cuda_required": false,
+    "cuda_min_version": "11.8",
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "PyTorch is the de-facto modern framework for vision research. The CIFAR-10 ResNets are small enough (≤1.7M params, 32x32 inputs) that they train on CPU in tolerable time and on a single consumer GPU in minutes-to-hours. CUDA is optional — code falls back to CPU. No HuggingFace integration needed; a single hand-written torchvision-style dataset suffices. Config is plain YAML loaded via PyYAML to keep the runtime dependency footprint minimal."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/resnet_cifar/models/resnet.py",
+      "description": "Defines the CIFAR-10 ResNet model (6n+2 layers) and the BasicBlock with Option-A identity shortcut.",
+      "sir_modules_mapped": ["input_layer", "stage1_basic_block", "stage2_basic_block", "stage3_basic_block", "global_avg_pool", "classifier"],
+      "classes": [
+        {
+          "name": "BasicBlock",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "__init__", "signature": "(in_planes: int, planes: int, stride: int = 1, shortcut_option: str = 'A')", "returns": "None"},
+            {"name": "forward", "signature": "(x: Tensor) -> Tensor", "returns": "Tensor of shape [B, planes, H', W']"}
+          ]
+        },
+        {
+          "name": "IdentityPadShortcut",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "__init__", "signature": "(in_planes: int, out_planes: int, stride: int)", "returns": "None"},
+            {"name": "forward", "signature": "(x: Tensor) -> Tensor", "returns": "Tensor with zero-padded extra channels and stride-2 downsampling (Option A)."}
+          ]
+        },
+        {
+          "name": "ResNetCIFAR",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "__init__", "signature": "(n: int, num_classes: int = 10, shortcut_option: str = 'A')", "returns": "None"},
+            {"name": "forward", "signature": "(x: Tensor) -> Tensor", "returns": "logits of shape [B, num_classes]"},
+            {"name": "_init_weights", "signature": "() -> None", "returns": "He init on conv weights; constant init on BN."}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/resnet_cifar/models/factory.py",
+      "description": "Convenience factory: name → ResNetCIFAR instance.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ResNetFactory",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "build", "signature": "(name: str, num_classes: int = 10) -> ResNetCIFAR", "returns": "ResNetCIFAR with n derived from name (resnet20→3, resnet32→5, resnet44→7, resnet56→9, resnet110→18)."}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/resnet_cifar/data/cifar10.py",
+      "description": "CIFAR-10 dataset wrapper with paper-spec augmentation.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "CIFAR10DataModule",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__init__", "signature": "(data_dir: str, batch_size: int = 128, num_workers: int = 2, val_size: int = 0)", "returns": "None"},
+            {"name": "train_loader", "signature": "() -> DataLoader", "returns": "DataLoader yielding (image, label) batches with paper augmentations applied."},
+            {"name": "val_loader", "signature": "() -> Optional[DataLoader]", "returns": "Returns None if val_size==0."},
+            {"name": "test_loader", "signature": "() -> DataLoader", "returns": "DataLoader over 10k test images, no augmentation."}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/resnet_cifar/data/transforms.py",
+      "description": "Paper-specified transforms: per-pixel mean subtraction, 4-pixel pad + random crop, random hflip.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "PerPixelMeanSubtract",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__init__", "signature": "(mean: Tensor)", "returns": "None"},
+            {"name": "__call__", "signature": "(img: Tensor) -> Tensor", "returns": "img - mean"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/resnet_cifar/training/trainer.py",
+      "description": "SGD trainer with iteration-based LR schedule (drops at 32k and 48k) and optional warmup for ResNet-110.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "Trainer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__init__", "signature": "(model: nn.Module, train_loader, val_loader, test_loader, cfg: dict, device: torch.device)", "returns": "None"},
+            {"name": "fit", "signature": "() -> dict", "returns": "Dict with per-iteration loss, per-epoch test accuracy, and best test accuracy."},
+            {"name": "evaluate", "signature": "(loader: DataLoader) -> Tuple[float, float]", "returns": "(loss, top1_accuracy_percent)"},
+            {"name": "save_checkpoint", "signature": "(path: str, extra: dict = None) -> None", "returns": "None"},
+            {"name": "load_checkpoint", "signature": "(path: str) -> dict", "returns": "checkpoint dict"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/resnet_cifar/training/schedule.py",
+      "description": "Iteration-based step LR schedule + ResNet-110 warmup helper.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "StepLRWithWarmup",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__init__", "signature": "(optimizer, base_lr: float, warmup_lr: float, warmup_iters: int, drop_iters: list[int], drop_factor: float = 10.0)", "returns": "None"},
+            {"name": "step", "signature": "(iteration: int) -> None", "returns": "Sets optimizer.param_groups[i]['lr'] for current iteration."}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/resnet_cifar/evaluation/metrics.py",
+      "description": "Top-1 accuracy / error metric.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "AccuracyMeter",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__init__", "signature": "()", "returns": "None"},
+            {"name": "update", "signature": "(logits: Tensor, labels: Tensor) -> None", "returns": "None"},
+            {"name": "compute", "signature": "() -> Tuple[float, float]", "returns": "(top1_accuracy_percent, top1_error_percent)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/resnet_cifar/utils/config.py",
+      "description": "YAML config loader.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ConfigLoader",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "load", "signature": "(path: str) -> dict", "returns": "Dict[str, Any]"},
+            {"name": "merge_cli_overrides", "signature": "(cfg: dict, overrides: list[str]) -> dict", "returns": "cfg with key=value overrides applied"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/resnet_cifar/utils/seed.py",
+      "description": "Deterministic seeding for torch / numpy / random.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "SeedUtil",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "set_seed", "signature": "(seed: int) -> None", "returns": "None"}
+          ]
+        }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "ResNetCIFAR_forward",
+      "input": {"name": "image", "shape": "[B, 3, 32, 32]", "dtype": "float32"},
+      "output": {"name": "logits", "shape": "[B, 10]", "dtype": "float32"},
+      "steps": [
+        "x = relu(BN(Conv3x3(3 -> 16, stride=1, pad=1)(image)))  → [B, 16, 32, 32]",
+        "x = stage1: stack of n BasicBlocks (16 → 16, stride=1)  → [B, 16, 32, 32]",
+        "x = stage2: BasicBlock(16 → 32, stride=2) then (n-1) BasicBlocks (32 → 32, stride=1)  → [B, 32, 16, 16]",
+        "x = stage3: BasicBlock(32 → 64, stride=2) then (n-1) BasicBlocks (64 → 64, stride=1)  → [B, 64, 8, 8]",
+        "x = adaptive_avg_pool2d(x, 1)  → [B, 64, 1, 1]",
+        "x = flatten(x)  → [B, 64]",
+        "logits = Linear(64 -> 10)(x)  → [B, 10]",
+        "return logits"
+      ]
+    },
+    {
+      "name": "BasicBlock_forward",
+      "input": {"name": "x", "shape": "[B, in_planes, H, W]", "dtype": "float32"},
+      "output": {"name": "y", "shape": "[B, planes, H/stride, W/stride]", "dtype": "float32"},
+      "steps": [
+        "out = Conv3x3(in_planes -> planes, stride=stride, pad=1)(x)",
+        "out = BN(out)",
+        "out = ReLU(out)",
+        "out = Conv3x3(planes -> planes, stride=1, pad=1)(out)",
+        "out = BN(out)",
+        "shortcut = x if (in_planes == planes and stride == 1) else IdentityPadShortcut(x)",
+        "out = out + shortcut",
+        "out = ReLU(out)",
+        "return out"
+      ]
+    },
+    {
+      "name": "IdentityPadShortcut_forward (Option A)",
+      "input": {"name": "x", "shape": "[B, in_planes, H, W]", "dtype": "float32"},
+      "output": {"name": "y", "shape": "[B, out_planes, H/stride, W/stride]", "dtype": "float32"},
+      "steps": [
+        "If stride>1: x = avg_pool2d(x, kernel_size=1, stride=stride) OR x = x[:, :, ::stride, ::stride]",
+        "If out_planes > in_planes: pad zero channels using F.pad(x, (0,0,0,0,0,out_planes-in_planes,0,0))",
+        "return x"
+      ]
+    },
+    {
+      "name": "training_iteration",
+      "input": {"name": "(images, labels)", "shape": "([B,3,32,32], [B])", "dtype": "float32 / int64"},
+      "output": {"name": "loss_scalar", "shape": "[]", "dtype": "float32"},
+      "steps": [
+        "scheduler.step(iteration)  # adjusts LR based on current iteration",
+        "optimizer.zero_grad()",
+        "logits = model(images)",
+        "loss = cross_entropy(logits, labels)",
+        "loss.backward()",
+        "optimizer.step()",
+        "return loss.item()"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "name": "resnet20",
+      "_name_options": "[resnet20, resnet32, resnet44, resnet56, resnet110]",
+      "num_classes": 10,
+      "shortcut_option": "A",
+      "_shortcut_option_note": "Option A = identity with zero-padded extra channels. Paper uses A for all CIFAR experiments (SIR conf 0.92)."
+    },
+    "training": {
+      "optimizer": "sgd",
+      "learning_rate": 0.1,
+      "momentum": 0.9,
+      "weight_decay": 0.0001,
+      "batch_size": 128,
+      "total_iterations": 64000,
+      "lr_drop_iterations": [32000, 48000],
+      "lr_drop_factor": 10.0,
+      "use_warmup_for_resnet110": true,
+      "warmup_lr": 0.01,
+      "warmup_iterations": 400,
+      "gradient_clipping": null,
+      "_weight_decay_note": "Applied only to conv/FC weights, not BN parameters (SIR ambiguity, conf 0.70; widely used convention)."
+    },
+    "data": {
+      "dataset_root": "./data/cifar10",
+      "download": true,
+      "num_workers": 2,
+      "augment_train": true,
+      "_augment_spec": "Per-pixel mean subtraction; 4-pixel zero-pad + random 32x32 crop; random horizontal flip.",
+      "mean_subtraction": "per_pixel",
+      "_mean_subtraction_note": "ASSUMED: per-pixel rather than per-channel (SIR ambiguity, conf 0.75). Falls back to per-channel via config flag."
+    },
+    "evaluation": {
+      "eval_every_n_epochs": 1,
+      "log_every_n_iterations": 100,
+      "save_best_checkpoint": true,
+      "checkpoint_dir": "./checkpoints"
+    },
+    "hardware": {
+      "device": "auto",
+      "_device_options": "[auto, cuda, cpu]",
+      "mixed_precision": false,
+      "deterministic": true,
+      "seed": 42
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": ">=2.0,<3.0", "reason": "Core deep learning framework; provides nn.Module, autograd, DataLoader, optim."},
+      {"package": "torchvision", "version": ">=0.15", "reason": "CIFAR-10 dataset download + standard transforms."},
+      {"package": "numpy", "version": ">=1.24", "reason": "Mean image computation and array utilities."},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "YAML config loading."},
+      {"package": "tqdm", "version": ">=4.65", "reason": "Training progress bars in CLI and notebook."}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=7.4"},
+      {"package": "ruff", "version": ">=0.1"},
+      {"package": "ipykernel", "version": ">=6.25"},
+      {"package": "matplotlib", "version": ">=3.7"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Train a CIFAR-10 ResNet end-to-end and write checkpoints + final test error to disk.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": false, "default": "configs/resnet20.yaml", "help": "Path to YAML config."},
+        {"flag": "--model", "type": "str", "required": false, "default": null, "help": "Override config.model.name (e.g. resnet32)."},
+        {"flag": "--device", "type": "str", "required": false, "default": null, "help": "Override config.hardware.device (auto|cuda|cpu)."},
+        {"flag": "--total-iters", "type": "int", "required": false, "default": null, "help": "Override training.total_iterations (useful for smoke tests)."},
+        {"flag": "--seed", "type": "int", "required": false, "default": null, "help": "Override config.hardware.seed."},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "./runs", "help": "Where to write checkpoints and metrics."}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Load a trained checkpoint and report test accuracy / error on CIFAR-10.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": false, "default": "configs/resnet20.yaml", "help": "Path to YAML config used at training time."},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to .pt checkpoint."},
+        {"flag": "--device", "type": "str", "required": false, "default": null, "help": "Override config.hardware.device."}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Run inference on a single image and print top-1 class.",
+      "cli_args": [
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to .pt checkpoint."},
+        {"flag": "--image", "type": "str", "required": true, "default": null, "help": "Path to a 32x32 RGB image (PNG/JPG)."},
+        {"flag": "--config", "type": "str", "required": false, "default": "configs/resnet20.yaml", "help": "Path to YAML config."}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget", "ca-certificates"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --config configs/resnet20.yaml"
+  },
+  "risk_assessment": [
+    {
+      "severity": "Medium",
+      "description": "Per-pixel vs per-channel mean subtraction is ambiguous in the paper. Reproductions diverge here; per-channel is more common in modern code.",
+      "source": "SIR ambiguities[0], conf 0.75",
+      "mitigation": "Expose `data.mean_subtraction` as a config flag; default to per-pixel to match paper wording, document per-channel as alternative."
+    },
+    {
+      "severity": "Medium",
+      "description": "Whether weight decay applies to BN parameters is unstated. Modern PyTorch defaults include BN, which can hurt accuracy vs the paper.",
+      "source": "SIR ambiguities[1], conf 0.70",
+      "mitigation": "Split optimizer param groups: conv/FC weights get weight_decay=1e-4; BN params and biases get weight_decay=0."
+    },
+    {
+      "severity": "Low",
+      "description": "ResNet-110 fails to converge without LR warmup. Easy to forget if user switches to resnet110 without enabling warmup.",
+      "source": "Paper Section 4.2, SIR variants[4]",
+      "mitigation": "Auto-enable warmup whenever model.name == 'resnet110' regardless of config flag."
+    },
+    {
+      "severity": "Low",
+      "description": "Iteration-based LR schedule with batch_size=128 makes the effective epoch count depend on dataset size (164 epochs if full 50k train, 182 if 45k/5k split).",
+      "source": "SIR implementation_assumptions[5], conf 0.85",
+      "mitigation": "Use the full 50k train split by default (val_size=0); LR schedule is iteration-based so total wall-clock is invariant."
+    },
+    {
+      "severity": "Low",
+      "description": "He initialization vs PyTorch default kaiming_normal_ differ in mode ('fan_in' vs 'fan_out') and gain. Original He et al. PReLU paper specifies fan_in with relu gain.",
+      "source": "SIR implementation_assumptions[1], conf 0.90",
+      "mitigation": "Explicitly call nn.init.kaiming_normal_(weight, mode='fan_in', nonlinearity='relu') in _init_weights."
+    },
+    {
+      "severity": "Low",
+      "description": "Stochastic results: ResNet-110 mean error has stddev ~0.16% across 5 runs. Single-seed reproductions may report values outside the paper's median.",
+      "source": "Paper Section 4.2, special_conditions",
+      "mitigation": "Notebook trains ResNet-20 (lower variance, faster); README describes how to replicate the multi-seed protocol."
+    }
+  ]
+}

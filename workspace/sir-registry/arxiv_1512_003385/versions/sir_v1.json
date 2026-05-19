@@ -1,0 +1,293 @@
+{
+  "paper_id": "arxiv_1512_003385",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Deep Residual Learning for Image Recognition",
+    "authors": ["Kaiming He", "Xiangyu Zhang", "Shaoqing Ren", "Jian Sun"],
+    "affiliations": ["Microsoft Research"],
+    "arxiv_id": "1512.03385",
+    "doi": "10.1109/CVPR.2016.90",
+    "submission_date": "2015-12-10",
+    "abstract": "Deeper neural networks are more difficult to train. We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously. We explicitly reformulate the layers as learning residual functions with reference to the layer inputs, instead of learning unreferenced functions. We provide comprehensive empirical evidence showing that these residual networks are easier to optimize, and can gain accuracy from considerably increased depth.",
+    "domain": "CV",
+    "key_claims": [
+      "Reformulating layers as residual functions with skip connections makes very deep networks easier to optimize.",
+      "Residual networks (ResNets) of 50/101/152 layers achieve state-of-the-art top-1/top-5 error on ImageNet, with a 152-layer ResNet 8x deeper than VGG but lower complexity.",
+      "On CIFAR-10, ResNets train successfully at depths up to 1202 layers; depths 20-110 give monotonically improving test error.",
+      "Identity shortcuts (parameter-free) are sufficient; projection shortcuts give marginal additional improvement but are not essential.",
+      "The 152-layer ensemble achieves 3.57% top-5 error on ImageNet (ILSVRC 2015 winner)."
+    ],
+    "parsed_at": "2026-05-18T12:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "ResNet-20 (CIFAR-10)",
+    "modules": [
+      {
+        "name": "input_layer",
+        "operation_type": "Conv2d+BN+ReLU",
+        "input_shape": "[B, 3, 32, 32]",
+        "output_shape": "[B, 16, 32, 32]",
+        "parameters": {"kernel_size": 3, "stride": 1, "padding": 1, "filters": 16, "bias": false},
+        "paper_section": "Section 4.2, paragraph 1",
+        "confidence": 0.95,
+        "notes": "First layer is a single 3x3 conv with 16 filters; followed by BN and ReLU."
+      },
+      {
+        "name": "stage1_basic_block",
+        "operation_type": "BasicBlock (Conv-BN-ReLU-Conv-BN-Add-ReLU)",
+        "input_shape": "[B, 16, 32, 32]",
+        "output_shape": "[B, 16, 32, 32]",
+        "parameters": {"filters": 16, "stride": 1, "shortcut": "identity", "num_blocks": "n (= 3 for ResNet-20, 5 for ResNet-32, 7 for 44, 9 for 56, 18 for 110)"},
+        "paper_section": "Section 4.2, paragraph 1",
+        "confidence": 0.95,
+        "notes": "Stack of 2n weighted layers on 32x32 feature maps (i.e., n BasicBlocks)."
+      },
+      {
+        "name": "stage2_basic_block",
+        "operation_type": "BasicBlock (Conv-BN-ReLU-Conv-BN-Add-ReLU)",
+        "input_shape": "[B, 16, 32, 32] / [B, 32, 16, 16]",
+        "output_shape": "[B, 32, 16, 16]",
+        "parameters": {"filters": 32, "first_block_stride": 2, "shortcut": "identity_with_zero_padding (Option A)", "num_blocks": "n"},
+        "paper_section": "Section 4.2, paragraph 1",
+        "confidence": 0.95,
+        "notes": "First block downsamples by stride 2 and doubles filter count. Shortcut uses Option A: identity with zero-padded extra channels."
+      },
+      {
+        "name": "stage3_basic_block",
+        "operation_type": "BasicBlock (Conv-BN-ReLU-Conv-BN-Add-ReLU)",
+        "input_shape": "[B, 32, 16, 16] / [B, 64, 8, 8]",
+        "output_shape": "[B, 64, 8, 8]",
+        "parameters": {"filters": 64, "first_block_stride": 2, "shortcut": "identity_with_zero_padding (Option A)", "num_blocks": "n"},
+        "paper_section": "Section 4.2, paragraph 1",
+        "confidence": 0.95,
+        "notes": "First block downsamples by stride 2 and doubles filter count."
+      },
+      {
+        "name": "global_avg_pool",
+        "operation_type": "AdaptiveAvgPool2d",
+        "input_shape": "[B, 64, 8, 8]",
+        "output_shape": "[B, 64, 1, 1]",
+        "parameters": {"output_size": 1},
+        "paper_section": "Section 4.2, paragraph 1",
+        "confidence": 0.95,
+        "notes": "Network ends with global average pooling."
+      },
+      {
+        "name": "classifier",
+        "operation_type": "Linear+Softmax",
+        "input_shape": "[B, 64]",
+        "output_shape": "[B, 10]",
+        "parameters": {"in_features": 64, "out_features": 10, "softmax": "applied in cross-entropy loss"},
+        "paper_section": "Section 4.2, paragraph 1",
+        "confidence": 0.95,
+        "notes": "10-way fully-connected + softmax."
+      }
+    ],
+    "connections": [
+      {"from": "input_layer", "to": "stage1_basic_block", "tensor_name": "feature_map_16x32x32"},
+      {"from": "stage1_basic_block", "to": "stage2_basic_block", "tensor_name": "feature_map_16x32x32"},
+      {"from": "stage2_basic_block", "to": "stage3_basic_block", "tensor_name": "feature_map_32x16x16"},
+      {"from": "stage3_basic_block", "to": "global_avg_pool", "tensor_name": "feature_map_64x8x8"},
+      {"from": "global_avg_pool", "to": "classifier", "tensor_name": "embedding_64"}
+    ],
+    "variants": [
+      {"name": "ResNet-20", "differences": {"n": 3, "total_layers": 20, "params_approx": "0.27M"}},
+      {"name": "ResNet-32", "differences": {"n": 5, "total_layers": 32, "params_approx": "0.46M"}},
+      {"name": "ResNet-44", "differences": {"n": 7, "total_layers": 44, "params_approx": "0.66M"}},
+      {"name": "ResNet-56", "differences": {"n": 9, "total_layers": 56, "params_approx": "0.85M"}},
+      {"name": "ResNet-110", "differences": {"n": 18, "total_layers": 110, "params_approx": "1.7M", "training_note": "Requires warm-up at lr=0.01 for first 400 iterations to start converging, then switch to lr=0.1."}}
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "residual_block_identity",
+      "latex": "y = \\mathcal{F}(x, \\{W_i\\}) + x",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 3.1, Eq. (1)",
+      "confidence": 1.0
+    },
+    {
+      "name": "residual_block_projection",
+      "latex": "y = \\mathcal{F}(x, \\{W_i\\}) + W_s x",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 3.1, Eq. (2)",
+      "confidence": 1.0
+    },
+    {
+      "name": "two_layer_residual_function",
+      "latex": "\\mathcal{F} = W_2 \\sigma(W_1 x)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 3.1",
+      "confidence": 1.0
+    },
+    {
+      "name": "cross_entropy_loss",
+      "latex": "\\mathcal{L} = -\\sum_{i=1}^{C} y_i \\log \\hat{y}_i",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Implicit (standard classification loss)",
+      "confidence": 0.90
+    }
+  ],
+  "tensor_semantics": [
+    {"name": "image_input", "shape_notation": "[B, 3, 32, 32]", "dtype": "float32", "tensor_type": "input", "module": "input_layer", "confidence": 0.95},
+    {"name": "stage1_feature_map", "shape_notation": "[B, 16, 32, 32]", "dtype": "float32", "tensor_type": "intermediate", "module": "stage1_basic_block", "confidence": 0.95},
+    {"name": "stage2_feature_map", "shape_notation": "[B, 32, 16, 16]", "dtype": "float32", "tensor_type": "intermediate", "module": "stage2_basic_block", "confidence": 0.95},
+    {"name": "stage3_feature_map", "shape_notation": "[B, 64, 8, 8]", "dtype": "float32", "tensor_type": "intermediate", "module": "stage3_basic_block", "confidence": 0.95},
+    {"name": "embedding", "shape_notation": "[B, 64]", "dtype": "float32", "tensor_type": "intermediate", "module": "global_avg_pool", "confidence": 0.95},
+    {"name": "logits", "shape_notation": "[B, 10]", "dtype": "float32", "tensor_type": "output", "module": "classifier", "confidence": 0.95}
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "SGD",
+      "learning_rate": 0.1,
+      "beta1": 0.9,
+      "beta2": null,
+      "weight_decay": 0.0001,
+      "confidence": 0.95
+    },
+    "lr_schedule": {
+      "type": "step_decay",
+      "warmup_steps": 0,
+      "total_steps": 64000,
+      "confidence": 0.95
+    },
+    "batch_size": 128,
+    "effective_batch_size": 128,
+    "training_steps": 64000,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [
+      "Per-pixel mean subtraction (computed on the training set).",
+      "4-pixel zero-padding on each side; random 32x32 crop from padded image or its horizontal flip.",
+      "Random horizontal flip.",
+      "Test-time: single center 32x32 view, no augmentation."
+    ],
+    "curriculum": "ResNet-110 only: lr=0.01 warmup for first 400 iterations, then switch to lr=0.1 and follow the standard schedule. Other depths use lr=0.1 from step 0.",
+    "confidence": 0.92
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "CIFAR-10", "split": "train", "size": 50000, "publicly_available": true},
+      {"name": "CIFAR-10", "split": "test", "size": 10000, "publicly_available": true}
+    ],
+    "metrics": ["test_error_rate_percent", "test_accuracy_percent"],
+    "reported_results": [
+      {"metric": "test_error_rate_percent", "dataset": "CIFAR-10", "split": "test", "value": 8.75, "is_primary": true},
+      {"metric": "test_error_rate_percent", "dataset": "CIFAR-10", "split": "test", "value": 7.51, "is_primary": false},
+      {"metric": "test_error_rate_percent", "dataset": "CIFAR-10", "split": "test", "value": 7.17, "is_primary": false},
+      {"metric": "test_error_rate_percent", "dataset": "CIFAR-10", "split": "test", "value": 6.97, "is_primary": false},
+      {"metric": "test_error_rate_percent", "dataset": "CIFAR-10", "split": "test", "value": 6.43, "is_primary": false}
+    ],
+    "baselines": [
+      "Plain (non-residual) networks of matching depth (20, 32, 44, 56)",
+      "Maxout (Goodfellow et al. 2013)",
+      "NIN (Network in Network, Lin et al. 2013)",
+      "DSN (Deeply-Supervised Nets, Lee et al. 2014)",
+      "FitNet (Romero et al. 2014)",
+      "Highway Networks (Srivastava et al. 2015)"
+    ],
+    "compute": "Two GPUs, mini-batch size 128 (per the ImageNet experiments; CIFAR experiments use the same training infrastructure). CIFAR training is small enough to run on a single GPU in modern setups.",
+    "special_conditions": [
+      "Results in Table 6 are reported as median test error across multiple runs for ResNet-110 (mean 6.61% ± 0.16% over 5 runs; reported 6.43% is the best/median).",
+      "Train/val split (45k/5k) used during hyperparameter tuning; final results trained on full 50k and evaluated on 10k test set."
+    ],
+    "confidence": 0.93
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Use PyTorch as the implementation framework.",
+      "basis": "Framework not specified by the paper (paper predates major framework standardization, original code was Caffe). PyTorch is the modern de-facto framework for research code.",
+      "confidence": 0.85,
+      "alternatives": ["TensorFlow/Keras", "JAX/Flax", "Caffe (original)"],
+      "affects_section": "code_generation"
+    },
+    {
+      "assumption": "He (Kaiming) initialization for conv layers.",
+      "basis": "Paper cites He et al. 2015 (PReLU paper) for initialization; this is standard for ReLU networks.",
+      "confidence": 0.90,
+      "alternatives": ["Glorot/Xavier", "Default PyTorch init"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "BN uses momentum=0.1 and eps=1e-5 (PyTorch defaults).",
+      "basis": "BN hyperparameters not specified in paper. PyTorch defaults are reasonable and widely used.",
+      "confidence": 0.75,
+      "alternatives": ["momentum=0.9 (TF convention)", "eps=1e-3"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Cross-entropy loss with no label smoothing.",
+      "basis": "Standard classification setup; label smoothing was not common in 2015.",
+      "confidence": 0.90,
+      "alternatives": ["Label smoothing 0.1"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Shortcut Option A (identity with zero-padded extra channels) is used for CIFAR experiments.",
+      "basis": "Section 4.2 explicitly states 'all shortcuts are identity shortcuts' for CIFAR; Option A is the zero-padding variant described in Section 3.3.",
+      "confidence": 0.92,
+      "alternatives": ["Option B (1x1 projection on dimension-changing shortcuts)"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "64000 iterations corresponds to ~182 epochs at batch_size=128 on 50k training images.",
+      "basis": "Computed as 64000 * 128 / 50000 = 163.84 effective epochs; if using 45k train (with 5k held out as val) it is 64000*128/45000 = 182.04 epochs. Common reproductions use 164/182 epochs.",
+      "confidence": 0.85,
+      "alternatives": ["164 epochs (full 50k train)", "182 epochs (45k train)"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "LR drops happen at iterations 32000 and 48000 (i.e., at ~50% and ~75% of training).",
+      "basis": "Paper says 'divide the learning rate by 10 at 32k and 48k iterations'.",
+      "confidence": 0.95,
+      "alternatives": [],
+      "affects_section": "training_pipeline"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 4.2, paragraph 2",
+      "description": "Paper does not explicitly state whether mean subtraction is per-pixel (i.e., a single 3x32x32 mean image) or per-channel. The phrasing suggests per-pixel.",
+      "primary_assumption": "per-pixel mean subtraction",
+      "alternatives": ["per-channel mean subtraction (single (R,G,B) mean)"],
+      "confidence": 0.75
+    },
+    {
+      "location": "Section 4.2",
+      "description": "Whether weight decay applies to BN gamma/beta and conv biases. Conv layers are typically bias-free when followed by BN.",
+      "primary_assumption": "weight decay applies only to conv weights and FC weights, not BN parameters; conv layers have bias=False since each is followed by BN",
+      "alternatives": ["weight decay applies to all parameters"],
+      "confidence": 0.70
+    },
+    {
+      "location": "Section 4.2",
+      "description": "Order of operations in BasicBlock: paper uses post-activation (conv-BN-ReLU). The pre-activation variant came in a 2016 follow-up.",
+      "primary_assumption": "post-activation: conv -> BN -> ReLU -> conv -> BN -> add -> ReLU",
+      "alternatives": ["pre-activation (BN-ReLU-conv-BN-ReLU-conv)"],
+      "confidence": 0.95
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.94,
+    "mathematical_spec": 0.97,
+    "tensor_semantics": 0.95,
+    "training_pipeline": 0.91,
+    "evaluation_protocol": 0.93,
+    "implementation_assumptions": 0.83,
+    "overall_sir_confidence": 0.92
+  }
+}

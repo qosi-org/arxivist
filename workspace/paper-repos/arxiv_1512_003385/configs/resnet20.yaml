@@ -1,0 +1,44 @@
+# ResNet-20 for CIFAR-10 (He et al. 2015, Section 4.2)
+# 6n+2 layers with n=3. Identity shortcuts (Option A). ~0.27M parameters.
+# SIR confidence annotations preserved as comments.
+
+model:
+  name: resnet20            # one of [resnet20, resnet32, resnet44, resnet56, resnet110]
+  num_classes: 10
+  shortcut_option: A        # SIR conf 0.92 — paper uses identity (Option A) for CIFAR
+
+training:
+  optimizer: sgd            # SIR conf 0.95
+  learning_rate: 0.1        # SIR conf 0.95
+  momentum: 0.9             # SIR conf 0.95
+  weight_decay: 0.0001      # SIR conf 0.95
+  apply_wd_to_bn: false     # ASSUMED: BN params + biases excluded from weight decay (conf 0.70)
+  batch_size: 128           # SIR conf 0.95
+  total_iterations: 64000   # SIR conf 0.95 (~164 epochs at 50k train / bs128)
+  lr_drop_iterations: [32000, 48000]  # SIR conf 0.95
+  lr_drop_factor: 10.0      # SIR conf 0.95
+  use_warmup: false         # Only ResNet-110 needs warmup. Auto-forced on for resnet110.
+  warmup_lr: 0.01           # SIR conf 0.95 (used only when use_warmup=true)
+  warmup_iterations: 400    # SIR conf 0.95
+  gradient_clipping: null
+  init: kaiming_normal_fan_in_relu  # ASSUMED from cited He et al. 2015 (conf 0.90)
+
+data:
+  dataset_root: ./data/cifar10
+  download: true
+  num_workers: 2
+  augment_train: true
+  # SIR conf 0.85: 4-pixel pad + random 32x32 crop, random hflip
+  mean_subtraction: per_pixel   # ASSUMED per-pixel (SIR ambiguity, conf 0.75); alt: per_channel
+  val_size: 0                   # 0 = train on full 50k; >0 carves a held-out val set from train
+
+evaluation:
+  eval_every_n_epochs: 1
+  log_every_n_iterations: 100
+  save_best_checkpoint: true
+
+hardware:
+  device: auto              # auto -> cuda if available else cpu
+  mixed_precision: false
+  deterministic: true
+  seed: 42

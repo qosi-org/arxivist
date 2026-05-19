@@ -1,0 +1,42 @@
+# Quick smoke-test config: ResNet-20, drastically reduced iterations.
+# Useful for verifying the full training pipeline runs end-to-end in ~1 minute on CPU.
+
+model:
+  name: resnet20
+  num_classes: 10
+  shortcut_option: A
+
+training:
+  optimizer: sgd
+  learning_rate: 0.1
+  momentum: 0.9
+  weight_decay: 0.0001
+  apply_wd_to_bn: false
+  batch_size: 128
+  total_iterations: 200       # paper uses 64000 — this is a smoke test only
+  lr_drop_iterations: [100, 150]
+  lr_drop_factor: 10.0
+  use_warmup: false
+  warmup_lr: 0.01
+  warmup_iterations: 50
+  gradient_clipping: null
+  init: kaiming_normal_fan_in_relu
+
+data:
+  dataset_root: ./data/cifar10
+  download: true
+  num_workers: 0
+  augment_train: true
+  mean_subtraction: per_pixel
+  val_size: 0
+
+evaluation:
+  eval_every_n_epochs: 100    # effectively only at the end for smoke test
+  log_every_n_iterations: 20
+  save_best_checkpoint: false
+
+hardware:
+  device: auto
+  mixed_precision: false
+  deterministic: true
+  seed: 42
