@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ArXivist Comparison Report",
+  "description": "Structured reproducibility comparison produced by Stage 6",
+  "type": "object",
+  "required": [
+    "paper_id",
+    "comparison_date",
+    "reproducibility_score",
+    "score_confidence",
+    "metric_comparisons",
+    "hallucinations",
+    "verification_log"
+  ],
+  "properties": {
+    "paper_id": { "type": "string" },
+    "comparison_date": { "type": "string" },
+    "arxivist_sir_version": { "type": "integer" },
+    "reproducibility_score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "score_confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+    "metric_comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "dataset", "paper_value", "user_value", "deviation_pct", "severity"],
+        "properties": {
+          "metric": { "type": "string" },
+          "dataset": { "type": "string" },
+          "split": { "type": "string" },
+          "paper_value": { "type": "number" },
+          "user_value": { "type": "number" },
+          "absolute_deviation": { "type": "number" },
+          "deviation_pct": { "type": "number" },
+          "direction": { "type": "string", "enum": ["above", "below", "exact"] },
+          "severity": { "type": "string", "enum": ["excellent", "good", "moderate", "significant", "critical", "unmatched"] },
+          "root_causes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cause": { "type": "string" },
+                "probability": { "type": "string", "enum": ["High", "Medium", "Low"] },
+                "suggested_fix": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "deviation_summary": {
+      "type": "object",
+      "properties": {
+        "excellent": { "type": "integer" },
+        "good": { "type": "integer" },
+        "moderate": { "type": "integer" },
+        "significant": { "type": "integer" },
+        "critical": { "type": "integer" },
+        "unmatched": { "type": "integer" }
+      }
+    },
+    "hallucinations": {
+      "type": "object",
+      "properties": {
+        "structural": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "component": { "type": "string" },
+              "location_in_code": { "type": "string" },
+              "severity": { "type": "string", "enum": ["Critical", "Significant", "Minor"] },
+              "evidence": { "type": "string" },
+              "suggested_fix": { "type": "string" }
+            }
+          }
+        },
+        "parametric": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "hyperparameter": { "type": "string" },
+              "assumed_value": {},
+              "severity": { "type": "string", "enum": ["Critical", "Significant", "Minor"] },
+              "evidence": { "type": "string" },
+              "suggested_fix": { "type": "string" }
+            }
+          }
+        },
+        "omission": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "missing_component": { "type": "string" },
+              "sir_location": { "type": "string" },
+              "severity": { "type": "string", "enum": ["Critical", "Significant", "Minor"] },
+              "suggested_fix": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "verification_log": {
+      "type": "object",
+      "properties": {
+        "comparison_timestamp": { "type": "string" },
+        "sir_version_used": { "type": "integer" },
+        "architecture_plan_version": { "type": "integer" },
+        "paper_metrics_total": { "type": "integer" },
+        "user_results_total": { "type": "integer" },
+        "matched_pairs": { "type": "integer" },
+        "user_config_modifications": { "type": "array", "items": { "type": "string" } },
+        "user_results_hash": { "type": "string" },
+        "requires_manual_review": { "type": "boolean" },
+        "review_reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

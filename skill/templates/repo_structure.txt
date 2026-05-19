@@ -1,0 +1,95 @@
+# ArXivist — Standard Repository Structure Template
+# Stage 4 (Code Generator) must produce a repo matching this layout.
+# {paper_id} and {project_name} are substituted at generation time.
+# {project_name} = snake_case version of the paper title (≤ 30 chars)
+
+paper-repos/{paper_id}/
+│
+├── README.md                          # Full project README (generated last)
+├── setup.py                           # or pyproject.toml
+├── .gitignore                         # Python + data + checkpoint ignores
+├── .env.example                       # Example env vars (no secrets)
+│
+├── src/
+│   └── {project_name}/
+│       ├── __init__.py
+│       ├── models/
+│       │   └── __init__.py
+│       │   # + model files per architecture plan
+│       ├── data/
+│       │   ├── __init__.py
+│       │   ├── dataset.py
+│       │   └── transforms.py
+│       ├── training/
+│       │   ├── __init__.py
+│       │   ├── trainer.py
+│       │   └── losses.py
+│       ├── evaluation/
+│       │   ├── __init__.py
+│       │   └── metrics.py
+│       └── utils/
+│           ├── __init__.py
+│           └── config.py              # Config loading + seed utilities
+│
+├── configs/
+│   └── config.yaml                   # Full hyperparameter config
+│   # Optional: configs/config_debug.yaml (reduced for quick local test)
+│
+├── docker/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+│
+├── data/
+│   ├── README_data.md                # Where to get the data, how to set up
+│   └── download.sh                   # or download.py
+│
+├── notebooks/
+│   ├── reproduce_{paper_id}.ipynb    # Primary reproduction notebook
+│   └── explore_{paper_id}.ipynb      # Optional: visualization/exploration
+│
+├── checkpoints/
+│   └── .gitkeep                      # Directory tracked, contents git-ignored
+│
+├── results/
+│   └── .gitkeep                      # User places experiment results here
+│
+├── comparison/
+│   └── .gitkeep                      # Stage 6 writes here
+│
+├── train.py                          # Training entrypoint
+├── evaluate.py                       # Evaluation entrypoint
+├── inference.py                      # Single-sample inference entrypoint
+│
+├── requirements.txt                  # Pinned runtime dependencies
+├── requirements-dev.txt              # Dev/test dependencies
+└── environment.yaml                  # Conda environment spec
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GITIGNORE CONTENTS (write verbatim to .gitignore)
+# ─────────────────────────────────────────────────────────────────────────────
+# __pycache__/
+# *.py[cod]
+# *.egg-info/
+# dist/
+# build/
+# .env
+# checkpoints/*.pt
+# checkpoints/*.pth
+# checkpoints/*.ckpt
+# data/raw/
+# data/processed/
+# results/*.csv
+# results/*.json
+# *.log
+# .DS_Store
+# wandb/
+# lightning_logs/
+# ─────────────────────────────────────────────────────────────────────────────
+
+# NOTES FOR STAGE 4:
+# - Every directory must contain __init__.py if it is a Python package
+# - checkpoints/, results/, and comparison/ use .gitkeep so they exist in git
+#   but their contents are ignored
+# - The comparison/ directory is managed by Stage 6 — Stage 4 only creates it
+# - If the paper has multiple model variants, add configs/config_{variant}.yaml
+#   for each variant described in the SIR

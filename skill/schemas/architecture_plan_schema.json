@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ArXivist Architecture Plan",
+  "description": "Software architecture plan produced by Stage 3, consumed by Stage 4",
+  "type": "object",
+  "required": [
+    "paper_id",
+    "framework",
+    "module_hierarchy",
+    "tensor_flows",
+    "config_schema",
+    "dependencies",
+    "entrypoints",
+    "docker_spec",
+    "risk_assessment"
+  ],
+  "properties": {
+    "paper_id": { "type": "string" },
+    "plan_version": { "type": "integer", "default": 1 },
+    "created_at": { "type": "string" },
+    "framework": {
+      "type": "object",
+      "required": ["primary", "reasoning"],
+      "properties": {
+        "primary": { "type": "string", "enum": ["pytorch", "jax", "tensorflow"] },
+        "python_version": { "type": "string" },
+        "cuda_required": { "type": "boolean" },
+        "cuda_min_version": { "type": ["string", "null"] },
+        "use_huggingface": { "type": "boolean" },
+        "config_library": { "type": "string", "enum": ["hydra", "omegaconf", "yaml", "none"] },
+        "reasoning": { "type": "string" }
+      }
+    },
+    "module_hierarchy": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "classes"],
+        "properties": {
+          "path": { "type": "string" },
+          "description": { "type": "string" },
+          "sir_modules_mapped": { "type": "array", "items": { "type": "string" } },
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "base_class", "public_methods"],
+              "properties": {
+                "name": { "type": "string" },
+                "base_class": { "type": "string" },
+                "public_methods": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string" },
+                      "signature": { "type": "string" },
+                      "returns": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tensor_flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "steps"],
+        "properties": {
+          "name": { "type": "string" },
+          "input": { "type": "object", "properties": { "name": {"type":"string"}, "shape": {"type":"string"}, "dtype": {"type":"string"} } },
+          "output": { "type": "object", "properties": { "name": {"type":"string"}, "shape": {"type":"string"}, "dtype": {"type":"string"} } },
+          "steps": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "config_schema": {
+      "type": "object",
+      "properties": {
+        "model": { "type": "object" },
+        "training": { "type": "object" },
+        "data": { "type": "object" },
+        "evaluation": { "type": "object" },
+        "hardware": { "type": "object" }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "required": ["runtime", "dev"],
+      "properties": {
+        "runtime": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "package": { "type": "string" },
+              "version": { "type": "string" },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "dev": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "package": { "type": "string" },
+              "version": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "entrypoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["filename", "purpose", "cli_args"],
+        "properties": {
+          "filename": { "type": "string" },
+          "purpose": { "type": "string" },
+          "cli_args": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "flag": { "type": "string" },
+                "type": { "type": "string" },
+                "required": { "type": "boolean" },
+                "default": {},
+                "help": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "docker_spec": {
+      "type": "object",
+      "properties": {
+        "base_image": { "type": "string" },
+        "system_deps": { "type": "array", "items": { "type": "string" } },
+        "workdir": { "type": "string" },
+        "default_cmd": { "type": "string" }
+      }
+    },
+    "risk_assessment": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "description", "mitigation"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["High", "Medium", "Low"] },
+          "description": { "type": "string" },
+          "source": { "type": "string" },
+          "mitigation": { "type": "string" }
+        }
+      }
+    }
+  }
+}
