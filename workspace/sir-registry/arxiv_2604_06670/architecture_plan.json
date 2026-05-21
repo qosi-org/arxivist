@@ -1,0 +1,410 @@
+{
+  "paper_id": "arxiv_2604_06670",
+  "plan_version": 1,
+  "framework": {
+    "primary": "PyTorch",
+    "version": ">=2.0",
+    "python_version": "3.10+",
+    "cuda_required": true,
+    "cuda_minimum": "11.8",
+    "huggingface": false,
+    "config_management": "YAML + argparse",
+    "reasoning": "Paper explicitly uses PyTorch 2.6.0 with CUDA 12.6; GPU required for performance"
+  },
+
+  "module_hierarchy": {
+    "project_name": "spg_uvm",
+    "root": "src/spg_uvm/",
+    "files": [
+      {
+        "path": "src/spg_uvm/__init__.py",
+        "description": "Package init",
+        "classes": []
+      },
+      {
+        "path": "src/spg_uvm/models/networks.py",
+        "description": "Actor and Critic shallow MLP networks",
+        "classes": [
+          {
+            "name": "ActorNetwork",
+            "public_methods": [
+              "forward(x: Tensor[B,d]) -> Tensor[B, d*(d+1)//2 or d]",
+              "get_mean(x: Tensor) -> Tensor"
+            ],
+            "sir_mapping": "Actor (Policy Network)"
+          },
+          {
+            "name": "CriticNetwork",
+            "public_methods": [
+              "forward(x: Tensor[B,d]) -> Tensor[B,1]"
+            ],
+            "sir_mapping": "Critic (Value Network)"
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/models/policy.py",
+        "description": "Policy classes: ContinuousPolicy (squashed Gaussian + C-vine) and BangBangPolicy (Bernoulli)",
+        "classes": [
+          {
+            "name": "ContinuousPolicy",
+            "public_methods": [
+              "sample(x: Tensor, actor_net: ActorNetwork, temperature: float) -> (action: Tensor, log_prob: Tensor, latent_z: Tensor)",
+              "log_prob(action: Tensor, x: Tensor, actor_net: ActorNetwork, temperature: float) -> Tensor",
+              "likelihood_ratio(action: Tensor, latent_z: Tensor, x: Tensor, m_old: Tensor, m_new: Tensor, temperature: float) -> Tensor",
+              "get_deterministic_action(x: Tensor, actor_net: ActorNetwork) -> (sigma: Tensor, rho: Tensor)"
+            ],
+            "sir_mapping": "TUVM Transform, Continuous Policy"
+          },
+          {
+            "name": "BangBangPolicy",
+            "public_methods": [
+              "sample(x: Tensor, actor_net: ActorNetwork) -> (action: Tensor, log_prob: Tensor)",
+              "log_prob(action: Tensor, x: Tensor, actor_net: ActorNetwork) -> Tensor",
+              "likelihood_ratio(action_binary: Tensor, x: Tensor, q_old: Tensor, q_new: Tensor) -> Tensor",
+              "get_deterministic_action(x: Tensor, actor_net: ActorNetwork) -> Tensor",
+              "entropy(x: Tensor, actor_net: ActorNetwork) -> Tensor"
+            ],
+            "sir_mapping": "Bang-Bang Policy Layer"
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/models/vine.py",
+        "description": "C-vine parameterization of correlation matrices; maps partial correlations to PSD correlation matrix",
+        "classes": [
+          {
+            "name": "CVineCorrelation",
+            "public_methods": [
+              "partial_to_cholesky(y: Tensor[B, d*(d-1)//2]) -> Tensor[B, d, d]",
+              "partial_to_correlation(y: Tensor[B, d*(d-1)//2]) -> Tensor[B, d, d]",
+              "cholesky_to_correlation(L: Tensor[B, d, d]) -> Tensor[B, d, d]"
+            ],
+            "sir_mapping": "C-vine parameterization (Joe 2006, JKL 2009)"
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/models/dynamics.py",
+        "description": "Log-Euler scheme for multi-asset GBM simulation under control",
+        "classes": [
+          {
+            "name": "LogEulerScheme",
+            "public_methods": [
+              "step(x: Tensor[B,d], a: Tensor[B,d,d], xi: Tensor[B,d], dt: float, r: float) -> Tensor[B,d]",
+              "simulate_paths(x0: Tensor[d], policy, n_steps: int, n_paths: int, ...) -> Tensor[n_paths, n_steps+1, d]"
+            ],
+            "sir_mapping": "Log-Euler Scheme (F)"
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/payoffs.py",
+        "description": "All option payoff functions",
+        "classes": [
+          {
+            "name": "GeoOutperformer",
+            "public_methods": ["compute(x: Tensor[B,d]) -> Tensor[B]"]
+          },
+          {
+            "name": "OutperformerSpread",
+            "public_methods": ["compute(x: Tensor[B,d]) -> Tensor[B]"]
+          },
+          {
+            "name": "BestOfButterfly",
+            "public_methods": ["compute(x: Tensor[B,d], K1: float, K2: float) -> Tensor[B]"]
+          },
+          {
+            "name": "GeoCallSpread",
+            "public_methods": ["compute(x: Tensor[B,d], K1: float, K2: float) -> Tensor[B]"]
+          },
+          {
+            "name": "CallSharpe",
+            "public_methods": ["compute(x: Tensor[B], realized_vol: Tensor[B], K: float) -> Tensor[B]"]
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/training/trainer.py",
+        "description": "SPG-UVM backward actor-critic training loop (Algorithm 1 from paper)",
+        "classes": [
+          {
+            "name": "SPGUVMTrainer",
+            "public_methods": [
+              "__init__(config: Config, policy_type: str, device: torch.device)",
+              "train() -> dict",
+              "train_one_step(n: int) -> dict",
+              "collect_data(actor_net, n: int, epoch: int) -> DataBatch",
+              "update_critic(phi_n, data: DataBatch, next_value_net) -> float",
+              "update_actor(theta_n, phi_n, data: DataBatch, epoch: int) -> float",
+              "compute_actor_price(n_paths: int) -> (float, float, float)",
+              "compute_critic_price() -> float"
+            ]
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/training/losses.py",
+        "description": "PPO clipped objective, critic MSE loss, correlation penalty (Huber)",
+        "classes": [
+          {
+            "name": "PPOLoss",
+            "public_methods": [
+              "compute(ratio: Tensor, advantage: Tensor, epsilon: float) -> Tensor"
+            ]
+          },
+          {
+            "name": "CriticLoss",
+            "public_methods": [
+              "compute(v_pred: Tensor, v_target: Tensor) -> Tensor"
+            ]
+          },
+          {
+            "name": "CorrelationPenalty",
+            "public_methods": [
+              "compute(rho: Tensor[B,d,d], rho_min: Tensor, rho_max: Tensor, beta: float, delta: float) -> Tensor"
+            ]
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/training/sampling.py",
+        "description": "State sampling distribution mu_n (log-normal, diagonal covariance); antithetic variates",
+        "classes": [
+          {
+            "name": "StateSampler",
+            "public_methods": [
+              "sample(n: int, t_n: float, n_paths: int, device: torch.device) -> Tensor[n_paths, d]",
+              "sample_antithetic(n: int, t_n: float, n_paths: int, device: torch.device) -> Tensor[2*n_paths, d]"
+            ]
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/training/annealing.py",
+        "description": "Sigmoid annealing schedule for temperature and entropy coefficient and learning rate",
+        "classes": [
+          {
+            "name": "SigmoidAnnealer",
+            "public_methods": [
+              "get_value(epoch: int, total_epochs: int) -> float"
+            ]
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/utils/config.py",
+        "description": "Config dataclass and YAML loading",
+        "classes": [
+          {
+            "name": "UVMConfig",
+            "public_methods": [
+              "from_yaml(path: str) -> UVMConfig",
+              "to_yaml(path: str) -> None"
+            ]
+          }
+        ]
+      },
+      {
+        "path": "src/spg_uvm/utils/metrics.py",
+        "description": "Price estimators and confidence intervals",
+        "classes": [
+          {
+            "name": "PriceEstimator",
+            "public_methods": [
+              "actor_price_with_ci(payoffs: Tensor, discount: float) -> (float, float, float)",
+              "relative_error(estimate: float, reference: float) -> float"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+
+  "tensor_flow": {
+    "continuous_policy_forward": [
+      "INPUT: x [B, d] — current asset prices (log-normalized)",
+      "x_normed = LayerNorm(x)  → [B, d]",
+      "h = ELU(Linear(x_normed, d, 32))  → [B, 32]",
+      "m_theta = Linear(h, 32, d*(d+1)//2)  → [B, d*(d+1)//2]  (actor mean)",
+      "z ~ N(m_theta, lambda * I)  → [B, d*(d+1)//2]  (reparameterized sample)",
+      "tanh_z = tanh(z)  → [B, d*(d+1)//2]  (all components in (-1,1))",
+      "z_sigma = tanh_z[:, :d]  → [B, d]",
+      "sigma = sigma_mid + sigma_half * z_sigma  → [B, d]  (volatility squashed to bounds)",
+      "z_rho = tanh_z[:, d:]  → [B, d*(d-1)//2]  (partial correlations)",
+      "L = cvine.partial_to_cholesky(z_rho)  → [B, d, d]  (lower-triangular Cholesky factor)",
+      "rho = L @ L.T  → [B, d, d]  (correlation matrix, PSD by construction)",
+      "a = diag(sigma) @ L  → [B, d, d]  (volatility matrix for log-Euler)",
+      "OUTPUT: (sigma [B,d], L [B,d,d], rho [B,d,d], z [B, d*(d+1)//2])"
+    ],
+    "log_euler_step": [
+      "INPUT: x [B,d], a [B,d,d], xi [B,d], dt, r",
+      "aa_T = a @ a.transpose(-1,-2)  → [B,d,d]",
+      "diag_aaT = aa_T.diagonal(dim1=-2, dim2=-1)  → [B,d]  (instantaneous variances)",
+      "drift = (r - 0.5 * diag_aaT) * dt  → [B,d]",
+      "diffusion = (a @ xi.unsqueeze(-1)).squeeze(-1) * sqrt(dt)  → [B,d]",
+      "X_next = x * exp(drift + diffusion)  → [B,d]",
+      "OUTPUT: X_next [B,d]"
+    ],
+    "critic_forward": [
+      "INPUT: x [B,d]",
+      "x_normed = LayerNorm(x)  → [B,d]",
+      "h = ELU(Linear(x_normed, d, 32))  → [B,32]",
+      "v = Linear(h, 32, 1)  → [B,1]",
+      "OUTPUT: v [B,1]  (value estimate)"
+    ],
+    "ppo_update": [
+      "GIVEN: (x, a, xi, z, adv) batch from data collection under theta_old",
+      "m_new = actor_net(x)  → [B, d*(d+1)//2]",
+      "ratio = exp(Gaussian log-ratio using m_new, m_old, z, lambda)  → [B]",
+      "clipped_ratio = clip(ratio, 1-eps, 1+eps)  → [B]",
+      "adv_norm = normalize(adv)  → [B]",
+      "ppo_loss = -mean(min(ratio * adv_norm, clipped_ratio * adv_norm))  (negate for ascent)",
+      "penalty = correlation_penalty(rho_from_m_new)  (scalar)",
+      "total_loss = ppo_loss + beta * penalty",
+      "optimizer_actor.zero_grad(); total_loss.backward(); optimizer_actor.step()"
+    ]
+  },
+
+  "config_schema": {
+    "template_path": "configs/default.yaml",
+    "sections": {
+      "model": {
+        "d": 2,
+        "hidden_units": 32,
+        "policy_type": "continuous",
+        "note": "policy_type: 'continuous' or 'bangbang'"
+      },
+      "uvm_params": {
+        "x0": 100.0,
+        "sigma_min": [0.1],
+        "sigma_max": [0.2],
+        "rho_min": -0.5,
+        "rho_max": 0.5,
+        "T": 1.0,
+        "r": 0.0,
+        "N": 128
+      },
+      "training": {
+        "M": 32768,
+        "minibatch_size": 1024,
+        "E_first": 500,
+        "E_subsequent": 10,
+        "lr_initial": 0.005,
+        "lr_final": 0.0001,
+        "ppo_epsilon": 0.2,
+        "normalize_advantages": true,
+        "antithetic_variates": true,
+        "transfer_learning": true
+      },
+      "exploration": {
+        "lambda_initial": 1.0,
+        "lambda_final": 0.01,
+        "gamma_initial": 0.01,
+        "gamma_final": 0.0,
+        "note_sigmoid": "ASSUMED: sigmoid annealing formula from Figure 1"
+      },
+      "penalty": {
+        "beta": 10,
+        "delta": 0.05,
+        "note": "Only applies to continuous policy, d>=3"
+      },
+      "evaluation": {
+        "n_paths_actor_price": 524288,
+        "confidence_level": 0.95,
+        "reference_price": null
+      },
+      "hardware": {
+        "device": "cuda",
+        "precision": "float32"
+      }
+    }
+  },
+
+  "dependencies": {
+    "requirements": [
+      "torch>=2.0.0",
+      "numpy>=1.24.0",
+      "scipy>=1.10.0",
+      "pyyaml>=6.0",
+      "matplotlib>=3.7.0",
+      "tqdm>=4.65.0"
+    ],
+    "requirements_dev": [
+      "pytest>=7.0",
+      "black>=23.0",
+      "isort>=5.12",
+      "flake8>=6.0",
+      "jupyter>=1.0"
+    ]
+  },
+
+  "entrypoints": {
+    "train": {
+      "file": "train.py",
+      "args": [
+        "--config configs/default.yaml",
+        "--policy {continuous,bangbang}",
+        "--d INT (number of assets)",
+        "--payoff {geo_outperformer, outperformer_spread, best_of_butterfly, geo_call_spread, call_sharpe}",
+        "--device {cuda,cpu}",
+        "--seed INT",
+        "--output_dir STR"
+      ]
+    },
+    "evaluate": {
+      "file": "evaluate.py",
+      "args": [
+        "--checkpoint STR",
+        "--n_paths INT",
+        "--reference_price FLOAT (optional)"
+      ]
+    },
+    "notebook": {
+      "file": "notebooks/spg_uvm_demo.ipynb",
+      "description": "End-to-end demo for 2D geo-outperformer"
+    }
+  },
+
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget", "build-essential"],
+    "workdir": "/workspace",
+    "copy_steps": ["requirements.txt", "src/", "configs/", "train.py", "evaluate.py"],
+    "install_cmd": "pip install -r requirements.txt && pip install -e .",
+    "default_cmd": "python train.py --config configs/default.yaml"
+  },
+
+  "risk_assessment": [
+    {
+      "risk": "C-vine parameterization for d>=4",
+      "severity": "Medium",
+      "description": "Recursive formula referenced but not fully spelled out in paper; must implement from Joe (2006) and JKL (2009) correctly",
+      "mitigation": "Validate output against known d=3 formula given in paper; add unit tests checking PSD and unit diagonal"
+    },
+    {
+      "risk": "Sigmoid annealing exact formula",
+      "severity": "Low",
+      "description": "Confidence 0.72; exact formula not given, only Figure 1 shape described",
+      "mitigation": "Implement as configurable; expose inflection point and steepness as config params"
+    },
+    {
+      "risk": "Adam beta1/beta2 not specified",
+      "severity": "Low",
+      "description": "Confidence 0.85; using PyTorch defaults may slightly differ from paper experiments",
+      "mitigation": "Use defaults; add TODO comment; expose as config"
+    },
+    {
+      "risk": "Path-dependent state augmentation for Call Sharpe",
+      "severity": "Medium",
+      "description": "Requires augmenting state with A1_t and A2_t (accumulated realized vol + last monitoring price); non-trivial state management",
+      "mitigation": "Implement as a StatefulPayoff class with explicit augmented state tensor"
+    },
+    {
+      "risk": "Numerical stability of C-vine when partial correlations near ±1",
+      "severity": "Low",
+      "description": "tanh squashing prevents exact ±1 but large |z| values can cause near-singular L",
+      "mitigation": "Clamp tanh output to (-1+eps, 1-eps) with eps=1e-6"
+    }
+  ]
+}

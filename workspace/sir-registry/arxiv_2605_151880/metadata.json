@@ -1,0 +1,22 @@
+{
+  "paper_id": "arxiv_2605_151880",
+  "title": "FutureSim: Replaying World Events to Evaluate Adaptive Agents",
+  "authors": ["Shashwat Goel", "Nikhil Chandak", "Arvindh Arun", "Ameya Prabhu", "Steffen Staab", "Moritz Hardt", "Maksym Andriushchenko", "Jonas Geiping"],
+  "domain": "NLP/Agents/Benchmarking",
+  "arxiv_id": "2605.15188",
+  "version": 1,
+  "created_at": "2026-05-15T00:00:00Z",
+  "last_updated": "2026-05-15T00:00:00Z",
+  "sir_confidence": 0.85,
+  "stages_with_data": ["sir"],
+  "has_comparison_report": false,
+  "repo_path": "paper-repos/arxiv_2605_151880/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-05-15T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    }
+  ]
+}

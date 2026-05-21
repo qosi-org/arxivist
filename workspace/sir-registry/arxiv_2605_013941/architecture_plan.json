@@ -1,0 +1,453 @@
+{
+  "paper_id": "arxiv_2605_013941",
+  "plan_version": 1,
+  "framework": {
+    "primary": "Python 3.10+",
+    "reasoning": "Paper explicitly uses SQLite/FTS5, sentence-transformers, and LLM API calls — no neural training loop, no GPU requirement. Pure Python orchestration system.",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "huggingface_integration": true,
+    "config_management": "YAML + dataclass",
+    "key_libraries": ["sentence-transformers", "sqlite3 (stdlib)", "anthropic/openai SDK", "rank-bm25", "nltk/sklearn for Jaccard"]
+  },
+
+  "module_hierarchy": {
+    "root": "evolvemem/",
+    "files": [
+      {
+        "path": "src/evolvemem/__init__.py",
+        "classes": [],
+        "exports": ["EvolveMem"]
+      },
+      {
+        "path": "src/evolvemem/memory/store.py",
+        "description": "SQLite-backed typed memory store",
+        "classes": [
+          {
+            "name": "MemoryUnit",
+            "description": "Dataclass for memory tuple m=(c, mu, e, eta)",
+            "public_methods": [
+              "to_dict() -> dict",
+              "from_dict(d: dict) -> MemoryUnit"
+            ]
+          },
+          {
+            "name": "MemoryStore",
+            "description": "SQLite/FTS5 backed store with typed taxonomy",
+            "public_methods": [
+              "__init__(db_path: str, embedding_model: str)",
+              "add(units: List[MemoryUnit]) -> None",
+              "search_bm25(query: str, top_k: int) -> List[MemoryUnit]",
+              "search_semantic(query: str, top_k: int) -> List[MemoryUnit]",
+              "search_structured(query: str, top_k: int) -> List[MemoryUnit]",
+              "get_all() -> List[MemoryUnit]",
+              "size() -> int"
+            ]
+          }
+        ],
+        "sir_mapping": "Layer 1: Structured Memory Store — memory representation and storage"
+      },
+      {
+        "path": "src/evolvemem/memory/extractor.py",
+        "description": "Sliding-window LLM-based memory extractor",
+        "classes": [
+          {
+            "name": "MemoryExtractor",
+            "public_methods": [
+              "__init__(llm_client, window_size: int = 40, sub_window_size: int = 15, max_retries: int = 3)",
+              "extract(conversation: List[dict], existing_memories: List[MemoryUnit] = None) -> List[MemoryUnit]",
+              "extract_targeted(conversation: List[dict], missing_keywords: List[str]) -> List[MemoryUnit]",
+              "_coverage_verify(units: List[MemoryUnit], source_text: str) -> List[str]"
+            ]
+          }
+        ],
+        "sir_mapping": "Layer 1: Memory extraction with retry, chunk-split, coverage verify"
+      },
+      {
+        "path": "src/evolvemem/memory/consolidator.py",
+        "description": "Deduplication, importance decay, entity reinforcement",
+        "classes": [
+          {
+            "name": "Consolidator",
+            "public_methods": [
+              "__init__(tau_j: float = 0.80, alpha_d: float = 0.05, iota_min: float = 0.15, delta_rho: float = 0.05, rho_max: float = 0.30)",
+              "deduplicate(units: List[MemoryUnit]) -> List[MemoryUnit]",
+              "apply_decay(units: List[MemoryUnit], current_time: datetime) -> List[MemoryUnit]",
+              "reinforce_entities(units: List[MemoryUnit], query: str) -> List[MemoryUnit]",
+              "run_all(store: MemoryStore, query: str = None) -> None"
+            ]
+          }
+        ],
+        "sir_mapping": "Layer 1: Consolidation — dedup, decay, reinforcement"
+      },
+      {
+        "path": "src/evolvemem/retrieval/config.py",
+        "description": "RetrievalConfig dataclass — the evolvable action space theta",
+        "classes": [
+          {
+            "name": "RetrievalConfig",
+            "description": "Full theta configuration; all fields clamped to valid ranges",
+            "fields": [
+              "semantic_top_k: int = 0",
+              "keyword_top_k: int = 5",
+              "structured_top_k: int = 0",
+              "max_context: int = 8",
+              "fusion_mode: str = 'sum'",
+              "w_sem: float = 1.0",
+              "w_kw: float = 1.0",
+              "w_str: float = 1.0",
+              "enable_entity_swap: bool = False",
+              "enable_query_decomposition: bool = False",
+              "decomposition_max_subqs: int = 3",
+              "enable_answer_verification: bool = False",
+              "verification_style: str = 'strict'",
+              "answer_style: str = 'concise'",
+              "reflection_rounds: int = 0",
+              "time_decay_half_life_days: float = None",
+              "per_category_overrides: dict = None"
+            ],
+            "public_methods": [
+              "clamp() -> RetrievalConfig",
+              "apply_delta(delta: dict) -> RetrievalConfig",
+              "to_dict() -> dict",
+              "from_dict(d: dict) -> RetrievalConfig"
+            ]
+          }
+        ],
+        "sir_mapping": "Layer 2: Action space theta (Equation 2)"
+      },
+      {
+        "path": "src/evolvemem/retrieval/retriever.py",
+        "description": "Multi-view retriever with fusion",
+        "classes": [
+          {
+            "name": "MultiViewRetriever",
+            "public_methods": [
+              "__init__(store: MemoryStore, config: RetrievalConfig)",
+              "retrieve(query: str, config: RetrievalConfig = None) -> List[MemoryUnit]",
+              "_bm25_search(query: str, top_k: int) -> List[Tuple[MemoryUnit, float]]",
+              "_semantic_search(query: str, top_k: int) -> List[Tuple[MemoryUnit, float]]",
+              "_structured_search(query: str, top_k: int) -> List[Tuple[MemoryUnit, float]]",
+              "_fuse(results_by_view: dict, mode: str) -> List[MemoryUnit]",
+              "_rrf(ranked_lists: List[List[MemoryUnit]], k: int = 60) -> List[MemoryUnit]",
+              "_entity_swap_retrieve(query: str, config: RetrievalConfig) -> List[MemoryUnit]",
+              "_decompose_and_retrieve(query: str, config: RetrievalConfig, llm_client) -> List[MemoryUnit]"
+            ]
+          }
+        ],
+        "sir_mapping": "Layer 2: Multi-view retrieval + entity swap + query decomposition (Eq 1-5, 10-11)"
+      },
+      {
+        "path": "src/evolvemem/retrieval/answer_gen.py",
+        "description": "Answer generation and second-pass verification",
+        "classes": [
+          {
+            "name": "AnswerGenerator",
+            "public_methods": [
+              "__init__(llm_client, config: RetrievalConfig)",
+              "generate(query: str, context: List[MemoryUnit], style: str, category: int = None) -> str",
+              "verify(query: str, context: List[MemoryUnit], candidate: str, style: str) -> str"
+            ]
+          }
+        ],
+        "sir_mapping": "Layer 2: Answer generation and verification (Eq 12-13)"
+      },
+      {
+        "path": "src/evolvemem/evolution/engine.py",
+        "description": "Self-evolution loop — Algorithm 1",
+        "classes": [
+          {
+            "name": "EvolutionEngine",
+            "public_methods": [
+              "__init__(store: MemoryStore, retriever: MultiViewRetriever, answer_gen: AnswerGenerator, diagnosis: DiagnosisModule, config: RetrievalConfig)",
+              "run(qa_pairs: List[dict], max_rounds: int = 7, epsilon: float = 0.005, tau_rev: float = 0.01) -> RetrievalConfig",
+              "_evaluate(qa_pairs: List[dict], config: RetrievalConfig) -> Tuple[float, List[dict]]",
+              "_update(theta_r: RetrievalConfig, delta: dict, f_r: float, f_prev: float, f_star: float) -> RetrievalConfig"
+            ]
+          }
+        ],
+        "sir_mapping": "Layer 3 + Algorithm 1: Self-evolution loop (Eq 3-4)"
+      },
+      {
+        "path": "src/evolvemem/evolution/diagnosis.py",
+        "description": "LLM-powered failure diagnosis module",
+        "classes": [
+          {
+            "name": "DiagnosisModule",
+            "public_methods": [
+              "__init__(llm_client)",
+              "diagnose(raw_log: List[dict], current_config: RetrievalConfig, memory_size: int) -> dict",
+              "_build_failure_summary(raw_log: List[dict]) -> str",
+              "_parse_proposal(response_json: dict) -> dict"
+            ]
+          }
+        ],
+        "sir_mapping": "Layer 3: LLM diagnosis — reads failure logs, proposes Delta_theta (Eq 6 area)"
+      },
+      {
+        "path": "src/evolvemem/evaluation/metrics.py",
+        "description": "Token-level F1 and BLEU-1 scoring",
+        "classes": [
+          {
+            "name": "Evaluator",
+            "public_methods": [
+              "token_f1(prediction: str, reference: str) -> float",
+              "bleu1(prediction: str, reference: str) -> float",
+              "score_qa_set(predictions: List[str], references: List[str]) -> dict"
+            ]
+          }
+        ],
+        "sir_mapping": "Evaluation protocol: token-F1 and BLEU-1 metrics"
+      },
+      {
+        "path": "src/evolvemem/embeddings/encoder.py",
+        "description": "Embedding backends",
+        "classes": [
+          {
+            "name": "EmbedderBase",
+            "public_methods": ["encode(texts: List[str]) -> np.ndarray"]
+          },
+          {
+            "name": "SentenceTransformerEmbedder",
+            "description": "BAAI/bge-base-en-v1.5, 768-dim, batch_size=32",
+            "public_methods": ["encode(texts: List[str]) -> np.ndarray"]
+          },
+          {
+            "name": "HashingEmbedder",
+            "description": "SHA-256 hash-based, 64-dim, zero dependencies",
+            "public_methods": ["encode(texts: List[str]) -> np.ndarray"]
+          }
+        ],
+        "sir_mapping": "Appendix D.2: Embedding backends"
+      },
+      {
+        "path": "src/evolvemem/utils/scope.py",
+        "description": "Hierarchical scope identifier management",
+        "classes": [
+          {
+            "name": "Scope",
+            "public_methods": [
+              "parse(scope_str: str) -> Scope",
+              "base() -> Scope",
+              "matches(other: Scope) -> bool"
+            ]
+          }
+        ],
+        "sir_mapping": "Appendix A: scope hierarchy sigma = user:u | workspace:w | session:s"
+      },
+      {
+        "path": "src/evolvemem/llm/client.py",
+        "description": "Unified LLM client wrapper (OpenAI/Anthropic)",
+        "classes": [
+          {
+            "name": "LLMClient",
+            "public_methods": [
+              "__init__(provider: str, model: str, api_key: str = None)",
+              "complete(messages: List[dict], system: str = None, max_tokens: int = 2048) -> str"
+            ]
+          }
+        ]
+      },
+      {
+        "path": "src/evolvemem/evolvemem.py",
+        "description": "Top-level orchestrator combining all layers",
+        "classes": [
+          {
+            "name": "EvolveMem",
+            "public_methods": [
+              "__init__(config_path: str)",
+              "ingest_sessions(sessions: List[List[dict]]) -> None",
+              "answer(query: str, category: int = None) -> str",
+              "evolve(qa_pairs: List[dict]) -> RetrievalConfig",
+              "save_state(path: str) -> None",
+              "load_state(path: str) -> None"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+
+  "tensor_flow": {
+    "retrieval_forward_pass": {
+      "description": "Multi-view retrieval for a single query",
+      "pseudocode": [
+        "INPUT: query q (str), config theta",
+        "1. bm25_results = BM25.search(q, top_k=theta.keyword_top_k)  → List[(MemoryUnit, score)]",
+        "2. sem_results = cosine_search(embed(q), embeddings, top_k=theta.semantic_top_k)  → List[(MemoryUnit, score)]",
+        "3. str_results = entity_filter(extract_entities(q), store, top_k=theta.structured_top_k)  → List[(MemoryUnit, score)]",
+        "4. if enable_entity_swap: swap_results = BM25+sem search on q_stripped of person names",
+        "5. if enable_query_decomposition: sub_results = union over RRF(sub-query retrievals)",
+        "6. fused = fuse([bm25, sem, str], mode=theta.fusion_mode, weights=[w_kw, w_sem, w_str])",
+        "7. scored = fused_score + lambda_iota*importance + lambda_r*recency + reinforcement",
+        "8. ranked = sort by scored DESC, take top theta.max_context",
+        "OUTPUT: List[MemoryUnit] (len <= max_context)"
+      ]
+    },
+    "evolution_loop": {
+      "pseudocode": [
+        "INPUT: qa_pairs Q, initial config theta_0, memory store K",
+        "f_star = 0; theta_star = theta_0",
+        "FOR r in 0..Rmax:",
+        "  predictions = [answer(q, K, theta_r) for q,y* in Q]",
+        "  f_r = mean([token_f1(pred, ref) for pred, (q,ref) in zip(predictions, Q)])",
+        "  write raw_log L_r to raw_results_{r}.jsonl",
+        "  delta_theta = diagnosis_llm.analyze(L_r, theta_r)",
+        "  IF f_{r-1} - f_r > tau_rev: theta_{r+1} = theta_star  # revert",
+        "  ELIF |f_r - f_{r-1}| < epsilon for 2 rounds: theta_{r+1} = perturb(theta_r)  # explore",
+        "  ELSE: theta_{r+1} = clamp(theta_r + delta_theta)  # apply",
+        "  IF diagnosis detects missing keywords: K += targeted_extract(S, missing_keywords)",
+        "  IF f_r > f_star: f_star = f_r; theta_star = theta_r",
+        "  IF f_r - f_{r-1} < epsilon: BREAK",
+        "OUTPUT: theta_star"
+      ]
+    }
+  },
+
+  "config_schema": {
+    "file": "configs/config.yaml",
+    "template": {
+      "memory": {
+        "db_path": "evolvemem.db",
+        "embedding_model": "BAAI/bge-base-en-v1.5",
+        "embedding_batch_size": 32,
+        "window_size": 40,
+        "sub_window_size": 15,
+        "max_retries": 3,
+        "tau_j": 0.80,
+        "alpha_d": 0.05,
+        "iota_min": 0.15,
+        "delta_rho": 0.05,
+        "rho_max": 0.30,
+        "decay_period_days": 30
+      },
+      "retrieval_initial": {
+        "semantic_top_k": 0,
+        "keyword_top_k": 5,
+        "structured_top_k": 0,
+        "max_context": 8,
+        "fusion_mode": "sum",
+        "enable_entity_swap": false,
+        "enable_query_decomposition": false,
+        "enable_answer_verification": false,
+        "answer_style": "concise"
+      },
+      "evolution": {
+        "max_rounds": 7,
+        "epsilon": 0.005,
+        "tau_rev": 0.01,
+        "rrf_k": 60,
+        "ASSUMED_rrf_k": "Standard default; paper does not specify"
+      },
+      "llm": {
+        "provider": "openai",
+        "extraction_model": "gpt-4o",
+        "answer_model": "gpt-4o",
+        "diagnosis_model": "gpt-4o",
+        "ASSUMED_lambda_iota": 1.0,
+        "ASSUMED_lambda_r": 1.0,
+        "ASSUMED_tau_ver": 0.5
+      }
+    }
+  },
+
+  "dependencies": {
+    "requirements_txt": [
+      "sentence-transformers>=2.7.0",
+      "rank-bm25>=0.2.2",
+      "openai>=1.30.0",
+      "anthropic>=0.28.0",
+      "numpy>=1.26.0",
+      "nltk>=3.8.1",
+      "scikit-learn>=1.4.0",
+      "pyyaml>=6.0.1",
+      "tqdm>=4.66.0",
+      "python-dateutil>=2.9.0"
+    ],
+    "requirements_dev_txt": [
+      "pytest>=8.0.0",
+      "pytest-cov>=5.0.0",
+      "black>=24.0.0",
+      "ruff>=0.4.0",
+      "mypy>=1.10.0"
+    ],
+    "rationale": {
+      "sentence-transformers": "BGE embedding for semantic search",
+      "rank-bm25": "BM25 lexical retrieval",
+      "openai/anthropic": "LLM API calls for extraction, answer gen, diagnosis",
+      "nltk/sklearn": "Tokenization for Jaccard similarity deduplication"
+    }
+  },
+
+  "entrypoints": [
+    {
+      "file": "ingest.py",
+      "description": "Ingest conversation sessions into memory store",
+      "cli_args": ["--sessions-file SESSIONS_FILE (jsonl)", "--db-path DB_PATH", "--config CONFIG_YAML", "--scope SCOPE_STR"]
+    },
+    {
+      "file": "evaluate.py",
+      "description": "Run evaluation on QA benchmark",
+      "cli_args": ["--qa-file QA_FILE (jsonl)", "--db-path DB_PATH", "--config CONFIG_YAML", "--output-dir OUTPUT_DIR", "--benchmark {locomo,membench}"]
+    },
+    {
+      "file": "evolve.py",
+      "description": "Run self-evolution loop on QA set",
+      "cli_args": ["--qa-file QA_FILE", "--db-path DB_PATH", "--config CONFIG_YAML", "--max-rounds MAX_ROUNDS", "--output-config OUTPUT_CONFIG_YAML"]
+    },
+    {
+      "file": "answer.py",
+      "description": "Single-query interactive inference",
+      "cli_args": ["--query QUERY", "--db-path DB_PATH", "--config CONFIG_YAML", "--category {1,2,3,4,5}", "--verbose"]
+    }
+  ],
+
+  "docker_spec": {
+    "base_image": "python:3.11-slim",
+    "system_deps": ["libsqlite3-dev", "curl"],
+    "python_setup": ["pip install -r requirements.txt", "python -m nltk.downloader punkt"],
+    "workdir": "/app",
+    "volumes": ["/app/data", "/app/outputs"],
+    "default_cmd": "python answer.py --help",
+    "notes": "No GPU required — all operations are CPU-only per Appendix E"
+  },
+
+  "risk_assessment": [
+    {
+      "risk": "lambda_iota and lambda_r weights unspecified",
+      "severity": "Medium",
+      "description": "Final ranking formula includes importance and recency weights with no default values given",
+      "mitigation": "Default to 1.0 with config flag; make swappable"
+    },
+    {
+      "risk": "tau_ver (verification threshold) unspecified",
+      "severity": "Medium",
+      "description": "Answer verification trigger condition depends on undefined threshold",
+      "mitigation": "Default 0.5; expose as config param; use 'Unknown'/'not specified' class detection as primary trigger"
+    },
+    {
+      "risk": "Rretry (max retries for extraction) unspecified",
+      "severity": "Low",
+      "description": "Retry count for failed LLM extraction calls not given",
+      "mitigation": "Default 3; make configurable"
+    },
+    {
+      "risk": "RRF smoothing constant k unspecified",
+      "severity": "Low",
+      "description": "RRF formula requires k but paper omits it",
+      "mitigation": "Use standard default k=60"
+    },
+    {
+      "risk": "Diagnosis LLM prompt engineering",
+      "severity": "High",
+      "description": "Quality of self-evolution depends critically on the diagnosis prompt. Paper provides the full prompt in Appendix F but it is highly benchmark-specific and tuned.",
+      "mitigation": "Implement Appendix F prompts verbatim; provide config override for custom prompts"
+    },
+    {
+      "risk": "LoCoMo and MemBench data access",
+      "severity": "Low",
+      "description": "Both benchmarks are publicly available per Appendix E",
+      "mitigation": "Include download scripts; provide mock data for unit tests"
+    }
+  ]
+}

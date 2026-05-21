@@ -1,0 +1,40 @@
+# Debug config: small subset for rapid local testing (< 2 min runtime)
+model:
+  n_qubits: 4
+  reps: 1
+  entanglement: "linear"
+  C: 1.0
+  backend: "GPU"
+  cache_kernel: false
+  probability: true
+
+quantum_smote:
+  enabled: true
+  n_clusters: 3
+  rotation_angle: 0.5
+  minority_ratio: 0.5
+  segmentation_factor: 1.0
+  random_state: 42
+
+data:
+  csv_path: "data/raw/creditcard.csv"
+  n_features: 4
+  score_func: "f_classif"
+  test_size: 0.2
+  random_state: 42
+  max_train_samples: 300   # subsample for debug speed
+
+evaluation:
+  metrics: [accuracy, f1, recall, auc]
+  save_confusion_matrix: false
+  save_roc_curve: false
+  results_dir: "results/"
+  run_classical_baseline: true
+
+hardware:
+  device: "cpu"
+  random_seed: 42
+
+logging:
+  level: "DEBUG"
+  log_file: null

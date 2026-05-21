@@ -1,0 +1,62 @@
+# Configuration for Best-of Butterfly option (Table 2 parameters)
+# Paper: Stochastic Policy Gradient Methods in the Uncertain Volatility Model
+
+model:
+  d: 2
+  hidden_units: 32
+  policy_type: "continuous"
+
+uvm_params:
+  x0: 100.0
+  sigma_min: [0.3, 0.3]       # Modified: wider vol interval
+  sigma_max: [0.5, 0.5]
+  rho_min: 0.3
+  rho_max: 0.5
+  T: 0.25                      # Shorter maturity
+  r: 0.05                      # Non-zero rate
+  N: 128
+
+payoff:
+  name: "best_of_butterfly"
+  K1: 85.0
+  K2: 115.0
+
+training:
+  M: 32768
+  minibatch_size: 1024
+  E_first: 500
+  E_subsequent: 10
+  lr_initial: 0.005
+  lr_final: 0.0001
+  ppo_epsilon: 0.2
+  normalize_advantages: true
+  antithetic_variates: true
+  transfer_learning: true
+  log_every: 10
+  checkpoint_every: 100
+
+exploration:
+  lambda_initial: 1.0
+  lambda_final: 0.01
+  gamma_initial: 0.01
+  gamma_final: 0.0
+  sigmoid_steepness: 0.15
+
+penalty:
+  beta: 10
+  delta: 0.05
+
+evaluation:
+  n_paths_actor_price: 524288
+  confidence_level: 0.95
+  reference_price: 6.70
+
+hardware:
+  device: "cuda"
+  precision: "float32"
+  seed: 42
+  deterministic: false
+
+output:
+  checkpoint_dir: "checkpoints"
+  results_dir: "results"

@@ -1,0 +1,294 @@
+{
+  "paper_id": "arxiv_2605_151880",
+  "version": 1,
+  "provenance": {
+    "title": "FutureSim: Replaying World Events to Evaluate Adaptive Agents",
+    "authors": [
+      "Shashwat Goel", "Nikhil Chandak", "Arvindh Arun",
+      "Ameya Prabhu", "Steffen Staab", "Moritz Hardt",
+      "Maksym Andriushchenko", "Jonas Geiping"
+    ],
+    "affiliations": [
+      "ELLIS Institute Tübingen", "Max Planck Institute for Intelligent Systems",
+      "Institute for AI, University of Stuttgart", "Tübingen AI Center",
+      "University of Tübingen", "University of Southampton"
+    ],
+    "arxiv_id": "2605.15188",
+    "submission_date": "2026-05-14",
+    "abstract": "AI agents are being increasingly deployed in dynamic, open-ended environments that require adapting to new information as it arrives. To efficiently measure this capability for realistic use-cases, we propose building grounded simulations that replay real-world events in the order they occurred. We build FutureSim, where agents forecast world events beyond their knowledge cutoff while interacting with a chronological replay of the world.",
+    "primary_domain": "NLP/Agents/Benchmarking",
+    "key_claims": [
+      "FutureSim replays real-world events chronologically to evaluate long-horizon test-time adaptation in agents",
+      "Best frontier agent (GPT 5.5) achieves only 25% accuracy on world-event forecasting over a 3-month window",
+      "Open-weight frontier models show negative Brier Skill Score — worse than abstaining from prediction",
+      "Memory, agentic search, and inference scaling all provide measurable improvements in the simulation",
+      "The environment supports multi-agent dynamics and is reproducible, unlike live prediction-market evaluations"
+    ],
+    "parsed_at": "2026-05-15T00:00:00Z"
+  },
+  "architecture": {
+    "description": "FutureSim is a simulation environment (not a neural architecture). It consists of: (1) a chronological event replay engine, (2) a forecasting task state manager (CSV-based), (3) a news corpus retrieval system (LanceDB + Qwen3-8B embeddings), and (4) a sandboxed agent execution environment.",
+    "components": [
+      {
+        "name": "Environment Engine",
+        "role": "Manages simulation time progression and state updates",
+        "operations": ["next_day()", "state_update", "question_resolution"],
+        "inputs": "current_date, agent_action",
+        "outputs": "updated_state, resolved_questions, feedback",
+        "confidence": 0.92
+      },
+      {
+        "name": "Task State Manager",
+        "role": "Maintains CSV of forecasting questions with predictions and resolutions",
+        "operations": ["submit_forecast(question_id, outcomes)", "resolve_question(qid, ground_truth)"],
+        "inputs": "question_id, outcome_distribution",
+        "outputs": "updated market.csv",
+        "confidence": 0.95
+      },
+      {
+        "name": "News Corpus (CCNews)",
+        "role": "Date-gated offline snapshot of 7.36M news articles from 141 sources (Jan 2023–Mar 2026)",
+        "operations": ["search_news(query, from_date, to_date)", "date_gating"],
+        "inputs": "search query, date range",
+        "outputs": "5 chunks of 512 tokens per query",
+        "confidence": 0.95
+      },
+      {
+        "name": "Hybrid Retrieval System",
+        "role": "LanceDB-backed semantic + keyword search over CCNews",
+        "operations": ["semantic_search (Qwen3-8B embeddings)", "keyword_search", "date_range_filter"],
+        "inputs": "query string, from_date, to_date",
+        "outputs": "ranked document chunks",
+        "confidence": 0.90
+      },
+      {
+        "name": "Sandbox / Execution Environment",
+        "role": "bwrap-isolated agent execution preventing future information leakage",
+        "operations": ["restrict_network", "date_gate_articles", "block_web_search"],
+        "inputs": "agent process",
+        "outputs": "isolated workspace",
+        "confidence": 0.88
+      },
+      {
+        "name": "Answer Matcher (DeepSeek v3.2)",
+        "role": "LLM-based semantic answer equivalence checker for scoring",
+        "operations": ["resolved_answer_equivalence", "prediction_clustering"],
+        "inputs": "predicted_outcome, ground_truth",
+        "outputs": "Yes/No match, cluster ID",
+        "confidence": 0.90
+      },
+      {
+        "name": "Question Generation Pipeline",
+        "role": "Automated pipeline generating free-form forecasting questions from news articles",
+        "operations": ["LLM question synthesis", "leakage_filter", "resolution_date_repair", "quality_filter"],
+        "inputs": "timestamped news articles",
+        "outputs": "330 forecasting questions with resolution dates and ground truths",
+        "confidence": 0.88
+      }
+    ],
+    "agent_actions": [
+      "submit_forecast(question_id, outcomes)  — register/update probability distribution over ≤5 outcomes",
+      "next_day()  — advance simulation by one day; updates task+context state"
+    ],
+    "confidence": 0.92
+  },
+  "mathematical_spec": {
+    "equations": [
+      {
+        "name": "Brier Skill Score",
+        "latex": "BSS(q) = 1 - \\sum_{o \\in \\Omega_q \\cup \\{y_q\\}} \\left( p_q(o) - \\mathbf{1}[o = y_q] \\right)^2",
+        "role": "Primary evaluation metric; proper scoring rule for subdistributions over free-form outcomes",
+        "range": "[-1, 1]; 1=perfect confident correct, 0=abstain, -1=all mass on wrong answer",
+        "symbols": {
+          "q": "forecasting question",
+          "Omega_q": "set of outcomes submitted by agent for question q",
+          "y_q": "ground-truth answer",
+          "p_q(o)": "probability assigned to outcome o (0 if not in Omega_q)",
+          "1[o=y_q]": "indicator that outcome o matches ground truth"
+        },
+        "confidence": 0.98
+      },
+      {
+        "name": "Top-1 Accuracy",
+        "latex": "Acc = \\frac{1}{|Q|} \\sum_{q \\in Q} \\mathbf{1}\\left[ \\arg\\max_o p_q(o) = y_q \\right]",
+        "role": "Secondary metric; fraction of questions where top predicted outcome is correct",
+        "confidence": 0.98
+      },
+      {
+        "name": "Time-Weighted Score",
+        "latex": "TW = 100 \\sum_{q \\in Q} \\frac{1}{|T_q|} \\sum_{t \\in T_q} BSS_t(q)",
+        "role": "Rewards early accurate predictions; penalizes early confident wrong predictions",
+        "symbols": {
+          "T_q": "set of days question q is open",
+          "BSS_t(q)": "Brier Skill Score of prediction held on day t (0 if no forecast submitted)"
+        },
+        "confidence": 0.95
+      },
+      {
+        "name": "Time-Weighted Peer Score (multi-agent)",
+        "latex": "TWPeer_a = 100 \\sum_{q \\in Q} \\frac{1}{|T_q|} \\sum_{t \\in T_q} \\left( BSS_{a,t}(q) - BSS_{-a,t}(q) \\right)",
+        "role": "Relative scoring in multi-agent setting; compares each agent to others on same question",
+        "confidence": 0.92
+      },
+      {
+        "name": "Aggregate Prediction (multi-agent)",
+        "latex": "\\bar{p}_q(o) = \\frac{1}{n_q} \\sum_{a=1}^{n_q} p_q^{(a)}(o)",
+        "role": "Coordinate-wise mean of agent forecasts, exposed as crowd aggregate each day",
+        "confidence": 0.93
+      },
+      {
+        "name": "Total Variation Distance (multi-agent divergence)",
+        "latex": "d_{TV}(p_q, p'_q) = \\frac{1}{2} \\sum_{o \\in \\Omega_q \\cup \\Omega'_q} |p_q(o) - p'_q(o)|",
+        "role": "Measures divergence between agent predictions over time",
+        "confidence": 0.92
+      }
+    ],
+    "properness_proof": "BSS is proven strictly proper for subdistributions (Theorem C.1 in paper); expected score uniquely maximized when p = pi_bar (projection of true belief onto reported outcome set)",
+    "confidence": 0.96
+  },
+  "tensor_semantics": {
+    "note": "FutureSim is a simulation environment, not a deep learning model. Tensor semantics apply to the retrieval embedding component.",
+    "embeddings": {
+      "model": "Qwen3 Embedding 8B",
+      "chunk_size": 512,
+      "chunks_returned_per_query": 5,
+      "training_cutoff": "mid-2025 (does not embed future events)"
+    },
+    "confidence": 0.75
+  },
+  "training_pipeline": {
+    "note": "No training pipeline — FutureSim is a benchmarking/simulation framework, not a trained model. Agents are evaluated at inference time only.",
+    "question_generation": {
+      "source": "Al Jazeera articles from CCNews, Q1 2026",
+      "initial_pool": "10,000+ articles",
+      "final_questions": 330,
+      "yield_rate": "~3%",
+      "resolution_window": "January 1 – March 28, 2026",
+      "steps": [
+        "LLM generates free-form short-answer question from timestamped article",
+        "Leakage filter: remove if answerable before Jan 1 2026 (GPT 5.5 + web search judges)",
+        "Difficulty filter: remove if too stale/easy or if still unanswerable as of April 2026",
+        "Resolution date repair: set to earliest date answer could be confidently inferred"
+      ]
+    },
+    "confidence": 0.85
+  },
+  "evaluation_protocol": {
+    "benchmark_period": "January 1 – March 28, 2026 (88 simulation days)",
+    "num_questions": 330,
+    "resolution_distribution": {
+      "January": 122,
+      "February": 92,
+      "March": 116
+    },
+    "topic_distribution": {
+      "International Politics & Diplomacy": "27.6%",
+      "Conflict & War": "23.6%",
+      "Sports": "22.7%",
+      "Crime & Justice": "7.9%",
+      "US Politics": "6.1%",
+      "Disasters & Accidents": "4.2%",
+      "Other": "7.9%"
+    },
+    "agents_evaluated": [
+      {"name": "GPT 5.5", "harness": "Codex", "accuracy": 0.25, "brier_skill_score": 0.05},
+      {"name": "Claude Opus 4.6", "harness": "Claude Code", "accuracy": 0.20, "brier_skill_score": 0.02},
+      {"name": "DeepSeek V4 Pro", "harness": "Claude Code", "accuracy": 0.13, "brier_skill_score": -0.02},
+      {"name": "GLM 5.1", "harness": "Claude Code", "accuracy": 0.10, "brier_skill_score": -0.01},
+      {"name": "Qwen 3.6 Plus", "harness": "OpenCode", "accuracy": 0.05, "brier_skill_score": -0.07}
+    ],
+    "harness_versions": {
+      "Claude Code": "2.1.132",
+      "Codex": "0.125.0",
+      "OpenCode": "1.4.11"
+    },
+    "answer_matcher": "DeepSeek V3.2",
+    "seeds": 3,
+    "total_tokens_consumed": ">10M unique tokens",
+    "tool_calls_range": "500–4000+",
+    "key_ablations": [
+      "Test-time adaptation: fix initial predictions to worst agent, compare improvement",
+      "Memory ablation: remove write access to memory files",
+      "Search ablation: daily context updates vs. frozen corpus vs. single query vs. agentic search",
+      "Inference scaling: GPT 5.5 at none/low/medium/high/xhigh reasoning effort",
+      "Multi-agent: 3 simultaneous DeepSeek V3.2 agents with shared aggregate prediction"
+    ],
+    "reported_results": {
+      "agentic_search_vs_single_query_accuracy": "31.2% vs 14.2% (one day before resolution)",
+      "daily_context_updates_vs_frozen_accuracy": "24.8% vs 17.9%",
+      "memory_benefit": "All 3 tested models perform worse without memory (qualitative traces show storage of post-resolution feedback)",
+      "inference_scaling": "Consistent improvement from none → high reasoning effort; diminishing returns at xhigh"
+    },
+    "confidence": 0.97
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "LanceDB version not specified; assumed latest stable compatible with Qwen3-8B embedding dimension",
+      "basis": "Common practice for vector DB integration",
+      "confidence": 0.70,
+      "alternatives": ["FAISS", "ChromaDB", "Weaviate"]
+    },
+    {
+      "assumption": "Qwen3 Embedding 8B produces fixed-size embeddings (likely 4096-dim based on model size)",
+      "basis": "Inferred from model architecture; paper does not state embedding dimension",
+      "confidence": 0.62,
+      "alternatives": ["1024-dim", "2048-dim"]
+    },
+    {
+      "assumption": "Hybrid retrieval weights for semantic vs keyword search not specified; assume equal weighting or LanceDB default",
+      "basis": "Paper says 'hybrid semantic + keyword search' without specifying fusion method",
+      "confidence": 0.55,
+      "alternatives": ["weighted sum", "reciprocal rank fusion", "learned combination"]
+    },
+    {
+      "assumption": "bwrap sandbox configuration details beyond described rules inferred from standard practice",
+      "basis": "Paper describes high-level sandboxing rules; implementation details in appendix are partial",
+      "confidence": 0.72,
+      "alternatives": ["Docker isolation", "firejail", "nsjail"]
+    },
+    {
+      "assumption": "CCNews articles stored as JSONL files organized by date (articles/YYYY/MM/DD/articles.jsonl)",
+      "basis": "Explicitly stated in prompt templates (Appendix E.1)",
+      "confidence": 0.95,
+      "alternatives": []
+    },
+    {
+      "assumption": "DeepSeek V3.2 answer matching prompt temperature set to 0 (deterministic) for reproducibility",
+      "basis": "Standard practice for evaluation judges; not specified in paper",
+      "confidence": 0.75,
+      "alternatives": ["temperature=0.1", "majority vote over 3 samples"]
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 4.1, Search Corpus",
+      "description": "Exact LanceDB version, embedding dimension, and hybrid retrieval fusion method not specified",
+      "primary_assumption": "Latest stable LanceDB, Qwen3-8B default embedding dim, equal weight fusion",
+      "alternatives": ["Different fusion strategies", "Re-ranking step"],
+      "confidence": 0.60
+    },
+    {
+      "location": "Appendix B.3",
+      "description": "Full bwrap configuration flags not provided; only high-level sandboxing behavior described",
+      "primary_assumption": "Standard namespace isolation with bind mounts for article directories",
+      "alternatives": ["Full network namespace", "User namespace remapping"],
+      "confidence": 0.65
+    },
+    {
+      "location": "Section 4.1",
+      "description": "Outcome set size limit of ≤5 per question enforced at answer-matching time, unclear if enforced at submission time",
+      "primary_assumption": "Enforced at submission time via environment validation",
+      "alternatives": ["Truncation at evaluation time"],
+      "confidence": 0.70
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.90,
+    "mathematical_spec": 0.96,
+    "tensor_semantics": 0.75,
+    "training_pipeline": 0.85,
+    "evaluation_protocol": 0.97,
+    "implementation_assumptions": 0.68,
+    "overall_sir_confidence": 0.85
+  }
+}

@@ -1,0 +1,10 @@
+Metadata-Version: 2.1
+Name: geomherd
+Version: 0.1.0
+Summary: GeomHerd: Forward-looking Herding Quantification via Ricci Flow Geometry
+Home-page: https://arxiv.org/abs/2605.11645
+Author: Lake Yang et al.
+Requires-Python: >=3.10
+Provides-Extra: dev
+Provides-Extra: forecasting
+Provides-Extra: llm

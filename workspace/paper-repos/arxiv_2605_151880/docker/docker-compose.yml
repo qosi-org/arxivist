@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  simulation:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ./data:/workspace/data
+      - ./configs:/workspace/configs
+      - ./results:/workspace/results
+      - ./agent_workspace:/workspace/agent_workspace
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    command: python run_simulation.py --config configs/config.yaml --agent native --seed 0
+
+  build_index:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ./data:/workspace/data
+    command: python build_index.py --corpus-path data/ccnews/ --index-path data/lancedb_index/
+
+  notebook:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/workspace/notebooks
+      - ./src:/workspace/src
+      - ./data:/workspace/data
+    command: jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --notebook-dir=/workspace/notebooks

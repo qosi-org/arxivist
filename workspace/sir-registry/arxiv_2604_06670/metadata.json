@@ -1,0 +1,12 @@
+{
+  "paper_id": "arxiv_2604_06670",
+  "arxiv_id": "2605.06670",
+  "title": "Stochastic Policy Gradient Methods in the Uncertain Volatility Model",
+  "authors": ["Abbas-Turki L.A.", "Chassagneux J.-F.", "Lemor J.-P.", "Loeper G.", "Sananes S."],
+  "sir_version": 1,
+  "created_at": "2026-05-15T00:00:00Z",
+  "sir_path": "sir-registry/arxiv_2604_06670/sir.json",
+  "overall_confidence": 0.90,
+  "human_review_required": false,
+  "comparison_data_exists": false
+}

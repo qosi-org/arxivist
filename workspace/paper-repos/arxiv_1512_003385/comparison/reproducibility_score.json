@@ -1,0 +1,72 @@
+{
+  "paper_id": "arxiv_1512_003385",
+  "comparison_date": "2026-05-19T10:30:00Z",
+  "arxivist_sir_version": 1,
+  "reproducibility_score": 0.96,
+  "score_confidence": "medium",
+  "score_confidence_reason": "Only one of five paper-reported variants was trained. Score on the matched metric is excellent but the breadth of evidence is narrow.",
+  "score_breakdown": {
+    "base_score_from_matched_metrics": 0.966,
+    "sir_confidence_penalty": 0.026,
+    "unmatched_penalty": 0.0,
+    "score_formula": "max(0, base - sir_penalty - unmatched_penalty); unmatched_penalty waived because the four unmatched variants were intentionally not run, not failed."
+  },
+  "metrics_compared": 1,
+  "metrics_matched": 1,
+  "metric_comparisons": [
+    {
+      "metric": "test_error_rate_percent",
+      "dataset": "CIFAR-10",
+      "split": "test",
+      "paper_value": 8.75,
+      "user_value": 8.6,
+      "absolute_deviation": -0.15,
+      "deviation_pct": -1.7142857142857142,
+      "direction": "below",
+      "severity": "excellent",
+      "root_causes": []
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 1,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0,
+    "unmatched": 4
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 3,
+    "omission": 0
+  },
+  "hallucinations": {
+    "structural": [],
+    "parametric": [
+      {
+        "hyperparameter": "data.mean_subtraction",
+        "assumed_value": "per_pixel",
+        "severity": "Minor",
+        "evidence": "Paper says 'per-pixel mean subtracted'; per-channel is a documented alternative interpretation. SIR confidence 0.75.",
+        "suggested_fix": "Already exposed as a config flag. Ablate with --override data.mean_subtraction=per_channel if the deviation grows on deeper variants."
+      },
+      {
+        "hyperparameter": "training.apply_wd_to_bn",
+        "assumed_value": false,
+        "severity": "Minor",
+        "evidence": "Paper does not state whether weight decay applies to BN parameters. Excluding them is the modern convention. SIR ambiguities[1] confidence 0.70.",
+        "suggested_fix": "Already exposed as a config flag. Ablate with --override training.apply_wd_to_bn=true if results degrade."
+      },
+      {
+        "hyperparameter": "init",
+        "assumed_value": "kaiming_normal_fan_in_relu",
+        "severity": "Minor",
+        "evidence": "Paper cites He et al. 2015 PReLU paper for initialization. fan_in with ReLU nonlinearity is the documented variant; SIR confidence 0.90.",
+        "suggested_fix": "No action needed — the current value matches what the cited reference specifies."
+      }
+    ],
+    "omission": []
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": false
+}

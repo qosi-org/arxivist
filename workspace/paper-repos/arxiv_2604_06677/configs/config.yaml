@@ -1,0 +1,62 @@
+# Configuration for stochastic_clock_barriers
+# Matches parameters from Section 6 (Tables 6.1-6.12) of arXiv:2605.06677v1
+
+contract:
+  S0:  100.0       # Table 6.1
+  K:   100.0       # ATM
+  H:   130.0       # Upper barrier
+  L:   70.0        # Lower barrier
+  T:   1.0         # Maturity (also run T=0.25)
+  r:   0.03        # Risk-free rate
+  q:   0.0         # Dividend yield
+
+clock:
+  family: "cir"    # "cir" or "sq_ou"
+  rho:    0.0      # Return-volatility correlation (rho=0 for independent clock)
+
+  cir:
+    # Regime 1 (moderate volatility) — Section 6.2.1
+    v0:    0.18
+    kappa: 0.6
+    theta: 0.20
+    xi:    0.4
+    # Regime 2 (stressed) — uncomment to use:
+    # v0:    0.48
+    # kappa: 0.5
+    # theta: 0.45
+    # xi:    0.6
+
+  sq_ou:
+    # Regime 1 — Section 6.2.2
+    Y0:    0.4243   # sqrt(0.18)
+    alpha: 0.6
+    sigma: 0.490
+    # Regime 2 — uncomment:
+    # Y0:    0.6928  # sqrt(0.48)
+    # alpha: 0.5
+    # sigma: 0.671
+
+pricing:
+  single_barrier:
+    n_quad:   200
+    quad_tol: 1.0e-10
+
+  double_barrier:
+    n_series_terms: 100   # Convergence O(1/n^2); 50-100 sufficient
+
+  leverage:
+    expansion_order: 5    # Order 5 used in Section 6.3.3 (Table 6.9)
+    pade_type: "[3/2]"    # Best Padé in Table 6.11
+    n_paths_duhamel: 100000   # Section 6.3.1
+
+monte_carlo:
+  n_paths:           1000000  # 10^6 paths (Section 6.1)
+  n_steps_per_year:  2080     # 8 observations/day × 260 days
+  bridge_correction: true     # Broadie-Glasserman-Kou (1997)
+  seed:              42
+
+calibration:
+  optimizer:             "L-BFGS-B"
+  vanilla_weight:        1.0
+  barrier_weight:        0.5   # Typically 0.3-0.5 (Section 7.4)
+  regularization_lambda: 0.001  # Section 7.2.3

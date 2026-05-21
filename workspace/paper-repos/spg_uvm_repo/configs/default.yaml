@@ -1,0 +1,71 @@
+# SPG-UVM Configuration
+# Paper: Stochastic Policy Gradient Methods in the Uncertain Volatility Model
+# arXiv: 2605.06670
+# All values from paper unless marked ASSUMED.
+
+model:
+  d: 2                          # Number of risky assets (confidence: 1.0)
+  hidden_units: 32              # Neurons in actor/critic hidden layer (confidence: 0.95)
+  policy_type: "continuous"     # "continuous" (squashed Gaussian) or "bangbang" (Bernoulli)
+
+uvm_params:
+  x0: 100.0                     # Initial asset price (all assets same) (confidence: 1.0)
+  sigma_min: [0.1, 0.1]        # Per-asset minimum volatility (confidence: 1.0)
+  sigma_max: [0.2, 0.2]        # Per-asset maximum volatility (confidence: 1.0)
+  rho_min: -0.5                 # Pairwise correlation lower bound (confidence: 1.0)
+  rho_max: 0.5                  # Pairwise correlation upper bound (confidence: 1.0)
+  T: 1.0                        # Time to maturity (years) (confidence: 1.0)
+  r: 0.0                        # Risk-free rate (confidence: 1.0)
+  N: 128                        # Number of time steps (confidence: 1.0; N=128 for uncertain corr.)
+
+payoff:
+  name: "geo_outperformer"      # Options: geo_outperformer, outperformer_spread, best_of_butterfly,
+                                 #          geo_call_spread, call_sharpe
+  K1: 90.0                      # Strike 1 (for spread/butterfly options)
+  K2: 110.0                     # Strike 2 (for spread/butterfly options)
+
+training:
+  M: 32768                      # Monte Carlo paths per epoch = 2^15 (confidence: 0.97)
+  minibatch_size: 1024          # Minibatch size = 2^10 (confidence: 0.97)
+  E_first: 500                  # Epochs for first time step n=N-1 (confidence: 0.95)
+  E_subsequent: 10              # Epochs for steps n<=N-2 (with transfer learning) (confidence: 0.95)
+  lr_initial: 0.005             # Initial learning rate (confidence: 0.91)
+  lr_final: 0.0001              # Final learning rate (confidence: 0.91)
+  ppo_epsilon: 0.2              # PPO clipping parameter (confidence: 0.97)
+  normalize_advantages: true    # Zero-mean unit-var advantage normalization (confidence: 0.97)
+  antithetic_variates: true     # Use xi and -xi jointly (doubles effective batch) (confidence: 0.97)
+  transfer_learning: true       # Initialize step n from step n+1 weights (confidence: 0.97)
+  log_every: 10                 # Log metrics every N epochs
+  checkpoint_every: 100         # Save checkpoint every N time steps
+
+exploration:
+  # Continuous policy: temperature lambda annealed from lambda_initial to lambda_final
+  lambda_initial: 1.0           # Initial Gaussian latent std (confidence: 0.85)
+  lambda_final: 0.01            # Final Gaussian latent std (confidence: 0.85)
+  # Bang-bang policy: entropy coefficient gamma annealed from gamma_initial to 0
+  gamma_initial: 0.01           # Initial entropy coefficient (confidence: 0.82)
+  gamma_final: 0.0              # Final entropy coefficient (confidence: 0.82)
+  # Sigmoid schedule parameters (ASSUMED from Figure 1; not explicitly stated in paper)
+  sigmoid_steepness: 0.15       # ASSUMED: controls slope of sigmoid transition
+  # Both lr and exploration param share the same sigmoid schedule (confidence: 0.91)
+
+penalty:
+  beta: 10                      # Penalty weight for correlation bound violations (confidence: 0.97)
+  delta: 0.05                   # Huber function threshold (confidence: 0.97)
+  # Applied only to continuous policy with d >= 3 (confidence: 0.97)
+  # Evaluated at mean action TUVM(m_theta(x)) only, not stochastic samples (confidence: 0.97)
+
+evaluation:
+  n_paths_actor_price: 524288   # MC paths for actor price estimate = 2^19 (confidence: 0.97)
+  confidence_level: 0.95        # For confidence interval reporting (confidence: 1.0)
+  reference_price: null         # Optional: set to known reference for relative error
+
+hardware:
+  device: "cuda"                # "cuda" or "cpu"
+  precision: "float32"          # float32 (mixed precision not used in paper) (confidence: 0.85)
+  seed: 42                      # Random seed (ASSUMED: not specified in paper)
+  deterministic: false          # Set true for full reproducibility (slower)
+
+output:
+  checkpoint_dir: "checkpoints"
+  results_dir: "results"

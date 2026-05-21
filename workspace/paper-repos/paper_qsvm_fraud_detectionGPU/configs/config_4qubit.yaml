@@ -1,0 +1,41 @@
+# Ablation config: 4-qubit QSVM (reproduces Table II row)
+# Inherits all defaults from config.yaml; overrides only differ fields.
+
+model:
+  n_qubits: 4
+  reps: 2
+  entanglement: "full"
+  C: 1.0
+  backend: "GPU"
+  cache_kernel: true
+  probability: true
+
+quantum_smote:
+  enabled: true
+  n_clusters: 5
+  rotation_angle: 0.5
+  minority_ratio: 0.5
+  segmentation_factor: 1.0
+  random_state: 42
+
+data:
+  csv_path: "data/raw/creditcard.csv"
+  n_features: 4
+  score_func: "f_classif"
+  test_size: 0.2
+  random_state: 42
+
+evaluation:
+  metrics: [accuracy, f1, recall, precision, auc]
+  save_confusion_matrix: true
+  save_roc_curve: true
+  results_dir: "results/"
+  run_classical_baseline: true
+
+hardware:
+  device: "cpu"
+  random_seed: 42
+
+logging:
+  level: "INFO"
+  log_file: "results/train_4qubit.log"

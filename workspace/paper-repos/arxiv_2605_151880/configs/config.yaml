@@ -1,0 +1,43 @@
+simulation:
+  start_date: "2025-12-24"           # Paper: agents active from Dec 24 2025
+  end_date: "2026-03-28"             # Paper: 88-day simulation window
+  timegap_days: 1                    # Daily cadence (Section 3.1)
+  max_outcomes_per_question: 5       # CONFIRMED Section 4.1: "≤ 5 per question"
+  seeds: [0, 1, 2]                   # CONFIRMED Section 4.1: "3 seeds"
+
+corpus:
+  ccnews_path: "data/ccnews/"        # CCNews JSONL articles organized by date
+  index_path: "data/lancedb_index/"  # LanceDB hybrid search index
+  chunk_size: 512                    # CONFIRMED Section 4.1: "5 chunks of 512 tokens"
+  chunks_per_query: 5                # CONFIRMED Section 4.1
+  embedding_model: "Qwen/Qwen3-Embedding-8B"  # CONFIRMED Section 4.1
+  # ASSUMED: embedding_dim not stated; likely 4096 based on Qwen3-8B architecture
+
+questions:
+  questions_path: "data/questions.csv"
+  source: "Al Jazeera / CCNews Q1 2026"   # CONFIRMED Appendix A.1
+  answer_matcher_model: "deepseek-chat"    # DeepSeek V3.2; CONFIRMED Section 4.1
+  answer_matcher_base_url: "https://api.deepseek.com"
+  match_cache_path: "data/match_cache.json"
+
+scoring:
+  metric: "brier_skill_score"
+  also_compute:
+    - accuracy
+    - time_weighted
+
+sandbox:
+  use_bwrap: true           # CONFIRMED Appendix B.3: "we sandbox them carefully using bwrap"
+  block_network: true       # CONFIRMED Appendix B.3: "no live web search"
+  workspace_path: "agent_workspace/"
+  # ASSUMED: full bwrap args; paper only describes high-level behavior
+
+harness:
+  type: "native"            # "native" or "custom" (our baseline harness)
+  max_actions: 200          # ASSUMED: not specified in paper
+  max_total_tokens: 200000  # ASSUMED: context window management
+
+hardware:
+  device: "cuda"
+  embedding_gpu: true
+  num_workers: 4

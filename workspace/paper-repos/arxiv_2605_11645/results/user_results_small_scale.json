@@ -1,0 +1,29 @@
+{
+  "run_config": {
+    "N_agents": 40,
+    "T_steps": 300,
+    "kappa_values": [
+      0.5,
+      1.2
+    ],
+    "seeds_per_kappa": 20,
+    "total_trajectories": 40,
+    "note": "Small-scale run; proxy curvature (mean edge weight) used instead of LP-W1 ORC due to POT not available in CI"
+  },
+  "geomherd_kappa_plus_recall": {
+    "precision": 0.0,
+    "recall_super": 0.0,
+    "far_sub": 0.0,
+    "median_lead": NaN,
+    "n_paired": 0,
+    "ci_lower": NaN,
+    "ci_upper": NaN
+  },
+  "geomherd_kappa_plus_precision": {
+    "precision": 0.0,
+    "recall_super": 0.0,
+    "far_sub": 0.0,
+    "median_lead": NaN,
+    "n_paired": 0
+  }
+}

@@ -1,0 +1,56 @@
+# ============================================================
+# QSVM Fraud Detection — Primary Configuration
+# Paper: "Quantum Support Vector Machine for Fraud Detection"
+# Ren & Zhang, IEEE CCPQT 2025
+# DOI: 10.1109/CCPQT66408.2025.11383198
+# ArXivist SIR confidence: 0.77
+# ============================================================
+
+model:
+  n_qubits: 10            # Paper Table I/II: primary config; tested 4, 8, 10 (confidence: 0.97)
+  reps: 2                 # ASSUMED: Qiskit ZZFeatureMap default (confidence: 0.60) — TODO: verify
+  entanglement: "full"    # ASSUMED: Qiskit ZZFeatureMap default (confidence: 0.60) — TODO: verify
+  C: 1.0                  # ASSUMED: sklearn SVC default — not stated in paper (confidence: 0.65)
+  backend: "GPU"  # ASSUMED: ideal simulation, not real HW (confidence: 0.85)
+  cache_kernel: true      # Caches K_train.npy / K_test.npy to avoid O(N^2) recomputation
+  probability: true       # Enable predict_proba() via SVC Platt scaling (for AUC computation)
+
+quantum_smote:
+  enabled: true           # Set false to use undersampling baseline instead
+  n_clusters: 5           # ASSUMED: common KMeans default — not stated in paper (confidence: 0.45)
+  rotation_angle: 0.5     # ASSUMED: mid-range — paper lists as hyperparameter, gives no value (confidence: 0.45)
+  minority_ratio: 0.5     # ASSUMED: target 50/50 balance (confidence: 0.45)
+  segmentation_factor: 1.0  # ASSUMED: no scaling (confidence: 0.45)
+  random_state: 42
+
+data:
+  csv_path: "data/raw/creditcard.csv"
+  n_features: 10          # Explicitly stated in paper: top-10 KBest (confidence: 0.90)
+  score_func: "f_classif" # ASSUMED: standard for binary classif — paper says KBest, not which score (confidence: 0.60)
+  test_size: 0.2          # ASSUMED: 80/20 stratified split — not stated in paper (confidence: 0.55)
+  random_state: 42
+  # Undersampling baseline parameters (used when quantum_smote.enabled=false):
+  undersample_majority_n: 300   # Paper: "randomly assigning 300 non-fraudulent samples"
+  undersample_first_n: 15000    # Paper: "selecting the first 15,000 samples"
+
+evaluation:
+  metrics:
+    - accuracy
+    - f1
+    - recall
+    - precision
+    - auc
+  save_confusion_matrix: true
+  save_roc_curve: true
+  results_dir: "results/"
+  run_classical_baseline: true
+  ablation_qubits: [4, 8, 10]   # Reproduces Table II
+
+hardware:
+  device: "cpu"           # No CUDA required — all quantum sim is CPU-based
+  random_seed: 42
+  num_workers: 1
+
+logging:
+  level: "INFO"
+  log_file: "results/train.log"

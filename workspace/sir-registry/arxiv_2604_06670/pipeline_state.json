@@ -1,0 +1,24 @@
+{
+  "paper_id": "arxiv_2604_06670",
+  "paper_title": "Stochastic Policy Gradient Methods in the Uncertain Volatility Model",
+  "current_stage": 6,
+  "stages_completed": [1, 2, 3, 4, 5],
+  "sir_path": "sir-registry/arxiv_2604_06670/sir.json",
+  "repo_path": "paper-repos/arxiv_2604_06670/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2604_06670/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2604_06670/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2604_06670/notebooks/reproduce_arxiv_2604_06670.ipynb",
+    "comparison_report": null
+  },
+  "confidence_flags": {
+    "sigmoid_annealing": 0.72,
+    "adam_betas": 0.85,
+    "cvine_d4_plus": 0.88
+  },
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-15T00:00:00Z",
+  "last_updated": "2026-05-15T00:00:02Z"
+}

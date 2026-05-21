@@ -1,0 +1,54 @@
+data:
+  # Path to the Telco CSV. If file is at repo root use the filename below.
+  raw_csv_path: WA_Fn-UseC_-Telco-Customer-Churn.csv
+  target_column: Churn
+  drop_columns:
+    - customerID
+  test_size: 0.2
+  random_state: 42
+  correlation_threshold: 0.9
+
+clustering:
+  n_clusters: 3
+  init: k-means++
+  n_init: 10
+  random_state: 42
+
+quantum_smote:
+  target_pct: 50
+  split_factor: 5
+  rotation_axis: X
+  angle_increment: 0.0174533
+  use_statevector: true
+  shots: 1024
+  statevector_extraction_strategy: first_F
+
+classifiers:
+  random_forest:
+    n_estimators: 100
+    random_state: 42
+  logistic_regression:
+    solver: lbfgs
+    max_iter: 1000
+    C: 1.0
+    random_state: 42
+
+evaluation:
+  metrics:
+    - accuracy
+    - f1
+    - pr_auc
+    - roc_auc
+    - confusion_matrix
+  average: binary
+  pos_label: 1
+
+output:
+  results_dir: results/
+  figures_dir: results/figures/
+  save_synthetic_data: true
+  synthetic_data_path: results/synthetic_minority.csv
+
+logging:
+  level: INFO
+  save_dir: results/logs/

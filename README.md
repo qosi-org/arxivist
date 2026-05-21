@@ -1,6 +1,6 @@
 # ArXivist 
 
-**ArXivist** converts scientific papers into fully executable, reproducible codebases - automatically, using a multi-agent workflow.
+**ArXivist** converts scientific papers into fully executable, reproducible codebases — automatically.
 
 Point it at an arXiv URL, a DOI, or a PDF. ArXivist reads the paper, extracts every architectural
 decision, equation, training detail, and evaluation protocol into a structured machine-readable
@@ -14,10 +14,10 @@ Built by [QOSI](https://github.com/qosi-org).
 
 ## The problem
 
-Reproducing a machine learning paper takes weeks. The gap between reading a paper and having
-working code is filled with undocumented hyperparameters, ambiguous architecture descriptions,
-missing preprocessing steps, and implementation decisions the authors never wrote down. Most
-papers are never reproduced at all.
+Reproducing a research paper takes weeks. The gap between reading a paper and having working code
+is filled with undocumented hyperparameters, ambiguous architecture descriptions, missing
+preprocessing steps, and implementation decisions the authors never wrote down. Most papers are
+never reproduced at all.
 
 ArXivist exists to close that gap.
 
@@ -40,7 +40,9 @@ Paper (PDF / arXiv URL / DOI)
 │  graph, equations in LaTeX, tensor   │
 │  shapes, training pipeline, eval     │
 │  protocol, and confidence scores.    │
-│  Every ambiguity is flagged.         │
+│  Every ambiguity is explicitly       │
+│  flagged — nothing is silently       │
+│  guessed.                            │
 └─────────────────┬────────────────────┘
                   │
                   ▼
@@ -84,7 +86,7 @@ Paper (PDF / arXiv URL / DOI)
 │                                      │
 │  Produces a runnable Jupyter         │
 │  notebook: component walkthroughs,   │
-│  equations rendered inline, and a   │
+│  equations rendered inline, and a    │
 │  mini training loop on synthetic     │
 │  data — no downloads required.       │
 └─────────────────┬────────────────────┘
@@ -150,26 +152,20 @@ machine-readable abstraction of a paper's entire implementation surface.
 
 The SIR is not a summary. It is a complete engineering specification extracted from prose:
 
-- **Architecture graph** — every named module, its input/output tensor shapes, and the
-  directed connections between them
-- **Mathematical spec** — every equation in LaTeX, named, categorised, and linked to its
-  role in training or inference
+- **Architecture graph** — every named module, its input/output tensor shapes, and the directed connections between them
+- **Mathematical spec** — every equation in LaTeX, named, categorised, and linked to its role in training or inference
 - **Tensor semantics** — shape notation, dtype, and role for every major tensor
-- **Training pipeline** — optimiser, learning rate schedule, batch size, augmentation,
-  mixed precision, gradient clipping
+- **Training pipeline** — optimiser, learning rate schedule, batch size, augmentation, mixed precision, gradient clipping
 - **Evaluation protocol** — datasets, metrics, and the paper's exact reported results table
-- **Implementation assumptions** — every decision the paper leaves implicit, recorded
-  explicitly with a basis and alternatives
-- **Ambiguities** — points where the correct interpretation is genuinely unclear, with the
-  most likely interpretation and alternatives listed
-- **Confidence annotations** — per-section scores (0.0–1.0) reflecting how explicitly each
-  detail was stated in the paper
+- **Implementation assumptions** — every decision the paper leaves implicit, recorded explicitly with a basis and alternatives
+- **Ambiguities** — points where the correct interpretation is genuinely unclear, with the most likely interpretation and all alternatives listed
+- **Confidence annotations** — per-section scores (0.0–1.0) reflecting how explicitly each detail was stated in the paper
 
 Every SIR is stored permanently in the global registry. As the registry grows, ArXivist
-accumulates implementation priors across research domains — making each successive paper
-faster and more accurate to process.
+accumulates implementation priors across research — making each successive paper faster
+and more accurate to process.
 
-Full format reference: [`docs/sir-specification.md`](docs/sir-specification.md)
+Full format reference: [`docs/sir-specification.md`](docs/sir-specification.md)  
 JSON schema: [`skill/schemas/sir_schema.json`](skill/schemas/sir_schema.json)
 
 ---
@@ -181,9 +177,9 @@ ArXivist never silently guesses. Every extracted detail carries a confidence sco
 | Score | Meaning |
 |-------|---------|
 | 0.9–1.0 | Explicitly stated in the paper |
-| 0.7–0.89 | Strongly implied or standard practice for the domain |
+| 0.7–0.89 | Strongly implied or standard practice |
 | 0.5–0.69 | Inferred with reasoning — surfaced as a warning |
-| < 0.5 | Speculative — pipeline pauses and requests human confirmation |
+| < 0.5 | Speculative — pipeline pauses for human confirmation |
 
 Low-confidence sections propagate forward: they trigger risk entries in the architecture
 plan, `# ASSUMED` comments in the generated code, and expanded root cause analysis in the
@@ -191,31 +187,36 @@ reproducibility report.
 
 ---
 
-## SIR Learner
+## SIR tools
 
-`sir_learner.py` is a corpus learning engine trained entirely on SIR artifacts accumulated
-in the global registry. As more papers are processed, the learner builds statistical priors
-over implementation patterns it has observed — architecture structures, optimizer choices,
-common ambiguities, reproducibility failure modes — without requiring any external training
-data or labelling.
+The `sir/` folder contains standalone tools that operate directly on the registry.
+No pipeline session required — run them locally after the registry is populated.
 
-It feeds into the pipeline at Stage 1, providing a predictive prior that:
+**`sir/learner/`** — Fine-tunes a small language model (SmolLM2-360M) on accumulated SIR
+artifacts to build a fast predictive prior for Stage 1. Given an abstract, it predicts
+likely architecture modules, implementation risks, confidence scores, and ambiguities before
+the full PDF is parsed. Improves continuously as the registry grows.
 
-- pre-flags papers likely to have under-specified architectures
-- infers plausible values for missing implementation details before full parsing
-- estimates reproducibility difficulty from abstract-level signals
-- surfaces high-risk implementation regions for human review
+**`sir/search/`** — Query the registry by natural language or structured filters. Find
+papers by architecture detail, training configuration, metric, or any SIR field. Uses
+TF-IDF by default; upgrades to semantic search if `sentence-transformers` is installed.
+Zero required dependencies.
 
-The learner improves continuously as the registry grows. A registry with ten processed
-papers produces better priors than one with one. A registry with a hundred produces better
-still. The system compounds.
+**`sir/diff/`** — Compare any two SIRs and produce a structured diff report with a formal
+similarity score (0.0–1.0) weighted across architecture, equations, training pipeline,
+evaluation protocol, and tensor semantics. Useful for measuring architectural inheritance
+between papers or tracking changes across ArXivist runs.
+
+**`sir/lineage/`** — Builds a citation and inheritance graph across all SIRs in the
+registry. Produces an interactive force-directed HTML visualisation, machine-readable JSON,
+Graphviz DOT, or a markdown report. Makes the accumulated registry visible as a knowledge
+graph.
 
 ---
 
 ## Reproducibility report
 
-Stage 6 produces four artifacts that together constitute a complete scientific audit of
-the generated implementation:
+Stage 6 produces four artifacts that constitute a complete scientific audit:
 
 | Artifact | Contents |
 |---|---|
@@ -240,12 +241,17 @@ arxivist/
 │   ├── templates/              # Blank SIR, repo layout, report template
 │   └── state/                  # Pipeline state schema
 │
+├── sir/                        # Standalone SIR tools
+│   ├── learner/                # LoRA fine-tuning on SIR corpus
+│   ├── search/                 # Registry search (TF-IDF + semantic)
+│   ├── diff/                   # Structured SIR diff and similarity scoring
+│   └── lineage/                # Inheritance and citation graph
+│
 ├── workspace/                  # Runtime output (gitignored contents)
 │   ├── sir-registry/           # Global SIR registry — one folder per paper
 │   │   └── global_index.json   # Index of every processed paper
 │   └── paper-repos/            # Generated paper repositories
 │
-├── sir_learner.py              # SIR corpus learning engine
 ├── docs/                       # Documentation
 ├── examples/                   # Reference SIRs for well-known papers
 └── .github/workflows/          # CI — schema validation on every push
@@ -276,9 +282,9 @@ to trigger Stage 6.
 
 ## CI
 
-Every push and pull request runs schema validation across all JSON artifacts, checks that
-all six stage files are present and correctly structured, and verifies the workspace
-scaffold and example SIRs are intact.
+Every push and pull request validates all JSON schemas, confirms all six stage files are
+present and correctly structured, and verifies the workspace scaffold and example SIRs
+are intact.
 
 See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 

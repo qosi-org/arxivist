@@ -1,0 +1,4 @@
+# No required dependencies beyond Python stdlib.
+# Optional — enables semantic search:
+sentence-transformers>=2.7.0
+torch>=2.1.0

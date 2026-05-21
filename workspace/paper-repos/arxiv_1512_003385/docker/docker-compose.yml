@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: resnet-cifar:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ../:/workspace
+      - ../data:/workspace/data
+      - ../runs:/workspace/runs
+    command: ["python", "train.py", "--config", "configs/resnet20.yaml"]
+
+  notebook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: resnet-cifar:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ../:/workspace
+    ports:
+      - "8888:8888"
+    command: ["jupyter", "notebook", "--ip=0.0.0.0", "--no-browser", "--allow-root"]

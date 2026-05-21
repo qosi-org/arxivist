@@ -1,0 +1,190 @@
+# ResNet-CIFAR — reproduction of He et al. 2015
+
+**Paper:** ["Deep Residual Learning for Image Recognition"](https://arxiv.org/abs/1512.03385)
+(Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun — Microsoft Research, December 2015).
+
+**What it does, in one paragraph.** The paper introduces *residual connections* — shortcut paths
+that add the input of a few stacked layers directly to their output, reframing each block as
+learning a residual `F(x) = H(x) - x` instead of the full mapping `H(x)`. This makes much deeper
+networks trainable: on ImageNet they trained 152-layer networks, and on CIFAR-10 they showed the
+trick works up to 1202 layers. This repo reproduces the CIFAR-10 part of the paper: ResNets of
+depth 20, 32, 44, 56, and 110 layers, trained with SGD on the standard 50k/10k split.
+
+> **Scope.** This repo covers **CIFAR-10 only** (ResNet-20/32/44/56/110 with BasicBlocks). The
+> ImageNet bottleneck variants (ResNet-50/101/152) and the 7×7 stem are out of scope.
+
+---
+
+## Quick start
+
+```bash
+# 1. Install (CPU also works for small variants; CUDA is faster)
+pip install -e .
+
+# 2. (Optional) pre-fetch CIFAR-10 — otherwise the trainer downloads on first run
+python data/download.py --dest ./data/cifar10
+
+# 3. Train ResNet-20 with the paper hyperparameters
+python train.py --config configs/resnet20.yaml --output-dir runs
+
+# 4. Evaluate the resulting checkpoint
+python evaluate.py --config configs/resnet20.yaml --checkpoint runs/resnet20/best.pt
+```
+
+For a 60-second smoke test (200 iterations on CPU):
+
+```bash
+python train.py --config configs/config_debug.yaml
+```
+
+---
+
+## Installation
+
+### pip (recommended)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # on Windows: .venv\Scripts\activate
+pip install -e .
+pip install -r requirements-dev.txt  # optional, for notebook / linting
+```
+
+### conda
+
+```bash
+conda env create -f environment.yaml
+conda activate resnet-cifar
+pip install -e .
+```
+
+### Docker
+
+```bash
+docker build -f docker/Dockerfile -t resnet-cifar:latest .
+docker run --rm -it --gpus all -v $PWD:/workspace resnet-cifar:latest \
+    python train.py --config configs/resnet20.yaml
+```
+
+---
+
+## Training
+
+All variants share one CLI. Pick the config that matches the depth you want:
+
+| Depth | Config | n | Params | Paper test error | Approx. wall clock (1× RTX 3090) |
+|------:|:--|--:|--:|--:|:--|
+| 20  | configs/resnet20.yaml  |  3 | 0.27M | **8.75%** | ~15 min |
+| 32  | configs/resnet32.yaml  |  5 | 0.46M | **7.51%** | ~25 min |
+| 44  | configs/resnet44.yaml  |  7 | 0.66M | **7.17%** | ~35 min |
+| 56  | configs/resnet56.yaml  |  9 | 0.85M | **6.97%** | ~50 min |
+| 110 | configs/resnet110.yaml | 18 | 1.70M | **6.43%** | ~2 hours |
+
+```bash
+python train.py --config configs/resnet56.yaml --output-dir runs
+```
+
+Useful flags:
+
+```bash
+--debug              # 200-iteration smoke test
+--dry-run            # build everything, skip training
+--device cpu         # force CPU (useful for debugging)
+--seed 1234          # override the seed
+--total-iters 2000   # short run, useful for verifying the LR schedule
+--override training.batch_size=64 hardware.deterministic=false
+```
+
+---
+
+## Hyperparameters (paper Section 4.2)
+
+| Knob | Value | Where |
+|---|---|---|
+| Optimizer | SGD with Nesterov **off**, momentum 0.9 | `configs/resnetXX.yaml → training.momentum` |
+| Weight decay | 1e-4 on conv/FC weights, 0 on BN/biases | `training.weight_decay` + `training.apply_wd_to_bn` |
+| LR schedule | 0.1 → 0.01 at iter 32k → 0.001 at iter 48k → stop at 64k | `training.lr_drop_iterations` |
+| Warmup | LR 0.01 for 400 iters (ResNet-110 only) | auto-enabled when `model.name == 'resnet110'` |
+| Batch size | 128 | `training.batch_size` |
+| Augmentation | per-pixel mean sub, 4-px zero-pad + random crop, random hflip | `src/resnet_cifar/data/transforms.py` |
+| Init | Kaiming normal (fan_in, relu) | `ResNetCIFAR._init_weights` |
+| Loss | Cross-entropy | `src/resnet_cifar/training/losses.py` |
+
+## Architecture (CIFAR variants)
+
+```
+Input [B,3,32,32]
+  → Conv3x3(3→16) → BN → ReLU            [B,16,32,32]
+  → stage1: n × BasicBlock(16→16,s=1)    [B,16,32,32]
+  → stage2: BasicBlock(16→32,s=2) + (n-1)× BasicBlock(32→32,s=1)  [B,32,16,16]
+  → stage3: BasicBlock(32→64,s=2) + (n-1)× BasicBlock(64→64,s=1)  [B,64, 8, 8]
+  → GAP → Linear(64→10)                  [B,10]
+```
+
+A `BasicBlock` is two 3×3 convs with BN; the input is added back to the post-second-BN tensor
+(Eq. 1 in the paper), then ReLU is applied. Where dimensions change, the shortcut path uses
+**Option A**: stride-2 spatial downsampling plus zero-padded extra channels (parameter-free).
+
+## Expected results
+
+From Table 6 of the paper (test error, %):
+
+| Model | Reported | Notes |
+|--|--:|--|
+| ResNet-20  | 8.75 | |
+| ResNet-32  | 7.51 | |
+| ResNet-44  | 7.17 | |
+| ResNet-56  | 6.97 | |
+| ResNet-110 | 6.43 | Median of 5 runs; mean 6.61 ± 0.16 |
+
+This repo writes a `summary.json` after each run with `best_test_error`. Place it under
+`results/` if you want Stage 6 (ArXivist results comparator) to consume it.
+
+---
+
+## Reproducibility notes
+
+The paper does not specify every detail of the recipe. The repo encodes the following
+documented assumptions:
+
+1. **Per-pixel vs per-channel mean subtraction** — paper says "per-pixel" so we default to a
+   (3, 32, 32) mean image. Toggle to per-channel with
+   `--override data.mean_subtraction=per_channel`. (SIR ambiguity, confidence 0.75.)
+2. **Weight decay on BN parameters** — excluded by default (modern convention; the paper does
+   not state behavior). Re-enable with `--override training.apply_wd_to_bn=true`.
+3. **Iteration → epoch mapping** — 64k iterations at batch 128 over the full 50k training set
+   ≈ 163.8 epochs. If you set `data.val_size > 0` the trainer uses a 45k/5k split (~182 epochs).
+4. **Initialization** — `nn.init.kaiming_normal_(weight, mode='fan_in', nonlinearity='relu')`,
+   matching the paper's cited He et al. 2015 PReLU init.
+5. **ResNet-110 warmup** — auto-enabled regardless of config flag (paper-mandated; without it
+   ResNet-110 fails to converge).
+6. **No label smoothing, no mixup, no cosine LR, no Nesterov** — none of these were used in the
+   paper; we don't sneak them in.
+
+Single-seed reproductions of ResNet-110 may report numbers outside the paper's median because
+of its high variance (std 0.16% across 5 seeds). For deeper-than-110 variants (1202 layers in
+the paper) this repo is the wrong starting point — the paper's results there required careful
+training and overfitting was a serious issue.
+
+## Implementation assumptions (full list)
+
+See `arxivist-workspace/sir-registry/arxiv_1512_003385/sir.json` → `implementation_assumptions[]`
+for the complete provenance trail.
+
+---
+
+## Citation
+
+```bibtex
+@inproceedings{he2016deep,
+  title={Deep Residual Learning for Image Recognition},
+  author={He, Kaiming and Zhang, Xiangyu and Ren, Shaoqing and Sun, Jian},
+  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={770--778},
+  year={2016}
+}
+```
+
+## License
+
+MIT (this reproduction repo). The paper itself is © the authors / IEEE.

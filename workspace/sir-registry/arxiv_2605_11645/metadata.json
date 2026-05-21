@@ -1,0 +1,45 @@
+{
+  "paper_id": "arxiv_2605_11645",
+  "title": "GeomHerd: A Forward-looking Herding Quantification via Ricci Flow Geometry on Agent Interactive Simulations",
+  "authors": [
+    "Lake Yang",
+    "Junwei Su",
+    "Jingfeng Zeng",
+    "Wenhao Lu",
+    "Xingzhi Qian",
+    "Weitong Zhang",
+    "Chuan Wu",
+    "Dunhong Jin"
+  ],
+  "domain": "Multimodal (Finance / Graph Geometry / Multi-Agent Systems)",
+  "arxiv_id": "2605.11645",
+  "version": 1,
+  "created_at": "2026-05-13T00:00:00Z",
+  "last_updated": "2026-05-15T16:16:59.807182+00:00",
+  "sir_confidence": 0.8,
+  "stages_with_data": [
+    "sir",
+    "architecture_plan",
+    "repo",
+    "notebooks",
+    "notebooks",
+    "comparison",
+    "comparison"
+  ],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2605_11645/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-05-13T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": [
+        "all"
+      ]
+    }
+  ],
+  "notebooks": [
+    "notebooks/reproduce_arxiv_2605_11645.ipynb",
+    "notebooks/explore_arxiv_2605_11645.ipynb"
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "paper_id": "arxiv_2605_11645",
+  "comparison_date": "2026-05-13T00:00:00Z",
+  "status": "pre_run",
+  "note": "No user results submitted. Scores are a priori estimates based on SIR confidence and implementation risk analysis.",
+  "reproducibility_score": null,
+  "reproducibility_score_predicted_range": [0.45, 0.72],
+  "score_confidence": "low",
+  "score_confidence_reason": "No user experimental results; estimates derived from SIR confidence scores × component risk flags",
+  "metrics_in_paper": 12,
+  "metrics_matched_to_user_results": 0,
+  "metrics_unmatched": 12,
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0,
+    "predicted_excellent": 6,
+    "predicted_good": 2,
+    "predicted_moderate": 2,
+    "predicted_significant": 3,
+    "predicted_critical": 2
+  },
+  "component_predictions": [
+    {
+      "metric": "Median lead recall-oriented (272 steps)",
+      "predicted_deviation_class": "Significant",
+      "predicted_pct_deviation_range": [15, 30],
+      "primary_risks": ["R3: LLM prompts withheld", "R5: CWS substrate approximation"]
+    },
+    {
+      "metric": "Median lead precision-oriented (178 steps)",
+      "predicted_deviation_class": "Significant",
+      "predicted_pct_deviation_range": [15, 30],
+      "primary_risks": ["R3: LLM prompts withheld", "R5: CWS substrate approximation"]
+    },
+    {
+      "metric": "FAR_sub precision-oriented (0.07)",
+      "predicted_deviation_class": "Good-to-Moderate",
+      "predicted_pct_deviation_range": [5, 15],
+      "primary_risks": ["CUSUM baseline estimation variance"]
+    },
+    {
+      "metric": "beta_minus Recall_super (0.65)",
+      "predicted_deviation_class": "Moderate",
+      "predicted_pct_deviation_range": [10, 25],
+      "primary_risks": ["R4: Kendall-tau threshold assumed -0.4"]
+    },
+    {
+      "metric": "beta_minus AUROC (0.80)",
+      "predicted_deviation_class": "Moderate",
+      "predicted_pct_deviation_range": [5, 15],
+      "primary_risks": ["R4: Kendall-tau params assumed"]
+    },
+    {
+      "metric": "gamma3 value (-0.0072)",
+      "predicted_deviation_class": "Significant",
+      "predicted_pct_deviation_range": [20, 40],
+      "primary_risks": ["Return proxy used instead of actual CWS per-asset returns"]
+    },
+    {
+      "metric": "gamma3 sign (< 0)",
+      "predicted_deviation_class": "Excellent",
+      "predicted_pct_deviation_range": [0, 0],
+      "note": "Sign preservation expected regardless of magnitude deviation"
+    },
+    {
+      "metric": "Vicsek AUROC (0.99)",
+      "predicted_deviation_class": "Excellent-to-Good",
+      "predicted_pct_deviation_range": [0, 5],
+      "primary_risks": ["Minor: kNN heading-to-action discretization assumed"]
+    },
+    {
+      "metric": "tau_sing values",
+      "predicted_deviation_class": "Critical",
+      "predicted_pct_deviation_range": [30, 90],
+      "primary_risks": ["R1: Ricci flow update rule ASSUMED multiplicative — unverified"]
+    },
+    {
+      "metric": "Kronos cascade-window MAE",
+      "predicted_deviation_class": "Critical",
+      "predicted_pct_deviation_range": [30, 100],
+      "primary_risks": ["R2: Kronos head architecture STUB — d_model, n_layers, n_heads all assumed"]
+    }
+  ],
+  "hallucination_count": {
+    "structural": 2,
+    "parametric": 7,
+    "omission": 2
+  },
+  "sir_version_used": 1,
+  "sir_overall_confidence": 0.80,
+  "architecture_plan_version": 1,
+  "requires_manual_review": true,
+  "manual_review_reasons": [
+    "R1: Ricci flow update rule not verified — tau_sing pipeline is approximate",
+    "R2: Kronos head architecture absent — forecasting numbers are structural stubs",
+    "R3: LLM persona prompts withheld — agent behavior is approximated",
+    "R5: CWS substrate mechanics partially reconstructed from paper description"
+  ]
+}

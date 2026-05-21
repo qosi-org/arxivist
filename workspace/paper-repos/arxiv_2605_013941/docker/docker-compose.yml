@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  evolvemem:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../data:/app/data
+      - ../outputs:/app/outputs
+      - ../logs:/app/logs
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    command: ["python", "evolve.py", "--help"]
+
+  notebook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../notebooks:/app/notebooks
+      - ../data:/app/data
+      - ../outputs:/app/outputs
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    command: ["jupyter", "notebook", "--ip=0.0.0.0", "--allow-root", "--no-browser",
+              "--notebook-dir=/app/notebooks"]

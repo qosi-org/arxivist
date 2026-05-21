@@ -1,0 +1,9 @@
+{
+  "model": "resnet20",
+  "best_test_top1": 91.4,
+  "best_test_error": 8.599999999999994,
+  "best_iter": 57086,
+  "total_iterations": 64000,
+  "device": "cpu",
+  "seed": 42
+}
