@@ -1,4 +1,4 @@
-# ArXivist
+# ArXivist 
 
 **ArXivist** converts scientific papers into fully executable, reproducible codebases — automatically.
 
@@ -105,7 +105,44 @@ Paper (PDF / arXiv URL / DOI)
 │  hallucinations.                     │
 └──────────────────────────────────────┘
 ```
-
+---
+ 
+## Subject domain intelligence
+ 
+ArXivist detects the paper's subject domain at Stage 1 and activates a domain-specific
+enrichment layer for the remainder of the pipeline. A finance paper and an AI paper may
+both use a Transformer — but the finance paper has different data pipelines, different
+evaluation norms, different failure modes, and different implementation conventions.
+Generic instructions don't capture that. Domain-specific ones do.
+ 
+Eight subject domains are supported:
+ 
+| Domain | Coverage |
+|---|---|
+| **AI** | Deep learning, foundation models, LLMs, diffusion, generative systems |
+| **ML** | Classical ML, probabilistic models, Bayesian inference, kernel methods, ensembles |
+| **Finance** | Quantitative finance, factor models, backtesting, asset pricing, algorithmic trading |
+| **Economics** | Econometrics, causal inference (IV, DiD, RDD), structural models, DSGE |
+| **Quantum** | Variational circuits, VQE, QAOA, quantum ML, hybrid quantum-classical systems |
+| **Biology** | Protein structure, genomics, single-cell, bioinformatics, drug discovery |
+| **Physics** | PDE solvers, physics-informed neural networks, molecular dynamics, scientific computing |
+| **Neuroscience** | Neural decoding, EEG/fMRI, spiking neural networks, BCI, connectomics |
+ 
+When a domain is detected with sufficient confidence, ArXivist loads domain-specific
+instructions at each relevant stage:
+ 
+- **Stage 1** gets field-specific parsing rules and a catalogue of data-level
+  reproducibility traps common to that domain
+- **Stage 3** gets known architecture patterns, preferred libraries, and domain
+  conventions for config design
+- **Stage 4** gets coding standards specific to the field — point-in-time correctness
+  for finance, sequence-identity splitting for biology, surrogate gradient conventions
+  for quantum, and so on
+- **Stage 6** gets domain-calibrated deviation thresholds and a prioritised list of
+  the root causes most likely to explain gaps in that field
+If domain detection confidence falls below 0.6, the domain layer is skipped and the
+generic pipeline runs unmodified.
+ 
 ---
 
 ## The SIR

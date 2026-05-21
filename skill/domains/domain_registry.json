@@ -1,0 +1,152 @@
+{
+  "registry_version": 1,
+  "description": "Maps subject domain labels (detected by Stage 1 from the paper) to their domain folder and the stages each domain file enriches.",
+  "fallback": "none",
+  "fallback_behaviour": "If domain is unrecognised or 'Other', skip the domain layer entirely and run generic agents only.",
+  "domains": {
+    "AI": {
+      "folder": "domains/ai",
+      "label": "Artificial Intelligence / Deep Learning",
+      "keywords": ["deep learning", "neural network", "foundation model", "large language model", "generative", "diffusion", "transformer", "LLM", "GPT", "BERT", "ViT"],
+      "files": {
+        "parsing_hints":         "domains/ai/parsing_hints.md",
+        "architecture_patterns": "domains/ai/architecture_patterns.md",
+        "code_conventions":      "domains/ai/code_conventions.md",
+        "evaluation_standards":  "domains/ai/evaluation_standards.md",
+        "data_pitfalls":         "domains/ai/data_pitfalls.md"
+      },
+      "stage_enrichment": {
+        "1": "parsing_hints",
+        "3": "architecture_patterns",
+        "4": "code_conventions",
+        "6": "evaluation_standards"
+      }
+    },
+    "ML": {
+      "folder": "domains/ml",
+      "label": "Machine Learning (Classical & Probabilistic)",
+      "keywords": ["gradient boosting", "random forest", "SVM", "Gaussian process", "Bayesian", "probabilistic", "kernel", "ensemble", "decision tree", "XGBoost", "scikit"],
+      "files": {
+        "parsing_hints":         "domains/ml/parsing_hints.md",
+        "architecture_patterns": "domains/ml/architecture_patterns.md",
+        "code_conventions":      "domains/ml/code_conventions.md",
+        "evaluation_standards":  "domains/ml/evaluation_standards.md",
+        "data_pitfalls":         "domains/ml/data_pitfalls.md"
+      },
+      "stage_enrichment": {
+        "1": "parsing_hints",
+        "3": "architecture_patterns",
+        "4": "code_conventions",
+        "6": "evaluation_standards"
+      }
+    },
+    "Finance": {
+      "folder": "domains/finance",
+      "label": "Quantitative Finance & Econophysics",
+      "keywords": ["return", "portfolio", "alpha", "factor model", "backtesting", "trading", "asset pricing", "volatility", "Sharpe", "drawdown", "option pricing", "risk"],
+      "files": {
+        "parsing_hints":         "domains/finance/parsing_hints.md",
+        "architecture_patterns": "domains/finance/architecture_patterns.md",
+        "code_conventions":      "domains/finance/code_conventions.md",
+        "evaluation_standards":  "domains/finance/evaluation_standards.md",
+        "data_pitfalls":         "domains/finance/data_pitfalls.md"
+      },
+      "stage_enrichment": {
+        "1": "parsing_hints",
+        "3": "architecture_patterns",
+        "4": "code_conventions",
+        "6": "evaluation_standards"
+      }
+    },
+    "Economics": {
+      "folder": "domains/economics",
+      "label": "Economics & Econometrics",
+      "keywords": ["econometrics", "causal inference", "instrumental variable", "difference-in-differences", "DSGE", "VAR", "regression discontinuity", "panel data", "welfare", "equilibrium"],
+      "files": {
+        "parsing_hints":         "domains/economics/parsing_hints.md",
+        "architecture_patterns": "domains/economics/architecture_patterns.md",
+        "code_conventions":      "domains/economics/code_conventions.md",
+        "evaluation_standards":  "domains/economics/evaluation_standards.md",
+        "data_pitfalls":         "domains/economics/data_pitfalls.md"
+      },
+      "stage_enrichment": {
+        "1": "parsing_hints",
+        "3": "architecture_patterns",
+        "4": "code_conventions",
+        "6": "evaluation_standards"
+      }
+    },
+    "Quantum": {
+      "folder": "domains/quantum",
+      "label": "Quantum Computing & Quantum ML",
+      "keywords": ["qubit", "quantum circuit", "variational", "VQE", "QAOA", "quantum gate", "superposition", "entanglement", "quantum advantage", "PennyLane", "Qiskit", "Cirq"],
+      "files": {
+        "parsing_hints":         "domains/quantum/parsing_hints.md",
+        "architecture_patterns": "domains/quantum/architecture_patterns.md",
+        "code_conventions":      "domains/quantum/code_conventions.md",
+        "evaluation_standards":  "domains/quantum/evaluation_standards.md",
+        "data_pitfalls":         "domains/quantum/data_pitfalls.md"
+      },
+      "stage_enrichment": {
+        "1": "parsing_hints",
+        "3": "architecture_patterns",
+        "4": "code_conventions",
+        "6": "evaluation_standards"
+      }
+    },
+    "Biology": {
+      "folder": "domains/biology",
+      "label": "Computational Biology & Bioinformatics",
+      "keywords": ["genomics", "protein", "sequence", "alignment", "FASTA", "variant", "gene expression", "single-cell", "phylogenetic", "RNA", "DNA", "CRISPR", "fold"],
+      "files": {
+        "parsing_hints":         "domains/biology/parsing_hints.md",
+        "architecture_patterns": "domains/biology/architecture_patterns.md",
+        "code_conventions":      "domains/biology/code_conventions.md",
+        "evaluation_standards":  "domains/biology/evaluation_standards.md",
+        "data_pitfalls":         "domains/biology/data_pitfalls.md"
+      },
+      "stage_enrichment": {
+        "1": "parsing_hints",
+        "3": "architecture_patterns",
+        "4": "code_conventions",
+        "6": "evaluation_standards"
+      }
+    },
+    "Physics": {
+      "folder": "domains/physics",
+      "label": "Computational Physics & Scientific Computing",
+      "keywords": ["simulation", "PDE", "finite element", "molecular dynamics", "Monte Carlo", "fluid dynamics", "Hamiltonian", "lattice", "N-body", "neural PDE", "physics-informed"],
+      "files": {
+        "parsing_hints":         "domains/physics/parsing_hints.md",
+        "architecture_patterns": "domains/physics/architecture_patterns.md",
+        "code_conventions":      "domains/physics/code_conventions.md",
+        "evaluation_standards":  "domains/physics/evaluation_standards.md",
+        "data_pitfalls":         "domains/physics/data_pitfalls.md"
+      },
+      "stage_enrichment": {
+        "1": "parsing_hints",
+        "3": "architecture_patterns",
+        "4": "code_conventions",
+        "6": "evaluation_standards"
+      }
+    },
+    "Neuroscience": {
+      "folder": "domains/neuroscience",
+      "label": "Computational Neuroscience & BCI",
+      "keywords": ["neuron", "spike", "EEG", "fMRI", "brain-computer interface", "neural decoding", "connectome", "spiking neural network", "LFP", "cortex", "receptive field"],
+      "files": {
+        "parsing_hints":         "domains/neuroscience/parsing_hints.md",
+        "architecture_patterns": "domains/neuroscience/architecture_patterns.md",
+        "code_conventions":      "domains/neuroscience/code_conventions.md",
+        "evaluation_standards":  "domains/neuroscience/evaluation_standards.md",
+        "data_pitfalls":         "domains/neuroscience/data_pitfalls.md"
+      },
+      "stage_enrichment": {
+        "1": "parsing_hints",
+        "3": "architecture_patterns",
+        "4": "code_conventions",
+        "6": "evaluation_standards"
+      }
+    }
+  }
+}

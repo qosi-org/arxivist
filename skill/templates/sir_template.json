@@ -12,7 +12,9 @@
     "domain": "Other",
     "key_claims": [],
     "parsed_at": "",
-    "arxivist_version": "1.0"
+    "arxivist_version": "1.0",
+    "subject_domain": null,
+    "subject_domain_confidence": 0.0
   },
   "architecture": {
     "primary_variant": "",
