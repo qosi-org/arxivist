@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  train:
+    build: ..
+    volumes:
+      - ../data:/app/data
+      - ../results:/app/results
+      - ../models:/app/models
+    command: python train_all.py --config configs/config.yaml
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  notebook:
+    build: ..
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../notebooks:/app/notebooks
+      - ../data:/app/data
+      - ../results:/app/results
+    command: jupyter notebook --ip=0.0.0.0 --no-browser --allow-root --notebook-dir=/app/notebooks

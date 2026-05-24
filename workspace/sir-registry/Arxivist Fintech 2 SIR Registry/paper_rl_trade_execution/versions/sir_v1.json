@@ -1,0 +1,284 @@
+{
+  "paper_id": "paper_rl_trade_execution",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Reinforcement Learning for Optimized Trade Execution",
+    "authors": ["Yuriy Nevmyvaka", "Yi Feng", "Michael Kearns"],
+    "affiliations": ["Lehman Brothers, New York", "University of Pennsylvania, Philadelphia"],
+    "arxiv_id": null,
+    "doi": null,
+    "submission_date": "2006",
+    "abstract": "We present the first large-scale empirical application of reinforcement learning to the important problem of optimized trade execution in modern financial markets. Our experiments are based on 1.5 years of millisecond time-scale limit order data from NASDAQ.",
+    "domain": "RL",
+    "key_claims": [
+      "RL can improve relative performance over submit-and-leave strategies by up to 50%",
+      "Algorithm exploits approximate independence between private (time, inventory) and market variables for computational efficiency",
+      "First large-scale empirical RL application to trade execution using microstructure data",
+      "Learned policies are interpretable: more aggressive pricing when time is short and inventory is high",
+      "Market variables (bid-ask spread, immediate market order cost) add further improvement over private-variable-only policies"
+    ],
+    "parsed_at": "2026-05-20T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "Q-learning + Dynamic Programming hybrid with private/market state factorization",
+    "modules": [
+      {
+        "name": "StateRepresentation",
+        "role": "Encode current world state from private and market variables",
+        "inputs": ["elapsed_time_t (int, 0..T)", "remaining_inventory_i (int, 0..I)", "market_vars (list of discretized features)"],
+        "outputs": ["state_vector x = <t, i, o1...oR>"],
+        "confidence": 0.95
+      },
+      {
+        "name": "ActionSpace",
+        "role": "Define limit order price offset relative to ask/bid",
+        "inputs": ["action_a (int, L levels)"],
+        "outputs": ["limit price = ask - a  (for selling)"],
+        "note": "Positive a = cross spread toward buyers; negative = deeper in own book",
+        "confidence": 0.92
+      },
+      {
+        "name": "MarketSimulator",
+        "role": "Simulate order execution against historical INET order book data",
+        "inputs": ["order_book_snapshot", "action_a", "remaining_inventory_i"],
+        "outputs": ["shares_executed", "immediate_cost", "next_state_y"],
+        "confidence": 0.90
+      },
+      {
+        "name": "QTableUpdater",
+        "role": "Maintain and update Q-value table c(x, a) via incremental averaging",
+        "inputs": ["state x", "action a", "immediate_cost cim(x,a)", "next_state y", "count n"],
+        "outputs": ["updated c(x, a)"],
+        "update_rule": "c(x,a) = n/(n+1)*c(x,a) + 1/(n+1)*[cim(x,a) + argmax_p c(y,p)]",
+        "confidence": 0.95
+      },
+      {
+        "name": "PolicyExtractor",
+        "role": "For each state select argmin-cost action from Q-table",
+        "inputs": ["Q-table c(x, a) for all states"],
+        "outputs": ["optimal_policy: state -> action mapping"],
+        "confidence": 0.95
+      }
+    ],
+    "connections": [
+      {"from": "StateRepresentation", "to": "QTableUpdater"},
+      {"from": "ActionSpace", "to": "MarketSimulator"},
+      {"from": "MarketSimulator", "to": "QTableUpdater"},
+      {"from": "QTableUpdater", "to": "PolicyExtractor"}
+    ],
+    "variants": [
+      {
+        "name": "PrivateOnly",
+        "description": "State = <t, i> only; no market variables",
+        "state_size": "T * I states"
+      },
+      {
+        "name": "WithMarketVars",
+        "description": "State = <t, i, o1...oR>; R market variables discretized to low-resolution buckets",
+        "state_size": "T * I * prod(|oj|) states"
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Q-value (cost) update rule",
+      "latex": "c(x, a) = \\frac{n}{n+1} c(x, a) + \\frac{1}{n+1} \\left[ c_{im}(x, a) + \\arg\\max_p c(y, p) \\right]",
+      "role": "Incremental averaging update for expected execution cost; fuses Q-learning with dynamic programming",
+      "used_in": "Training",
+      "hyperparameters": ["n (visit count per state-action pair)"],
+      "confidence": 0.97
+    },
+    {
+      "name": "Limit order action (sell side)",
+      "latex": "\\text{limit\\_price} = \\text{ask} - a",
+      "role": "Maps integer action to actual order book price offset",
+      "used_in": "Both training and inference",
+      "confidence": 0.95
+    },
+    {
+      "name": "Mid-spread baseline",
+      "latex": "\\text{mid} = \\frac{\\text{ask} + \\text{bid}}{2}",
+      "role": "Reference price for measuring trading cost",
+      "used_in": "Evaluation",
+      "confidence": 0.99
+    },
+    {
+      "name": "Trading cost (basis points)",
+      "latex": "\\text{cost}_{bps} = \\frac{\\text{mid} - \\text{execution\\_price}}{\\text{mid}} \\times 10000",
+      "role": "Primary performance metric; underperformance vs mid-spread baseline in basis points",
+      "used_in": "Evaluation",
+      "confidence": 0.92
+    },
+    {
+      "name": "Data complexity (backward induction passes)",
+      "latex": "\\text{passes} = T \\times I \\times L",
+      "role": "Total number of dataset traversals required for training; independent of number of market variables R",
+      "used_in": "Algorithmic analysis",
+      "confidence": 0.93
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "state_vector",
+      "shape": "[R+2]",
+      "description": "Concatenation of private vars (t, i) and R market variables",
+      "dtype": "mixed int",
+      "role": "input to Q-table lookup"
+    },
+    {
+      "name": "q_table",
+      "shape": "[T, I, prod(|oj|), L]",
+      "description": "Full state-action cost table; stores expected execution cost for each (state, action) pair",
+      "dtype": "float64",
+      "role": "central data structure; read and written during training; read-only at inference"
+    },
+    {
+      "name": "action",
+      "shape": "scalar int",
+      "description": "Discrete price offset in ticks relative to ask (sell) or bid (buy)",
+      "role": "output of policy"
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Custom backward-induction Q-learning (no gradient-based optimizer)",
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.85
+    },
+    "lr_schedule": {
+      "type": "Incremental averaging (implicit, 1/(n+1) decay)",
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.80
+    },
+    "batch_size": null,
+    "effective_batch_size": "One order book snapshot per update step",
+    "training_steps": "~45,000 episodes per stock per H=2min setting (1 year of data)",
+    "epochs": "T * I * L passes over training data",
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "Backward induction: train from t=T down to t=0",
+    "confidence": 0.75,
+    "notes": "Algorithm is table-based, not neural. No gradient descent. Learning via incremental averaging of realized costs."
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {
+        "name": "INET ECN NASDAQ historical order book data",
+        "split": "12 months training, 6 months test",
+        "stocks": ["AMZN", "NVDA", "QCOM"],
+        "frequency": "Millisecond tick data",
+        "size": "Several GB per stock"
+      }
+    ],
+    "metrics": [
+      {
+        "name": "Trading cost (basis points)",
+        "description": "Underperformance vs mid-spread at episode start; lower is better"
+      }
+    ],
+    "reported_results": [
+      {
+        "condition": "RL (T=4,I=4) vs Submit-and-Leave",
+        "improvement_range": "27.16% – 35.50% cost reduction"
+      },
+      {
+        "condition": "RL with private + market variables vs S&L",
+        "improvement": ">=50% cost reduction overall"
+      },
+      {
+        "condition": "Bid-Ask Spread as market variable",
+        "additional_improvement_over_private_only": "7.97%"
+      },
+      {
+        "condition": "Spread + Immediate Cost + Signed Volume",
+        "additional_improvement_over_private_only": "12.85%"
+      }
+    ],
+    "baselines": [
+      "Market order (immediate full execution)",
+      "Submit-and-Leave (S&L) with optimized fixed limit price"
+    ],
+    "compute": null,
+    "special_conditions": [
+      "Test set simulations fully account for market impact of policy actions (independence assumption used only in training)",
+      "Experiments run for V in {5000, 10000} shares and H in {2, 8} minutes"
+    ],
+    "confidence": 0.93
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Q-table stored as dense numpy array indexed by (t, i, discretized_market_vars, action)",
+      "basis": "Standard tabular RL; paper describes discrete state and action spaces",
+      "confidence": 0.88,
+      "alternatives": ["Sparse dict-based table", "Function approximation (not used in paper)"]
+    },
+    {
+      "assumption": "Market variables discretized into 3 bins (0=low, 1=medium, 2=high) unless stated otherwise",
+      "basis": "Explicitly stated in Section 5 for transaction volume; implied for others",
+      "confidence": 0.80,
+      "alternatives": ["2 bins", "5 bins"]
+    },
+    {
+      "assumption": "Action space L = ~15–20 discrete price offsets (e.g. -6 to +14 ticks based on Figure 5 x-axis)",
+      "basis": "Inferred from Figure 5 and Figure 7 x-axis ranges (-6 to +14)",
+      "confidence": 0.65,
+      "alternatives": ["Fewer offsets for faster training", "More granular tick offsets"]
+    },
+    {
+      "assumption": "Episode partitioning is non-overlapping sliding windows of length H over the trading day",
+      "basis": "Paper states ~45,000 episodes from 1-year data at H=2min; trading day ~6.5h → ~195 episodes/day × 252 days ≈ 49,140",
+      "confidence": 0.72,
+      "alternatives": ["Rolling windows", "Random sampling"]
+    },
+    {
+      "assumption": "Order book data loaded into memory per episode; no lookahead beyond episode boundary",
+      "basis": "Markov assumption; independence between episodes",
+      "confidence": 0.85,
+      "alternatives": ["Streaming from disk"]
+    },
+    {
+      "assumption": "Framework: Python with NumPy/Pandas for data handling; no neural networks required",
+      "basis": "Tabular RL algorithm; 2006 paper predates modern DL frameworks",
+      "confidence": 0.90,
+      "alternatives": ["C++ for performance-critical simulation loop"]
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 3, Action Space",
+      "description": "Exact number of discrete actions L is not stated explicitly; inferred from figures",
+      "primary_assumption": 21,
+      "alternatives": [10, 15, 30],
+      "confidence": 0.60
+    },
+    {
+      "location": "Section 4.2, Table 1",
+      "description": "Discretization bins for each market variable not fully specified; only transaction volume is explicitly described as 3-level",
+      "primary_assumption": "3 bins for all market variables",
+      "alternatives": ["2 bins", "variable per feature"],
+      "confidence": 0.70
+    },
+    {
+      "location": "Section 3, Rewards",
+      "description": "Exact reward signal formulation (immediate payout per step vs terminal only) is described qualitatively; precise normalization not stated",
+      "primary_assumption": "Cumulative sum of per-step execution proceeds minus mid-spread value of executed shares",
+      "alternatives": ["Terminal-only reward"],
+      "confidence": 0.72
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.88,
+    "mathematical_spec": 0.94,
+    "tensor_semantics": 0.78,
+    "training_pipeline": 0.75,
+    "evaluation_protocol": 0.93,
+    "implementation_assumptions": 0.72,
+    "overall_sir_confidence": 0.83
+  }
+}

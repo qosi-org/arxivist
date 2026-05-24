@@ -1,0 +1,27 @@
+{
+  "paper_id": "paper_rl_trade_execution",
+  "paper_title": "Reinforcement Learning for Optimized Trade Execution",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "sir_path": "sir-registry/paper_rl_trade_execution/sir.json",
+  "repo_path": "paper-repos/paper_rl_trade_execution/",
+  "artifacts": {
+    "sir": "sir-registry/paper_rl_trade_execution/sir.json",
+    "architecture_plan": "sir-registry/paper_rl_trade_execution/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/paper_rl_trade_execution/notebooks/reproduce_paper_rl_trade_execution.ipynb",
+    "comparison_report": "paper-repos/paper_rl_trade_execution/comparison/results_comparator.md"
+  },
+  "confidence_flags": {},
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-20T00:00:00Z",
+  "last_updated": "2026-05-21T00:00:00Z"
+}

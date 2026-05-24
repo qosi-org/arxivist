@@ -1,0 +1,344 @@
+{
+  "paper_id": "arxiv_2004_empirical_asset_pricing",
+  "framework": {
+    "primary": "PyTorch (for NN) + scikit-learn (for trees) + NumPy/SciPy (for linear methods)",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "huggingface_integration": false,
+    "config_library": "YAML + argparse",
+    "reasoning": "Paper does not specify framework. Finance/tabular ML canonical stack is PyTorch for NNs, scikit-learn for tree ensembles, and numpy/scipy + custom code for PCR/PLS/elastic net. No GPU strictly required — dataset fits in memory and NNs are shallow (≤5 layers, ≤32 neurons). CUDA beneficial but optional."
+  },
+  "module_hierarchy": {
+    "project_name": "asset_pricing_ml",
+    "files": [
+      {
+        "path": "src/asset_pricing_ml/__init__.py",
+        "classes": [],
+        "purpose": "Package init"
+      },
+      {
+        "path": "src/asset_pricing_ml/data/dataset.py",
+        "classes": ["StockReturnDataset", "PanelDataSplit"],
+        "methods": [
+          "StockReturnDataset.load_crsp(crsp_path, chars_path, macro_path) -> StockReturnDataset",
+          "StockReturnDataset.build_features(c_it, x_t) -> Z [NT x 920], R [NT x 1]",
+          "StockReturnDataset.cross_sectional_rank(c_it) -> c_ranked in [-1, 1]",
+          "StockReturnDataset.fill_missing(strategy='cross_sectional_median') -> None",
+          "PanelDataSplit.split(train_end, val_end, test_end) -> (train, val, test)"
+        ],
+        "sir_mapping": "PredictorConstruction, Data preprocessing"
+      },
+      {
+        "path": "src/asset_pricing_ml/data/features.py",
+        "classes": ["FeatureBuilder"],
+        "methods": [
+          "FeatureBuilder.build_interaction_features(c_it [N,94], x_t [9]) -> z_it [N,920]",
+          "FeatureBuilder.add_industry_dummies(c_it, sic_codes) -> c_with_dummies",
+          "FeatureBuilder.normalize_macro(x_t) -> x_normalized"
+        ],
+        "sir_mapping": "Kronecker product feature construction z_it = x_t ⊗ c_it"
+      },
+      {
+        "path": "src/asset_pricing_ml/models/linear.py",
+        "classes": ["OLSModel", "ElasticNetModel", "PCRModel", "PLSModel"],
+        "methods": [
+          "OLSModel.fit(Z [NT,P], R [NT,1]) -> None",
+          "OLSModel.predict(Z [N,P]) -> R_hat [N,1]",
+          "ElasticNetModel.fit(Z, R, lambda_, rho) -> None",
+          "ElasticNetModel.predict(Z) -> R_hat",
+          "ElasticNetModel.tune(Z_train, R_train, Z_val, R_val, lambda_grid, rho_grid) -> best_params",
+          "PCRModel.fit(Z, R, K) -> None",
+          "PCRModel.predict(Z) -> R_hat",
+          "PLSModel.fit(Z, R, K) -> None (via SIMPLS)",
+          "PLSModel.predict(Z) -> R_hat"
+        ],
+        "sir_mapping": "OLS, ENet, PCR, PLS models (Sections 1.2-1.4)"
+      },
+      {
+        "path": "src/asset_pricing_ml/models/glm.py",
+        "classes": ["GeneralizedLinearModel"],
+        "methods": [
+          "GeneralizedLinearModel.build_spline_basis(z_j, K, knots) -> basis [N, K]",
+          "GeneralizedLinearModel.fit(Z, R, lambda_, K) -> None",
+          "GeneralizedLinearModel.predict(Z) -> R_hat",
+          "GeneralizedLinearModel.tune(Z_train, R_train, Z_val, R_val) -> best_params"
+        ],
+        "sir_mapping": "GLM with spline expansion and group lasso (Section 1.5)",
+        "note": "Spline knot locations ASSUMED: equally spaced quantiles of training data (confidence 0.62)"
+      },
+      {
+        "path": "src/asset_pricing_ml/models/trees.py",
+        "classes": ["GBRTModel", "RandomForestModel"],
+        "methods": [
+          "GBRTModel.fit(Z, R, L, nu, B) -> None",
+          "GBRTModel.predict(Z) -> R_hat",
+          "GBRTModel.tune(Z_train, R_train, Z_val, R_val) -> best_params",
+          "GBRTModel.feature_importance() -> importances [P]",
+          "RandomForestModel.fit(Z, R, L, m, B) -> None",
+          "RandomForestModel.predict(Z) -> R_hat",
+          "RandomForestModel.tune(Z_train, R_train, Z_val, R_val) -> best_params",
+          "RandomForestModel.feature_importance() -> importances [P]"
+        ],
+        "sir_mapping": "GBRT and RF (Section 1.6)"
+      },
+      {
+        "path": "src/asset_pricing_ml/models/neural_net.py",
+        "classes": ["NeuralNetModel", "FeedForwardNN"],
+        "methods": [
+          "FeedForwardNN.__init__(input_dim, hidden_layers, activation='relu')",
+          "FeedForwardNN.forward(z [B, P]) -> r_hat [B, 1]",
+          "NeuralNetModel.fit(Z_train, R_train, Z_val, R_val, config) -> None",
+          "NeuralNetModel.predict(Z) -> R_hat",
+          "NeuralNetModel.predict_ensemble(Z, n_seeds) -> R_hat_avg",
+          "NeuralNetModel.get_gradients(Z) -> grads [N, P] (for SSD importance)"
+        ],
+        "sir_mapping": "NN1-NN5 (Section 1.7)",
+        "architectures": {
+          "NN1": [32],
+          "NN2": [32, 16],
+          "NN3": [32, 16, 8],
+          "NN4": [32, 16, 8, 4],
+          "NN5": [32, 16, 8, 4, 2]
+        }
+      },
+      {
+        "path": "src/asset_pricing_ml/training/losses.py",
+        "classes": ["HuberLoss", "L2Loss", "WeightedL2Loss"],
+        "methods": [
+          "HuberLoss.forward(pred, target, xi) -> scalar",
+          "HuberLoss.tune_xi(errors, xi_grid) -> best_xi",
+          "L2Loss.forward(pred, target) -> scalar",
+          "WeightedL2Loss.forward(pred, target, weights) -> scalar"
+        ],
+        "sir_mapping": "Equations: L2 loss, Huber loss, weighted L2 (Section 1.2)"
+      },
+      {
+        "path": "src/asset_pricing_ml/training/trainer.py",
+        "classes": ["NNTrainer", "LinearTrainer"],
+        "methods": [
+          "NNTrainer.train(model, Z_train, R_train, Z_val, R_val, config) -> model",
+          "NNTrainer._early_stop_check(val_losses) -> bool",
+          "NNTrainer._batch_normalize(x_batch) -> x_normalized",
+          "LinearTrainer.fit_and_tune(model_class, Z_train, R_train, Z_val, R_val, param_grid) -> best_model"
+        ],
+        "sir_mapping": "Training pipeline Section 1.7: SGD, Adam, early stopping, batch norm, ensemble"
+      },
+      {
+        "path": "src/asset_pricing_ml/evaluation/metrics.py",
+        "classes": ["ReturnMetrics", "PortfolioMetrics"],
+        "methods": [
+          "ReturnMetrics.oos_r2(r_actual, r_pred) -> float",
+          "ReturnMetrics.diebold_mariano(errors_1, errors_2) -> (stat, pval)",
+          "ReturnMetrics.variable_importance_r2(model, Z, R, feature_names) -> importances dict",
+          "ReturnMetrics.variable_importance_ssd(model, Z, feature_names) -> importances dict",
+          "PortfolioMetrics.sharpe_ratio(returns, annualize=True) -> float",
+          "PortfolioMetrics.max_drawdown(cum_returns) -> float",
+          "PortfolioMetrics.monthly_turnover(weights_history) -> float",
+          "PortfolioMetrics.factor_alpha(returns, factor_returns) -> (alpha, tstat, r2)",
+          "PortfolioMetrics.campbell_thompson_sr(sr_bah, r2_oos) -> sr_star"
+        ],
+        "sir_mapping": "Evaluation protocol Section 1.8, 1.9, 2.4"
+      },
+      {
+        "path": "src/asset_pricing_ml/evaluation/portfolios.py",
+        "classes": ["PortfolioConstructor"],
+        "methods": [
+          "PortfolioConstructor.bottom_up_forecast(r_hat [N], weights [N]) -> r_hat_portfolio",
+          "PortfolioConstructor.decile_sort(r_hat [N], n_deciles=10) -> portfolio_assignments",
+          "PortfolioConstructor.long_short_portfolio(r_hat, r_actual, weighting='value') -> PortfolioReturns",
+          "PortfolioConstructor.market_timing(r_hat_sp500, r_sp500, max_leverage=1.5) -> strategy_returns"
+        ],
+        "sir_mapping": "Section 2.4: prespecified and ML-sorted portfolios"
+      },
+      {
+        "path": "src/asset_pricing_ml/utils/config.py",
+        "classes": ["Config", "ModelConfig", "TrainingConfig", "EvalConfig"],
+        "methods": [
+          "Config.from_yaml(path) -> Config",
+          "Config.validate() -> None",
+          "ModelConfig.get_nn_architecture(variant='NN3') -> list[int]"
+        ]
+      }
+    ]
+  },
+  "tensor_flow": {
+    "feature_construction": "FEATURE CONSTRUCTION:\n  c_it: [N_t, 94] float32  ← raw stock characteristics\n  x_t: [9] float32         ← macro predictors (8) + constant\n  c_ranked = cross_sectional_rank(c_it)  → [N_t, 94] in [-1, 1]\n  z_it = kronecker(x_t, c_ranked) + industry_dummies  → [N_t, 920]\n  Z: [NT, 920] float32     ← full panel stacked",
+    "nn_forward_pass": "NN FORWARD PASS (NN3 example):\n  z: [B, 920] float32          ← input batch\n  x0 = z  → [B, 920]\n  x1 = ReLU(batch_norm(x0 @ W0 + b0))  → [B, 32]\n  x2 = ReLU(batch_norm(x1 @ W1 + b1))  → [B, 16]\n  x3 = ReLU(batch_norm(x2 @ W2 + b2))  → [B, 8]\n  r_hat = x3 @ W3 + b3                  → [B, 1]",
+    "pcr_pass": "PCR FORWARD:\n  Z: [NT, 920] → SVD → Omega_K: [920, K]\n  Z_reduced = Z @ Omega_K  → [NT, K]\n  theta_K = OLS(Z_reduced, R)  → [K, 1]\n  r_hat = Z_reduced @ theta_K → [NT, 1]",
+    "pls_pass": "PLS FORWARD (SIMPLS):\n  For j = 1..K:\n    phi_j = Z.T @ R / ||Z.T @ R||  (univariate corr weights)\n    w_j = Z.T @ R  (normalized)\n    Z, R = orthogonalize w.r.t. previous components\n  Omega_K: [920, K]; r_hat = (Z @ Omega_K) @ theta_K",
+    "portfolio_construction": "PORTFOLIO:\n  r_hat: [N_t] per stock  → sort → decile assignments → long top / short bottom\n  bottom_up: sum(w_it * r_hat_it) for stocks i in portfolio p"
+  },
+  "config_schema": {
+    "template_path": "configs/config.yaml",
+    "fields": {
+      "data": {
+        "crsp_path": "data/raw/crsp_returns.csv",
+        "chars_path": "data/raw/characteristics.csv",
+        "macro_path": "data/raw/macro_predictors.csv",
+        "train_end_year": 1974,
+        "val_end_year": 1986,
+        "test_end_year": 2016,
+        "refit_frequency": "annual",
+        "val_window_years": 12,
+        "missing_fill": "cross_sectional_median",
+        "char_lag_monthly": 1,
+        "char_lag_quarterly": 4,
+        "char_lag_annual": 6
+      },
+      "model": {
+        "variant": "NN3  # one of: OLS, OLS3, ENet, PCR, PLS, GLM, RF, GBRT, NN1..NN5",
+        "nn_architectures": {
+          "NN1": [32],
+          "NN2": [32, 16],
+          "NN3": [32, 16, 8],
+          "NN4": [32, 16, 8, 4],
+          "NN5": [32, 16, 8, 4, 2]
+        },
+        "activation": "relu",
+        "use_batch_norm": true,
+        "use_huber_loss": true,
+        "n_ensemble_seeds": "10  # ASSUMED: paper states ensemble but not seed count (confidence 0.50)"
+      },
+      "training": {
+        "optimizer": "adam",
+        "lr": "0.001  # ASSUMED: standard Adam default (confidence 0.65)",
+        "beta1": "0.9  # ASSUMED: Adam default",
+        "beta2": "0.999  # ASSUMED: Adam default",
+        "l1_lambda_grid": "[0.0001, 0.001, 0.01, 0.1]  # ASSUMED (confidence 0.52)",
+        "huber_xi_grid": "[0.5, 1.0, 2.0, 5.0]",
+        "batch_size": "512  # ASSUMED: not stated in paper (confidence 0.45)",
+        "early_stopping_patience": "5  # ASSUMED (confidence 0.55)",
+        "max_epochs": 100
+      },
+      "elastic_net": {
+        "lambda_grid": "[0.0001, 0.001, 0.01, 0.1, 1.0]",
+        "rho_grid": "[0.0, 0.25, 0.5, 0.75, 1.0]"
+      },
+      "glm": {
+        "spline_order_K_grid": "[3, 4, 5]",
+        "lambda_grid": "[0.001, 0.01, 0.1]",
+        "knot_strategy": "quantiles  # ASSUMED (confidence 0.62)"
+      },
+      "trees": {
+        "gbrt_depth_grid": "[1, 2, 3]",
+        "gbrt_nu_grid": "[0.01, 0.05, 0.1]",
+        "gbrt_B_grid": "[500, 1000]",
+        "rf_depth_grid": "[3, 5, 10, 'unlimited']",
+        "rf_m_grid": "['sqrt', 'third']",
+        "rf_B": "300  # ASSUMED: Breiman 2001 default"
+      },
+      "evaluation": {
+        "output_dir": "results/",
+        "compute_variable_importance": true,
+        "importance_method": "r2_reduction  # or: ssd",
+        "n_portfolios": 10,
+        "portfolio_weighting": "value  # or: equal",
+        "factor_model": "FF5_plus_momentum"
+      },
+      "hardware": {
+        "device": "cuda  # or: cpu",
+        "num_workers": 4,
+        "seed": 42
+      }
+    }
+  },
+  "dependencies": {
+    "requirements": [
+      "torch>=2.1.0",
+      "numpy>=1.24.0",
+      "pandas>=2.0.0",
+      "scikit-learn>=1.3.0",
+      "scipy>=1.11.0",
+      "pyyaml>=6.0",
+      "tqdm>=4.65.0",
+      "matplotlib>=3.7.0",
+      "statsmodels>=0.14.0",
+      "pyarrow>=13.0.0"
+    ],
+    "requirements_dev": [
+      "pytest>=7.4.0",
+      "pytest-cov>=4.1.0",
+      "black>=23.0.0",
+      "ruff>=0.0.280",
+      "jupyter>=1.0.0",
+      "ipykernel>=6.25.0"
+    ]
+  },
+  "entrypoints": [
+    {
+      "file": "train.py",
+      "description": "Train a single model variant with annual refitting",
+      "args": ["--config configs/config.yaml", "--model NN3", "--device cuda", "--output models/"]
+    },
+    {
+      "file": "train_all.py",
+      "description": "Train all 13 model variants and save results table (replicates Table 1)",
+      "args": ["--config configs/config.yaml", "--output results/"]
+    },
+    {
+      "file": "evaluate.py",
+      "description": "Evaluate saved models on test set; produce R², DM tests, portfolio Sharpe ratios",
+      "args": ["--models_dir models/", "--config configs/config.yaml", "--output results/"]
+    },
+    {
+      "file": "portfolio_analysis.py",
+      "description": "Build decile-sorted portfolios and compute Sharpe ratios (replicates Tables 7, 8)",
+      "args": ["--models_dir models/", "--config configs/config.yaml", "--weighting value"]
+    },
+    {
+      "file": "variable_importance.py",
+      "description": "Compute and plot variable importance across all models (replicates Figures 4, 5)",
+      "args": ["--models_dir models/", "--method r2_reduction", "--output results/figures/"]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["build-essential", "git"],
+    "python_setup": ["pip install -r requirements.txt"],
+    "workdir": "/app",
+    "volumes": ["/app/data", "/app/results", "/app/models"],
+    "default_cmd": "python train_all.py --config configs/config.yaml"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "CRSP and Compustat/characteristics data are proprietary and require subscription access. The 94-characteristic dataset from Green, Hand, Zhang (2017) is partially available but may require reconstruction.",
+      "mitigation": "Provide a synthetic data generator using random factor models. Include a download script stub with WRDS API instructions. Paper's characteristics list in Internet Appendix Table A.6 can guide reconstruction."
+    },
+    {
+      "severity": "High",
+      "description": "Mini-batch size for SGD is not stated (confidence 0.45). Wrong batch size can significantly affect NN training dynamics and results.",
+      "mitigation": "Expose as config parameter with default 512. Add TODO comment. Ablation helper to test multiple sizes."
+    },
+    {
+      "severity": "Medium",
+      "description": "Number of ensemble random seeds not stated (confidence 0.50). Affects variance of NN predictions.",
+      "mitigation": "Default to 10 seeds. Abstract via config. Seeds loop is easily parallelized."
+    },
+    {
+      "severity": "Medium",
+      "description": "Early stopping patience/criterion not specified (confidence 0.55). Different stopping rules can alter NN generalization markedly.",
+      "mitigation": "Implement patience-based stopping (default 5 epochs). Add TODO. Make patience a config param."
+    },
+    {
+      "severity": "Medium",
+      "description": "Spline knot locations for GLM not specified (confidence 0.62). Affects GLM feature quality.",
+      "mitigation": "Default to equally spaced quantiles of training distribution. Mark with TODO."
+    },
+    {
+      "severity": "Medium",
+      "description": "L1 regularization grid for NN not specified (confidence 0.52). Paper uses L1 but not the tuning grid.",
+      "mitigation": "Use log-spaced grid over [1e-4, 0.1]. Make grid a config parameter."
+    },
+    {
+      "severity": "Low",
+      "description": "Exact SIMPLS algorithm implementation for PLS may differ across libraries. Paper cites de Jong (1993).",
+      "mitigation": "Use scikit-learn PLSRegression which implements NIPALS/SIMPLS. Validate against paper's K=3-6 component results."
+    },
+    {
+      "severity": "Low",
+      "description": "Annual refit protocol: training sample grows by 1 year at each refit over 30-year test period = 30 refits × 13 models = 390 training runs. Computationally intensive.",
+      "mitigation": "Implement recursive refitting loop with caching. Provide single-year evaluation mode for debugging."
+    }
+  ]
+}

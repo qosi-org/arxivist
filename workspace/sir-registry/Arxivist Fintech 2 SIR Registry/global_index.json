@@ -1,0 +1,28 @@
+{
+  "index_version": 1,
+  "total_papers": 2,
+  "papers": [
+    {
+      "paper_id": "paper_rl_trade_execution",
+      "title": "Reinforcement Learning for Optimized Trade Execution",
+      "domain": "RL / FinTech",
+      "sir_version": 1,
+      "sir_confidence": 0.83,
+      "has_repo": false,
+      "has_notebook": false,
+      "has_comparison": false,
+      "last_updated": "2026-05-20T00:00:00Z"
+    },
+    {
+      "paper_id": "arxiv_2004_empirical_asset_pricing",
+      "title": "Empirical Asset Pricing via Machine Learning",
+      "domain": "Tabular / Finance",
+      "sir_version": 1,
+      "sir_confidence": 0.85,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": true,
+      "last_updated": "2026-05-22T00:00:00Z"
+    }
+  ]
+}

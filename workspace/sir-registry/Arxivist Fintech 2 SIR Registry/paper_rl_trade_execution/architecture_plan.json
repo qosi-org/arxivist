@@ -1,0 +1,240 @@
+{
+  "paper_id": "paper_rl_trade_execution",
+  "framework": {
+    "primary": "Python + NumPy (tabular RL, no neural network)",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "huggingface_integration": false,
+    "config_library": "YAML + argparse",
+    "reasoning": "Paper is a tabular Q-learning/DP algorithm from 2006 with no neural network components. NumPy arrays are the natural implementation. No GPU required."
+  },
+  "module_hierarchy": {
+    "project_name": "rl_trade_execution",
+    "files": [
+      {
+        "path": "src/rl_trade_execution/__init__.py",
+        "classes": [],
+        "purpose": "Package init"
+      },
+      {
+        "path": "src/rl_trade_execution/env/order_book.py",
+        "classes": ["OrderBook", "OrderBookSnapshot"],
+        "methods": [
+          "OrderBook.load_from_inet(path) -> OrderBook",
+          "OrderBook.get_snapshot(timestamp) -> OrderBookSnapshot",
+          "OrderBookSnapshot.bid() -> float",
+          "OrderBookSnapshot.ask() -> float",
+          "OrderBookSnapshot.mid() -> float",
+          "OrderBookSnapshot.simulate_execution(volume, limit_price) -> (shares_executed, avg_price, residual)"
+        ],
+        "sir_mapping": "MarketSimulator"
+      },
+      {
+        "path": "src/rl_trade_execution/env/market_env.py",
+        "classes": ["TradeExecutionEnv"],
+        "methods": [
+          "TradeExecutionEnv.__init__(config)",
+          "TradeExecutionEnv.reset(episode_start) -> state",
+          "TradeExecutionEnv.step(action) -> (next_state, reward, done, info)",
+          "TradeExecutionEnv.encode_state(t, i, market_vars) -> int",
+          "TradeExecutionEnv.decode_state(state_idx) -> (t, i, market_vars)"
+        ],
+        "sir_mapping": "StateRepresentation, ActionSpace, MarketSimulator"
+      },
+      {
+        "path": "src/rl_trade_execution/env/market_features.py",
+        "classes": ["MarketFeatureExtractor"],
+        "methods": [
+          "MarketFeatureExtractor.compute_bid_ask_spread(snapshot) -> int",
+          "MarketFeatureExtractor.compute_immediate_market_order_cost(snapshot, volume) -> int",
+          "MarketFeatureExtractor.compute_bid_ask_volume_imbalance(snapshot) -> int",
+          "MarketFeatureExtractor.compute_signed_transaction_volume(recent_trades) -> int",
+          "MarketFeatureExtractor.discretize(value, bins) -> int"
+        ],
+        "sir_mapping": "StateRepresentation (market variables o1..oR)"
+      },
+      {
+        "path": "src/rl_trade_execution/agent/q_table.py",
+        "classes": ["QTable"],
+        "methods": [
+          "QTable.__init__(T, I, market_dims, L)",
+          "QTable.get(state_idx, action) -> float",
+          "QTable.update(state_idx, action, new_cost, n_visits)",
+          "QTable.best_action(state_idx) -> int",
+          "QTable.save(path)",
+          "QTable.load(path)"
+        ],
+        "sir_mapping": "QTableUpdater"
+      },
+      {
+        "path": "src/rl_trade_execution/agent/policy.py",
+        "classes": ["OptimalPolicy"],
+        "methods": [
+          "OptimalPolicy.from_q_table(q_table) -> OptimalPolicy",
+          "OptimalPolicy.act(state) -> action",
+          "OptimalPolicy.save(path)",
+          "OptimalPolicy.load(path)"
+        ],
+        "sir_mapping": "PolicyExtractor"
+      },
+      {
+        "path": "src/rl_trade_execution/training/trainer.py",
+        "classes": ["BackwardInductionTrainer"],
+        "methods": [
+          "BackwardInductionTrainer.__init__(config, env, q_table)",
+          "BackwardInductionTrainer.train(episodes) -> QTable",
+          "BackwardInductionTrainer._optimize_single_state(t, i, market_obs, order_book)"
+        ],
+        "sir_mapping": "QTableUpdater (backward induction loop)"
+      },
+      {
+        "path": "src/rl_trade_execution/baselines/submit_and_leave.py",
+        "classes": ["SubmitAndLeavePolicy"],
+        "methods": [
+          "SubmitAndLeavePolicy.__init__(limit_offset)",
+          "SubmitAndLeavePolicy.act(state) -> action",
+          "SubmitAndLeavePolicy.optimize(episodes) -> SubmitAndLeavePolicy"
+        ],
+        "sir_mapping": "Baseline comparison"
+      },
+      {
+        "path": "src/rl_trade_execution/baselines/market_order.py",
+        "classes": ["MarketOrderPolicy"],
+        "methods": [
+          "MarketOrderPolicy.act(state) -> action"
+        ],
+        "sir_mapping": "Baseline comparison"
+      },
+      {
+        "path": "src/rl_trade_execution/evaluation/metrics.py",
+        "classes": ["ExecutionMetrics"],
+        "methods": [
+          "ExecutionMetrics.trading_cost_bps(execution_price, mid_price) -> float",
+          "ExecutionMetrics.relative_improvement(cost_a, cost_b) -> float",
+          "ExecutionMetrics.aggregate_episodes(episode_costs) -> dict"
+        ],
+        "sir_mapping": "Evaluation protocol"
+      },
+      {
+        "path": "src/rl_trade_execution/data/loader.py",
+        "classes": ["INETDataLoader"],
+        "methods": [
+          "INETDataLoader.load_order_book(filepath) -> list[OrderBookSnapshot]",
+          "INETDataLoader.partition_episodes(data, H_minutes) -> list[Episode]",
+          "INETDataLoader.train_test_split(episodes, train_months=12, test_months=6)"
+        ],
+        "sir_mapping": "Data loading from INET ECN files"
+      },
+      {
+        "path": "src/rl_trade_execution/utils/config.py",
+        "classes": ["ExperimentConfig"],
+        "methods": [
+          "ExperimentConfig.from_yaml(path) -> ExperimentConfig",
+          "ExperimentConfig.validate()"
+        ]
+      }
+    ]
+  },
+  "tensor_flow": {
+    "training_pass": "BACKWARD INDUCTION LOOP:\n  for t = T downto 0:\n    for each order_book_snapshot in training_data:\n      compute market_vars o1..oR from snapshot (discretized)\n      for i in 0..I:\n        for a in 0..L:\n          state_idx = encode(t, i, o1..oR)  → scalar int\n          shares_executed, cost_im = simulate_execution(snapshot, i*V/I, ask-a)\n          next_i = i - shares_executed_units\n          next_state_idx = encode(t+1, next_i, next_market_vars)\n          best_future = q_table.best_action(next_state_idx)\n          n = visit_count[state_idx, a]\n          q_table[state_idx, a] = n/(n+1)*q_table[state_idx,a] + 1/(n+1)*(cost_im + best_future)\n          visit_count[state_idx, a] += 1",
+    "inference_pass": "INFERENCE:\n  given current state (t, i, order_book_snapshot):\n    market_vars = extract_features(snapshot)\n    state_idx = encode(t, i, market_vars)\n    action = argmin_a q_table[state_idx, a]\n    limit_price = ask - action\n    submit limit order at limit_price for i*V/I shares"
+  },
+  "config_schema": {
+    "template_path": "configs/experiment.yaml",
+    "fields": {
+      "experiment": {
+        "stock": "AMZN  # one of: AMZN, NVDA, QCOM",
+        "V": "10000  # total shares to execute",
+        "H_minutes": "2  # execution horizon",
+        "side": "sell  # buy or sell"
+      },
+      "state_space": {
+        "T": "8  # time resolution (decision points)",
+        "I": "8  # inventory resolution levels",
+        "market_variables": "['bid_ask_spread', 'immediate_market_order_cost']",
+        "n_bins_market": "3  # discretization bins per market variable # ASSUMED: paper states 3 for tx volume, implied for others"
+      },
+      "action_space": {
+        "L": "21  # number of discrete price offset actions # ASSUMED: inferred from figures, confidence=0.60",
+        "action_min": "-6  # most passive (deep in own book)",
+        "action_max": "14  # most aggressive (cross spread)"
+      },
+      "training": {
+        "data_path": "data/raw/",
+        "train_months": 12,
+        "test_months": 6
+      },
+      "evaluation": {
+        "output_dir": "results/",
+        "report_stocks": "['AMZN', 'NVDA', 'QCOM']"
+      }
+    }
+  },
+  "dependencies": {
+    "requirements": [
+      "numpy>=1.24.0",
+      "pandas>=2.0.0",
+      "pyyaml>=6.0",
+      "tqdm>=4.65.0",
+      "matplotlib>=3.7.0",
+      "scipy>=1.11.0"
+    ],
+    "requirements_dev": [
+      "pytest>=7.4.0",
+      "pytest-cov>=4.1.0",
+      "black>=23.0.0",
+      "ruff>=0.0.280",
+      "jupyter>=1.0.0",
+      "ipykernel>=6.25.0"
+    ]
+  },
+  "entrypoints": [
+    {
+      "file": "train.py",
+      "args": ["--config configs/experiment.yaml", "--stock AMZN", "--H 2", "--V 10000", "--T 8", "--I 8", "--output models/policy.pkl"]
+    },
+    {
+      "file": "evaluate.py",
+      "args": ["--policy models/policy.pkl", "--data data/test/", "--stock AMZN", "--output results/"]
+    },
+    {
+      "file": "simulate_episode.py",
+      "args": ["--policy models/policy.pkl", "--episode_file data/test/episode_001.csv", "--verbose"]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.10-slim",
+    "system_deps": ["build-essential"],
+    "python_setup": ["pip install -r requirements.txt"],
+    "workdir": "/app",
+    "volumes": ["/app/data", "/app/results"],
+    "default_cmd": "python train.py --config configs/experiment.yaml"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "INET ECN historical order book data is proprietary and not publicly available. The exact data format is undocumented.",
+      "mitigation": "Provide a synthetic data generator that mimics INET format (random walk + Poisson order arrivals). Include a data loading interface that users can implement for their own data."
+    },
+    {
+      "severity": "Medium",
+      "description": "Number of discrete actions L (confidence 0.60) — inferred from figures as ~21 but not stated explicitly.",
+      "mitigation": "Make L a config parameter with default 21; add TODO comment. Results may vary with different L values."
+    },
+    {
+      "severity": "Medium",
+      "description": "Market variable discretization bins not fully specified for all variables beyond transaction volume.",
+      "mitigation": "Implement configurable n_bins per variable; default to 3. Add TODO annotation in code."
+    },
+    {
+      "severity": "Low",
+      "description": "Reward normalization / exact cost calculation formula implied but not fully specified.",
+      "mitigation": "Implement cost as (mid_price - executed_price) / mid_price * 10000 bps, which matches paper description."
+    },
+    {
+      "severity": "Low",
+      "description": "Memory: Q-table with T=8, I=8, 3 market vars at 3 bins each, L=21 has 8*8*27*21 = 36,288 entries — trivially small.",
+      "mitigation": "No mitigation needed; pure NumPy array is sufficient."
+    }
+  ]
+}

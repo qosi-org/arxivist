@@ -1,0 +1,27 @@
+{
+  "paper_id": "arxiv_2004_empirical_asset_pricing",
+  "paper_title": "Empirical Asset Pricing via Machine Learning",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "sir_path": "sir-registry/arxiv_2004_empirical_asset_pricing/sir.json",
+  "repo_path": "paper-repos/arxiv_2004_empirical_asset_pricing/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2004_empirical_asset_pricing/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2004_empirical_asset_pricing/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2004_empirical_asset_pricing/notebooks/reproduce_empirical_asset_pricing.ipynb",
+    "comparison_report": "paper-repos/arxiv_2004_empirical_asset_pricing/comparison/results_comparator.md"
+  },
+  "confidence_flags": {},
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-22T00:00:00Z",
+  "last_updated": "2026-05-22T00:00:00Z"
+}

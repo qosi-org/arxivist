@@ -1,0 +1,12 @@
+{
+  "paper_id": "paper_rl_trade_execution",
+  "title": "Reinforcement Learning for Optimized Trade Execution",
+  "authors": ["Yuriy Nevmyvaka", "Yi Feng", "Michael Kearns"],
+  "venue": "Proceedings of the 23rd International Conference on Machine Learning (ICML 2006)",
+  "year": 2006,
+  "domain": "RL / FinTech / Market Microstructure",
+  "source": "PDF upload",
+  "sir_versions": [1],
+  "pipeline_stage": 1,
+  "has_comparison": false
+}
