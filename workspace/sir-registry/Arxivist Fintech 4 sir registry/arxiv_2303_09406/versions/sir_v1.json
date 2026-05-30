@@ -1,0 +1,286 @@
+{
+  "paper_id": "arxiv_2303_09406",
+  "version": 1,
+  "provenance": {
+    "title": "Exploiting Supply Chain Interdependencies for Stock Return Prediction: A Full-State Graph Convolutional LSTM",
+    "authors": [{"name": "Chang Liu", "affiliation": "Department of Information Engineering and Computer Science, University of Trento"}],
+    "arxiv_id": "2303.09406v2",
+    "submission_date": "2023-03",
+    "last_revised": "2025-12-07",
+    "abstract": "We propose the Full-State Graph Convolutional LSTM (FS-GCLSTM), a novel temporal graph neural network that incorporates value-chain relationships to enhance stock return forecasting. FS-GCLSTM applies graph convolutions to all LSTM components—current input features, previous hidden states, and cell states.",
+    "primary_domain": "Tabular / Time-Series / Graph",
+    "key_claims": [
+      "Applying GCN to ALL LSTM inputs (Xt, h_{t-1}, c_{t-1}) outperforms GCN applied only to node features",
+      "FS-GCLSTM achieves highest annualized return (7.41%), Sharpe (0.46), Sortino (0.59) on Eurostoxx 600",
+      "FS-GCLSTM achieves highest annualized return (9.79%), Sharpe (0.61), Sortino (0.75) on S&P 500",
+      "Superior portfolio performance despite NOT having lowest MSE/MAE — portfolio metrics matter more",
+      "Performance gains more pronounced in denser Eurostoxx 600 network; stable across sequence lengths 30-120 days"
+    ],
+    "parsed_at": "2026-05-29T00:00:00Z"
+  },
+  "architecture": {
+    "description": "Temporal graph neural network combining Graph Convolutional Networks (GCN) with LSTM. Key innovation: GCN applied to ALL LSTM inputs (h_{t-1}, c_{t-1}, X_t) rather than only X_t.",
+    "components": [
+      {
+        "name": "GraphConvLayer",
+        "role": "Spatial feature extraction via normalized Laplacian convolution (Kipf & Welling 2016)",
+        "input": "Feature matrix X [N, d], adjacency matrix A [N, N]",
+        "output": "H [N, d_out]",
+        "operation": "H = f(D_tilde^{-1/2} A_tilde D_tilde^{-1/2} X W), f=ReLU",
+        "n_layers": 2,
+        "confidence": 0.97
+      },
+      {
+        "name": "FSGCLSTMCell",
+        "role": "Core recurrent cell — applies 2-layer GCN to h_{t-1}, c_{t-1}, X_t before LSTM gates",
+        "input": "X_t [N, d], h_{t-1} [N, hidden], c_{t-1} [N, hidden]",
+        "output": "h_t [N, hidden], c_t [N, hidden]",
+        "operation": "See equations f_t, i_t, c_t, o_t, h_t below",
+        "confidence": 0.97
+      },
+      {
+        "name": "StackedFSGCLSTM",
+        "role": "3 stacked FS-GCLSTM cells processing temporal sequence of d-day windows",
+        "input": "Sequence of graph snapshots [d, N, features]",
+        "output": "Concatenated final hidden states [3 * N * hidden]",
+        "n_layers": 3,
+        "confidence": 0.92
+      },
+      {
+        "name": "MLP",
+        "role": "Maps flattened hidden states to per-stock return predictions",
+        "input": "Flattened hidden states [3 * N * hidden]",
+        "output": "Predicted returns [N_pred]",
+        "confidence": 0.85,
+        "note": "MLP size not specified — ASSUMED: 2 layers with hidden_dim intermediate"
+      }
+    ],
+    "primary_variant": "FS-GCLSTM with d=60 input days, 3 stacked cells",
+    "confidence": 0.88
+  },
+  "mathematical_spec": {
+    "equations": [
+      {
+        "id": "eq1",
+        "name": "GCN Layer",
+        "latex": "Z = \\tilde{D}^{-1/2} \\tilde{A} \\tilde{D}^{-1/2} X W, \\quad H = f(Z)",
+        "where": "A_tilde = A + I_n, D_tilde = degree matrix of A_tilde, W learnable, f=ReLU",
+        "role": "Spatial neighborhood aggregation (Kipf & Welling 2016)",
+        "confidence": 0.99
+      },
+      {
+        "id": "eq2",
+        "name": "FS-GCLSTM Forget Gate",
+        "latex": "f_t = \\sigma\\left(W_f [\\tilde{H}(h_{t-1}), \\tilde{H}(X_t)] + b_f\\right)",
+        "confidence": 0.97
+      },
+      {
+        "id": "eq3",
+        "name": "FS-GCLSTM Input Gate",
+        "latex": "i_t = \\sigma\\left(W_i [\\tilde{H}(h_{t-1}), \\tilde{H}(X_t)] + b_i\\right)",
+        "confidence": 0.97
+      },
+      {
+        "id": "eq4",
+        "name": "FS-GCLSTM Cell State",
+        "latex": "c_t = f_t \\odot \\tilde{H}(c_{t-1}) + i_t \\odot \\tanh\\left(W_c [\\tilde{H}(h_{t-1}), \\tilde{H}(X_t)] + b_c\\right)",
+        "role": "Key innovation: GCN applied to c_{t-1} as well as h_{t-1} and X_t",
+        "confidence": 0.97
+      },
+      {
+        "id": "eq5",
+        "name": "FS-GCLSTM Output Gate",
+        "latex": "o_t = \\sigma\\left(W_o [\\tilde{H}(h_{t-1}), \\tilde{H}(X_t)] + b_o\\right)",
+        "confidence": 0.97
+      },
+      {
+        "id": "eq6",
+        "name": "FS-GCLSTM Hidden State",
+        "latex": "h_t = o_t \\odot \\tanh(c_t)",
+        "confidence": 0.99
+      }
+    ],
+    "confidence": 0.97
+  },
+  "tensor_semantics": {
+    "data_objects": [
+      {
+        "name": "Node feature matrix",
+        "symbol": "X_t",
+        "shape": "[N, d]",
+        "description": "N = number of graph nodes, d = rolling window of daily returns (default: 60)"
+      },
+      {
+        "name": "Adjacency matrix",
+        "symbol": "A_t",
+        "shape": "[N, N]",
+        "description": "Binary (or confidence-weighted) value-chain supplier-customer relationships, bidirectional"
+      },
+      {
+        "name": "Hidden state",
+        "symbol": "h_t",
+        "shape": "[N, hidden_dim]",
+        "description": "Per-node hidden state after GCN transformation"
+      },
+      {
+        "name": "Cell state",
+        "symbol": "c_t",
+        "shape": "[N, hidden_dim]",
+        "description": "Per-node cell state — also passed through GCN (key FS-GCLSTM innovation)"
+      },
+      {
+        "name": "Output predictions",
+        "symbol": "y_hat",
+        "shape": "[N_pred]",
+        "description": "Predicted next-day returns for N_pred target stocks (N_pred <= N)"
+      }
+    ],
+    "confidence": 0.88
+  },
+  "training_pipeline": {
+    "optimizer": "Adam",
+    "learning_rate": 0.001,
+    "weight_decay": 1e-5,
+    "lr_schedule": "OneCycleLR",
+    "max_epochs": 30,
+    "early_stopping_patience": 10,
+    "early_stopping_metric": "validation loss",
+    "rolling_window": {
+      "initial_window_days": 3000,
+      "train_split": 0.70,
+      "val_split": 0.20,
+      "test_split": 0.10,
+      "advance_days": 300
+    },
+    "data_period": "2000-01-01 to 2024-12-31",
+    "input_sequence_length_default": 60,
+    "input_sequence_length_robustness": [30, 60, 90, 120],
+    "loss_function": "MSE",
+    "loss_function_confidence": 0.70,
+    "loss_function_note": "ASSUMED: MSE is standard for return prediction regression; paper evaluates MSE but does not state training loss explicitly",
+    "batch_size": "ASSUMED: full-batch or mini-batch per rolling window — not stated",
+    "batch_size_confidence": 0.45,
+    "confidence": 0.78
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {
+        "name": "Eurostoxx 600",
+        "description": "600 large-cap European companies, 17 countries. After filtering: 1576 graph nodes, 550 output nodes, 2501 edges",
+        "period": "2000-01-01 to 2024-12-31",
+        "min_trading_days": 5000,
+        "geographic_filter": "19 European countries"
+      },
+      {
+        "name": "S&P 500",
+        "description": "500 US companies. After filtering: 1694 nodes, 656 output nodes, 2446 edges",
+        "period": "2000-01-01 to 2024-12-31",
+        "min_trading_days": 5000,
+        "geographic_filter": "US-listed firms only"
+      }
+    ],
+    "graph_data": "LSEG value-chain dataset, confidence score > 20% threshold, bidirectional edges",
+    "metrics": ["MSE", "MAE", "Directional Correctness (%)", "Annualized Return (%)", "Annualized Sharpe Ratio", "Annualized Sortino Ratio"],
+    "portfolio_strategy": "Daily rebalanced, equal-weighted, long-only. Buy all stocks with positive predicted return. Transaction costs: 1bp. Restricted to current index constituents.",
+    "risk_free_rate": {
+      "eurostoxx": "EONIA (Euro OverNight Index Average)",
+      "sp500": "USD Overnight LIBOR (US00O/N)"
+    },
+    "reported_results": {
+      "eurostoxx_600": {
+        "FS_GCLSTM": {"MSE": 4.236e-4, "MAE": 1.379e-2, "Correctness": 50.59, "ann_Return": 7.41, "Sharpe": 0.462, "Sortino": 0.592},
+        "FCL_best_MSE": {"MSE": 4.081e-4, "ann_Return": 6.24, "Sharpe": 0.386},
+        "Constant_Weights": {"ann_Return": 5.03, "Sharpe": 0.310}
+      },
+      "sp500": {
+        "FS_GCLSTM": {"MSE": 3.985e-4, "MAE": 1.315e-2, "Correctness": 50.35, "ann_Return": 9.79, "Sharpe": 0.608, "Sortino": 0.754},
+        "LSTM_best_MSE": {"MSE": 3.857e-4, "ann_Return": 8.93, "Sharpe": 0.549},
+        "Constant_Weights": {"ann_Return": 8.52, "Sharpe": 0.529}
+      }
+    },
+    "baselines": ["ARIMA (pmdarima, 60-day rolling)", "FCL (4-layer fully connected)", "LSTM (2-layer, hidden 60)", "GConvGRU (Chebyshev spectral GRU)"],
+    "confidence": 0.96
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "MSE loss used for training",
+      "basis": "Standard for regression; paper evaluates MSE but does not explicitly state training objective",
+      "confidence": 0.70,
+      "alternatives": ["MAE", "Huber loss", "custom directional loss"]
+    },
+    {
+      "assumption": "MLP has 2 hidden layers with sizes [hidden_dim*2, N_pred]",
+      "basis": "Paper states 'multi-layer perceptron' without specifying layer sizes",
+      "confidence": 0.50,
+      "alternatives": ["1 layer", "3 layers", "different size schedule"]
+    },
+    {
+      "assumption": "hidden_dim = 64 per GCN layer",
+      "basis": "Common default for GCN-LSTM; paper does not state hidden dimension",
+      "confidence": 0.45,
+      "alternatives": [32, 128, 256]
+    },
+    {
+      "assumption": "GCN weight matrix W is shared across the 2 GCN layers applied to each tensor",
+      "basis": "Standard 2-layer GCN as in Kipf & Welling 2016",
+      "confidence": 0.72,
+      "alternatives": ["Separate weights per layer"]
+    },
+    {
+      "assumption": "Training loss computed only on N_pred output nodes, not all N graph nodes",
+      "basis": "Paper states predictions for N_pred <= N; logical to backpropagate only on target nodes",
+      "confidence": 0.80,
+      "alternatives": ["Loss on all N nodes"]
+    },
+    {
+      "assumption": "Daily log-returns used as node features",
+      "basis": "Paper says 'historical price movements'; log-returns are standard",
+      "confidence": 0.72,
+      "alternatives": ["simple returns", "normalized prices", "raw prices"]
+    },
+    {
+      "assumption": "Batch size equals one full rolling window snapshot",
+      "basis": "Graph structure makes mini-batching non-trivial; common in graph learning",
+      "confidence": 0.55,
+      "alternatives": ["Mini-batches by sampling subgraphs", "batches of time steps"]
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section III.c, MLP",
+      "description": "MLP architecture not specified: number of layers, hidden sizes, activation functions",
+      "primary_assumption": "2-layer MLP: [3*N*hidden -> hidden_dim*2 -> N_pred]",
+      "confidence": 0.50
+    },
+    {
+      "location": "Section III.c, hidden_dim",
+      "description": "Hidden dimension of GCN and LSTM layers not stated anywhere in the paper",
+      "primary_assumption": 64,
+      "alternatives": [32, 128],
+      "confidence": 0.45
+    },
+    {
+      "location": "Section IV.C, loss function",
+      "description": "Training objective not explicitly stated. Paper only mentions evaluation metrics (MSE, MAE, etc.)",
+      "primary_assumption": "MSE",
+      "alternatives": ["MAE", "Huber"],
+      "confidence": 0.70
+    },
+    {
+      "location": "Section IV.C, batch size",
+      "description": "Batch size not stated. With a dynamic graph, full-batch is common but expensive.",
+      "primary_assumption": "Full-batch per time step",
+      "alternatives": ["Mini-batch via subgraph sampling"],
+      "confidence": 0.55
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.88,
+    "mathematical_spec": 0.97,
+    "tensor_semantics": 0.88,
+    "training_pipeline": 0.78,
+    "evaluation_protocol": 0.96,
+    "implementation_assumptions": 0.62,
+    "overall_sir_confidence": 0.85
+  }
+}

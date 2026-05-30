@@ -1,0 +1,24 @@
+{
+  "paper_id": "arxiv_2303_09406",
+  "paper_title": "Exploiting Supply Chain Interdependencies for Stock Return Prediction: A Full-State Graph Convolutional LSTM",
+  "current_stage": 5,
+  "stages_completed": [1, 2, 3, 4, 5],
+  "sir_path": "sir-registry/arxiv_2303_09406/sir.json",
+  "repo_path": "paper-repos/arxiv_2303_09406/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2303_09406/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2303_09406/architecture_plan_summary.md",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2303_09406/notebooks/reproduce_arxiv_2303_09406.ipynb",
+    "comparison_report": null
+  },
+  "confidence_flags": {
+    "overall_sir_confidence": 0.85,
+    "low_confidence_sections": ["implementation_assumptions (0.62)", "hidden_dim assumption (0.45)", "MLP architecture (0.50)"],
+    "human_review_required": false
+  },
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-05-29T00:00:00Z",
+  "last_updated": "2026-05-29T00:00:00Z"
+}

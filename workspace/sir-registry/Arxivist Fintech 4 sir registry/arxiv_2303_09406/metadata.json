@@ -1,0 +1,22 @@
+{
+  "paper_id": "arxiv_2303_09406",
+  "title": "Exploiting Supply Chain Interdependencies for Stock Return Prediction: A Full-State Graph Convolutional LSTM",
+  "authors": ["Chang Liu"],
+  "domain": "Temporal Graph Neural Networks / Quantitative Finance",
+  "arxiv_id": "2303.09406",
+  "version": 1,
+  "created_at": "2026-05-29T00:00:00Z",
+  "last_updated": "2026-05-29T00:00:00Z",
+  "sir_confidence": 0.85,
+  "stages_with_data": [1, 2, 3, 4, 5],
+  "has_comparison_report": false,
+  "repo_path": "paper-repos/arxiv_2303_09406/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-05-29T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    }
+  ]
+}
