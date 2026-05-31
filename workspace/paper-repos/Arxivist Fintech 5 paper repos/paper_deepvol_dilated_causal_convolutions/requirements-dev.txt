@@ -1,0 +1,9 @@
+-r requirements.txt
+pytest>=7.4.0
+black>=23.0.0
+isort>=5.12.0
+mypy>=1.5.0
+jupyter>=1.0.0
+ipywidgets>=8.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0

@@ -1,0 +1,27 @@
+version: "3.8"
+services:
+  train:
+    build: ..
+    working_dir: /workspace
+    volumes:
+      - ../data:/workspace/data
+      - ../results:/workspace/results
+      - ../checkpoints:/workspace/checkpoints
+    command: python train.py --config configs/config.yaml
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  notebook:
+    build: ..
+    working_dir: /workspace
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../notebooks:/workspace/notebooks
+      - ../data:/workspace/data
+    command: jupyter notebook --ip=0.0.0.0 --allow-root --no-browser notebooks/

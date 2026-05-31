@@ -1,0 +1,9 @@
+torch>=2.0.0
+pytorch-lightning>=2.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+statsmodels>=0.14.0
+arch>=6.2.0
+omegaconf>=2.3.0
+tqdm>=4.65.0

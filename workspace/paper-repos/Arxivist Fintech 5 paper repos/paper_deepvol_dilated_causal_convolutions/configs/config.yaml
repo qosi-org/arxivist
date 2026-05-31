@@ -1,0 +1,85 @@
+# DeepVol Configuration
+# Paper: "DeepVol: volatility forecasting from high-frequency data with dilated causal convolutions"
+# Moreno-Pino & Zohren, Quantitative Finance 2024.
+# All hyperparameter values from Table 1 unless noted.
+
+model:
+  name: "DeepVol"             # "DeepVol" or "DeepVolRM"
+
+  # --- Input ---
+  in_channels: 1              # Single scalar return per time-step
+
+  # --- DCC Stack (Table 1) ---
+  num_blocks: 2               # Number of residual block groups
+  num_layers: 6               # Layers per block; dilation = 2^l for l in 0..5
+  kernel_size: 3              # Convolutional kernel size (Table 1)
+  residual_channels: 32       # Width of residual stream (Table 1)
+  dilation_channels: 64       # Internal width of dilated conv (Table 1)
+  skip_channels: 128          # Skip connection width (Table 1)
+  end_channels: 64            # Output head hidden size (Table 1)
+
+  # --- Activation (ASSUMED: WaveNet gated tanh*sigmoid; confidence=0.78) ---
+  # TODO: verify activation type from paper authors
+  gate_activation: "gated_tanh_sigmoid"  # ASSUMED
+
+data:
+  # Sampling frequency: 5 min proved optimal (Table 2, Section 5.2)
+  sampling_freq_min: 5         # Minutes per intraday bar
+  # For 6.5-hour US trading day at 5-min: 78 intervals
+  intervals_per_day: 78        # J — intraday intervals per trading day
+
+  # Receptive field: 1 day proved optimal (Table 2, Section 5.2)
+  conditioning_range: 1        # T — number of past trading days used as input
+
+  # Data paths — override via CLI or environment
+  data_dir: "data/processed"
+  tickers_file: "data/tickers.txt"  # List of NASDAQ-100 ticker symbols
+
+  # Splits (Section 5.3)
+  train_start: "2019-09-30"
+  train_end:   "2020-09-30"
+  val_start:   "2020-10-01"
+  val_end:     "2020-12-31"
+  test_start:  "2021-01-01"
+  test_end:    "2021-09-30"
+
+  # Exclude overnight returns (Section 2.1)
+  exclude_overnight: true
+
+  # Realised variance target computed at 5-min (Eq. 2)
+  rv_freq_min: 5
+
+training:
+  # Optimizer: Adam (Table 1, Kingma & Ba 2014)
+  optimizer: "adam"
+  learning_rate: 0.001         # Table 1
+  beta1: 0.9                   # Adam default — not stated in paper; ASSUMED
+  beta2: 0.999                 # Adam default — not stated in paper; ASSUMED
+  epsilon: 1.0e-8              # Adam default — ASSUMED
+  weight_decay: 0.0            # ASSUMED: not mentioned in paper
+
+  batch_size: 512              # Table 1
+  num_epochs: 1000             # Table 1
+  early_stopping_patience: 50  # Table 1
+
+  loss_function: "qlike"       # Table 1
+
+  # Checkpointing
+  checkpoint_dir: "checkpoints"
+  save_every_n_epochs: 10
+  log_every_n_steps: 50
+
+  # Reproducibility
+  seed: 42
+  deterministic: false         # Set true for full reproducibility (slower)
+
+  # Hardware
+  accelerator: "auto"          # "gpu", "cpu", or "auto"
+  precision: "32-true"         # "16-mixed" for AMP (not mentioned in paper)
+  num_workers: 4
+
+evaluation:
+  metrics: ["mae", "rmse", "smape", "qlike", "me", "medae"]
+  mcs_alpha: 0.05              # Model Confidence Set significance level (Section 3.3)
+  checkpoint_path: "checkpoints/best.ckpt"
+  output_dir: "results"
