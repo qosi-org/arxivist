@@ -1,0 +1,101 @@
+# =============================================================================
+# Configuration — Havlicek et al. (2018)
+# "Supervised Learning with Quantum-Enhanced Feature Spaces"
+# arXiv: 1804.11326v2
+# =============================================================================
+
+seed: 42
+
+experiment:
+  name: havlicek2018_reproduction
+  protocol: both           # Options: 'qvc', 'qke', 'both'
+  output_dir: results/
+
+# -----------------------------------------------------------------------------
+# Feature Map  [EQ1, EQ2, EQ5 — conf=0.97]
+# U_Phi(x) = exp(i * sum_{S⊆[n]} phi_S(x) * prod_{i∈S} Z_i)
+# Full map:  𝒰_Phi(x) = U_Phi(x) H^n U_Phi(x) H^n
+# -----------------------------------------------------------------------------
+feature_map:
+  n_qubits: 2              # Paper: n=2 qubits used in experiments — conf=0.97
+  reps: 2                  # Two U_Phi layers (double-layer structure) — conf=0.97
+
+# -----------------------------------------------------------------------------
+# Synthetic Data  [EQ14 — conf=0.90]
+# m(x) = +1 if <Phi(x)|V† Z1Z2 V|Phi(x)> >= Delta, -1 if <= -Delta
+# -----------------------------------------------------------------------------
+data:
+  n_per_label: 20          # 20 data points per label — conf=0.96
+  gap: 0.3                 # Delta = 0.3 separation gap — conf=0.98
+  domain_min: 0.0001       # (0, 2π] — avoid exact 0
+  domain_max: 6.2832       # 2π
+  n_test_sets: 10          # Test sets drawn per training set — conf=0.90
+  V_seed: 42               # ASSUMED: fixed seed for V∈SU(4) — conf=0.80
+
+# -----------------------------------------------------------------------------
+# QVC — Quantum Variational Classifier  [EQ6-EQ9 — conf=0.88]
+# -----------------------------------------------------------------------------
+qvc:
+  depths: [0, 1, 2, 3, 4]   # Circuit depths l tested — conf=0.95
+  n_datasets: 3              # Training datasets per depth — conf=0.95
+
+  spsa:
+    n_iter: 250              # SPSA iterations — conf=0.95
+    shots_cost: 200          # R in EQ8 sigmoid (smoother gradient) — conf=0.95
+    shots_eval: 2000         # Actual hardware shots per training step — conf=0.95
+    shots_classify: 10000    # Shots for final classification — conf=0.95
+    # ASSUMED: Spall canonical gain-sequence defaults — conf=0.55
+    # WARNING: Wrong values cause non-convergence. Tune if QVC doesn't improve.
+    # Reference: Spall (1997) IEEE TAC 45(10); Spall (2000) Automatica 33(1)
+    a: 0.628                 # ASSUMED: Spall default step-size coefficient
+    c: 0.1                   # ASSUMED: Spall default gradient perturbation
+    A: 100                   # ASSUMED: Spall stability constant
+    alpha_spsa: 0.602        # ASSUMED: Spall gain decay exponent for a_k
+    gamma_spsa: 0.101        # ASSUMED: Spall gain decay exponent for c_k
+
+  optimizer: spsa            # Options: 'spsa' | 'adam' | 'cobyla'
+  bias_init: 0.0
+  bias_range: [-1.0, 1.0]
+
+# -----------------------------------------------------------------------------
+# QKE — Quantum Kernel Estimator  [EQ3, EQ11, EQ12 — conf=0.95]
+# K(x,z) = |<Phi(x)|Phi(z)>|^2
+# -----------------------------------------------------------------------------
+qke:
+  shots_per_entry: 50000     # Hardware shots per kernel entry — conf=0.97
+  use_statevector: true      # true=exact sim; false=shot-based hardware emulation
+  n_test_sets: 10
+
+  svm:
+    C: 1.0                   # ASSUMED: SVM regularisation (hard margin implied) — conf=0.75
+    psd_epsilon: 1.0e-10     # Eigenvalue floor for PSD enforcement
+
+# -----------------------------------------------------------------------------
+# Error Mitigation — Zero-Noise Extrapolation  [conf=0.72]
+# ASSUMED: disabled for ideal simulation — set enabled: true for noisy emulation
+# Paper applies Richardson first-order ZNE with 1.5x gate-time stretch
+# -----------------------------------------------------------------------------
+error_mitigation:
+  enabled: false
+  scale_factors: [1.0, 1.5]       # Paper's stretch factors — conf=0.95
+  # ASSUMED: depolarizing error approximation for simulation — conf=0.60
+  depolarizing_error_rate: 0.01
+
+# -----------------------------------------------------------------------------
+# Backend
+# -----------------------------------------------------------------------------
+backend:
+  name: statevector_simulator      # Qiskit Aer backend name
+  device: cpu                      # 'cpu' | 'GPU' (AerSimulator supports GPU)
+  noise_model: null                # null = noiseless; 'depolarizing' = noisy sim
+
+# -----------------------------------------------------------------------------
+# Output
+# -----------------------------------------------------------------------------
+output:
+  results_dir: results/
+  save_kernel_matrix: true
+  save_plots: true
+  plot_format: png                 # 'png' | 'pdf' | 'svg'
+  plot_dpi: 150
+  verbose: true
