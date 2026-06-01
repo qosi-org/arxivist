@@ -1,0 +1,300 @@
+{
+"sir_json": {
+"metadata": {
+"title": "Supervised Learning with Quantum-Enhanced Feature Spaces",
+"authors": "Havlicek, Corcoles, Temme, Harrow, Kandala, Chow, Gambetta",
+"affiliations": "IBM / MIT",
+"arxiv_id": "1804.11326v2 (Jun 2018)",
+"paper_id": "paper_havlicek2018_qsvm",
+"sir_version": "v1",
+"overall_confidence": 0.86
+},
+"provenance": {
+"domain": "Quantum Machine Learning",
+"hardware": "5-qubit superconducting transmon (IBM), qubits Q0 and Q1",
+"key_claims": [
+"Quantum feature maps embed classical data into exponentially large Hilbert spaces conjectured to be classically hard",
+"Quantum Variational Classifier (QVC) achieves up to 100% success on real hardware",
+"Quantum Kernel Estimator (QKE) is a direct quantum-enhanced analog of classical kernel SVM",
+"The feature map is related to the hidden-shift problem for bent Boolean functions (hardness conjecture)",
+"Zero-noise extrapolation (Richardson) substantially improves results for deeper circuits"
+]
+},
+"architecture_graph": {
+"confidence": 0.91,
+"graph_text": "INPUT x ∈ (0,2π]²\n        │\n        ▼\n┌───────────────────────────────────────────────┐\n│  FEATURE MAP  U_Φ(x) = U_Φ H⊗ⁿ U_Φ H⊗ⁿ      │\n│                                               │\n│  U_Φ(x) = exp(i Σ_{S⊆[n]} φ_S(x) Π_{i∈S} Zᵢ)│\n│                                               │\n│  For n=d=2:                                   │\n│    φ_{i}(x) = xᵢ                             │\n│    φ_{1,2}(x) = (π−x₁)(π−x₂)                │\n│                                               │\n│  Gate decomp: ZkZl via CNOT+Z (Fig 1c)        │\n└───────────────────┬───────────────────────────┘\n                    │\n          ┌─────────┴─────────┐\n          │                   │\n          ▼                   ▼\n  ┌───────────────┐   ┌──────────────────────────┐\n  │ PROTOCOL 1    │   │ PROTOCOL 2 (QKE)         │\n  │ QVC           │   │                          │\n  │               │   │ Apply U†*Φ(xⱼ) U_Φ(xᵢ) │\n  │ W(θ) =        │   │ to |0ⁿ⟩; count |0...0⟩  │\n  │ U^(l)*loc     │   │ outcomes → K(xᵢ,xⱼ)     │\n  │ Uₑₙₜ ... l×  │   │                          │\n  │               │   │ 50,000 shots/entry       │\n  │ Uₑₙₜ = ΠCZ   │   │ ZNE error mitigation     │\n  │               │   └──────────┬───────────────┘\n  │ Meas: Z₁Z₂   │              │\n  │ parity f(z)   │              ▼\n  │               │   ┌──────────────────────────┐\n  │ SPSA opt:     │   │ CLASSICAL SVM (precomp K)│\n  │ 250 iters     │   │ Solve Wolfe dual L_D(α)  │\n  │ R=200 (cost)  │   │ → support vectors α*     │\n  │ R=2000 (eval) │   │ → bias b from KKT        │\n  └───────┬───────┘   └──────────┬───────────────┘\n          │                      │\n          ▼                      ▼\n  ┌───────────────┐   ┌──────────────────────────┐\n  │ Decision:     │   │ Decision:                │\n  │ ỹ if          │   │ sign(Σᵢ yᵢα*ᵢK(xᵢ,s)+b)│\n  │ p̂_y > p̂*{-y}│   │                          │\n  │ − yb          │   │                          │\n  └───────────────┘   └──────────────────────────┘",
+"hardware_details": {
+"n_qubits": "n=2 qubits",
+"T1": "[55, 38] μs",
+"T2_star": "[16, 17] μs",
+"CNOT_error": 0.0373,
+"readout_fidelity": "~95%; readout correction matrix applied",
+"zero_noise_extrapolation": "stretch gate times by 1.5×; Richardson extrapolate"
+}
+},
+"mathematical_specification": {
+"confidence": 0.94,
+"core_equations": [
+{
+"id": "EQ1",
+"name": "Diagonal phase gate",
+"expression": "U_Φ(x) = exp(i Σ*{S⊆[n]} φ_S(x) Π_{i∈S} Zᵢ)"
+},
+{
+"id": "EQ2",
+"name": "Full feature map",
+"expression": "𝒰_Φ(x) = U_Φ H^⊗n U_Φ H^⊗n"
+},
+{
+"id": "EQ3",
+"name": "Quantum kernel",
+"expression": "K(x,z) = │⟨Φ(x)│Φ(z)⟩│² = │⟨0ⁿ│U†*Φ(x) U_Φ(z)│0ⁿ⟩│²"
+},
+{
+"id": "EQ4",
+"name": "Encoded state",
+"expression": "│Φ(x)⟩ = Σ_p Φ_x(p) Φ̂_x(p) │p⟩"
+},
+{
+"id": "EQ5",
+"name": "Coefficients (n=2)",
+"expression": "φ*{i}(x) = xᵢ, φ_{1,2}(x) = (π−x₁)(π−x₂)"
+},
+{
+"id": "EQ6",
+"name": "Meas. probability",
+"expression": "p_y(x) = ⟨Φ(x)│W†(θ) M_y W(θ)│Φ(x)⟩"
+},
+{
+"id": "EQ7",
+"name": "Empirical risk",
+"expression": "R_emp(θ) = (1/│T│) Σ_{x∈T} Pr(ỹ ≠ y)"
+},
+{
+"id": "EQ8",
+"name": "Sigmoid approx",
+"expression": "Pr(ỹ ≠ y) ≈ sig(√R · ((1+yb)/2 − p̂_y) / √(2(1−p̂_y)p̂_y))"
+},
+{
+"id": "EQ9",
+"name": "QVC decision",
+"expression": "ỹ = y if p̂_y(x) > p̂_{-y}(x) − yb"
+},
+{
+"id": "EQ10",
+"name": "QVC–SVM equiv",
+"expression": "ỹ = sign(2^{-n} Σ_α w_α(θ) Φ_α(x) + b)"
+},
+{
+"id": "EQ11",
+"name": "Wolfe dual (QKE)",
+"expression": "L_D(α) = Σᵢ αᵢ − ½ Σᵢⱼ yᵢ yⱼ αᵢ αⱼ K(xᵢ,xⱼ)"
+},
+{
+"id": "EQ12",
+"name": "QKE classifier",
+"expression": "ỹ(s) = sign(Σᵢ yᵢ α*ᵢ K(xᵢ,s) + b)"
+},
+{
+"id": "EQ13",
+"name": "Sampling complexity",
+"expression": "R = O(ε⁻² │T│⁴)"
+},
+{
+"id": "EQ14",
+"name": "Data generation",
+"expression": "m(x) = sign(⟨Φ(x)│V† (Z₁Z₂) V│Φ(x)⟩ ≷ ±Δ), Δ=0.3"
+}
+]
+},
+"tensor_semantics": {
+"confidence": 0.78,
+"tensors": [
+{
+"tensor": "x_input",
+"shape": "[2]",
+"dtype": "float64",
+"role": "Classical input ∈ (0,2π]²"
+},
+{
+"tensor": "feature_state",
+"shape": "[4] complex",
+"dtype": "complex128",
+"role": "│Φ(x)⟩ statevector (n=2)"
+},
+{
+"tensor": "kernel_matrix_K",
+"shape": "[40, 40]",
+"dtype": "float64",
+"role": "Training kernel (20+20 pts)"
+},
+{
+"tensor": "alpha_dual",
+"shape": "[40]",
+"dtype": "float64",
+"role": "SVM dual variables"
+},
+{
+"tensor": "theta_qvc",
+"shape": "[4*(l+1)]",
+"dtype": "float64",
+"role": "QVC variational params"
+},
+{
+"tensor": "empirical_probs",
+"shape": "[2]",
+"dtype": "float64",
+"role": "p̂_{+1}, p̂_{-1} per data pt"
+},
+{
+"tensor": "shot_counts",
+"shape": "[4]",
+"dtype": "int64",
+"role": "Raw bitstring counts"
+}
+]
+},
+"training_pipeline": {
+"confidence": 0.85,
+"protocols": {
+"protocol_1_qvc": {
+"Optimizer": "SPSA (Spall 1997/2000)",
+"SPSA iterations": 250,
+"Shots for cost eval": "R = 200",
+"Shots for actual experiment": 2000,
+"Shots for classification": 10000,
+"Training set": "20 pts/label = 40 total",
+"Circuit depths": "l ∈ {0,1,2,3,4}",
+"Training sets per depth": 3,
+"Error mitigation": "ZNE (Richardson, 1.5× stretch) at every SPSA step",
+"Bias": "b optimized jointly; b* = 0 at inference"
+},
+"protocol_2_qke": {
+"Shots per kernel entry": 50000,
+"Kernel size": "40 × 40",
+"Error mitigation": "ZNE per kernel entry",
+"Classical solver": "Wolfe dual QP (sklearn precomputed kernel)",
+"Training sets": "3 (Set I, II, III)",
+"Test sets per training set": 10
+}
+}
+},
+"evaluation_protocol": {
+"confidence": 0.96,
+"dataset": "Synthetic, generated with fixed V ∈ SU(4), gap Δ=0.3",
+"results": [
+{
+"method": "QVC depth=0",
+"set": "multiple",
+"result": "~60–75%"
+},
+{
+"method": "QVC depth=1–4",
+"set": "multiple",
+"result": "~85–100%"
+},
+{
+"method": "QVC depth=4",
+"set": "inset",
+"result": "100%"
+},
+{
+"method": "QKE",
+"set": "Set I",
+"result": "100% (all 10 test sets)"
+},
+{
+"method": "QKE",
+"set": "Set II",
+"result": "100% (all 10 test sets)"
+},
+{
+"method": "QKE",
+"set": "Set III",
+"result": "94.75%"
+}
+]
+},
+"implementation_assumptions": {
+"confidence": 0.72,
+"assumptions": [
+{
+"id": "A1",
+"assumption": "Qiskit for circuit construction",
+"basis": "IBM hardware used",
+"confidence": 0.85,
+"flag": null
+},
+{
+"id": "A2",
+"assumption": "SPSA defaults from Spall 1997",
+"basis": "Paper doesn't give gain params",
+"confidence": 0.55,
+"flag": "⚠"
+},
+{
+"id": "A3",
+"assumption": "sklearn SVC(kernel='precomputed')",
+"basis": "Standard practice",
+"confidence": 0.82,
+"flag": null
+},
+{
+"id": "A4",
+"assumption": "Statevector sim (exact) for ideal case",
+"basis": "Standard baseline",
+"confidence": 0.75,
+"flag": null
+},
+{
+"id": "A5",
+"assumption": "ZNE via depolarizing noise injection",
+"basis": "Without real hardware",
+"confidence": 0.65,
+"flag": "⚠"
+},
+{
+"id": "A6",
+"assumption": "Fixed seed for V ∈ SU(4)",
+"basis": "Fig 3b shows fixed boundary",
+"confidence": 0.80,
+"flag": null
+},
+{
+"id": "A7",
+"assumption": "PSD enforcement: clip negative eigenvalues",
+"basis": "Paper mentions issue",
+"confidence": 0.70,
+"flag": null
+}
+]
+},
+"confidence_summary": {
+"Architecture": 0.91,
+"Mathematical Spec": 0.94,
+"Tensor Semantics": 0.78,
+"Training Pipeline": 0.85,
+"Evaluation Protocol": 0.96,
+"Implementation Assumptions": 0.72,
+"Overall SIR": 0.86,
+"human_review_required": false
+},
+"key_ambiguities": [
+"1. SPSA hyperparameters (conf 0.55): Spall canonical defaults will be used; may need tuning",
+"2. Exact V ∈ SU(4) (conf 0.75): Will use fixed seed; boundary shape will differ but algorithm behavior preserved",
+"3. ZNE in simulation (conf 0.65): Two options — skip (ideal sim) or inject depolarizing noise at 1×/1.5× levels",
+"4. QP solver (conf 0.80): Will default to sklearn; can switch to cvxopt if numerical issues arise"
+],
+"footer": {
+"written_to": "sir-registry/paper_havlicek2018_qsvm/sir.json",
+"version": "v1",
+"pipeline_state": "Stage 3 (Architecture Planner) ready"
+}
+},
+"validation_report": {
+"json_valid": true,
+"missing_information": [],
+"warnings": [],
+"extraction_confidence": "high"
+}
+}
