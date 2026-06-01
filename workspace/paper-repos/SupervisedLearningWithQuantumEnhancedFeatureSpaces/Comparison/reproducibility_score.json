@@ -1,0 +1,32 @@
+{
+  "paper_id": "paper_havlicek2018_qsvm",
+  "comparison_date": "2026-06-01T07:00:50Z",
+  "reproducibility_score": 0.672,
+  "score_confidence": "Medium",
+  "metrics_compared": 6,
+  "metrics_matched": 6,
+  "metrics_unmatched": 0,
+  "deviation_summary": {
+    "Excellent": 2,
+    "Good": 0,
+    "Moderate": 1,
+    "Significant": 0,
+    "Critical": 2,
+    "In range": 1
+  },
+  "hallucination_count": {
+    "structural": 2,
+    "parametric": 3,
+    "omission": 2,
+    "total": 7
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": true,
+  "manual_review_reason": "QVC results are qualitative only (15/250 SPSA iterations). Full convergence run needed for definitive QVC score.",
+  "qke_reproducibility": 0.9983,
+  "qvc_note": "Low \u2014 only 15/250 SPSA iterations run",
+  "sir_mean_confidence": 0.876,
+  "sir_confidence_penalty": 0.0186,
+  "base_score": 0.6906,
+  "user_results_sha256": "e23284fe251f1d37"
+}
