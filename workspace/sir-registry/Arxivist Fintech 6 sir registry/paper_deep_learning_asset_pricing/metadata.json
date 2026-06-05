@@ -1,0 +1,22 @@
+{
+  "paper_id": "paper_deep_learning_asset_pricing",
+  "title": "Deep Learning in Asset Pricing",
+  "authors": ["Luyang Chen", "Markus Pelger", "Jason Zhu"],
+  "domain": "Tabular / Finance",
+  "arxiv_id": null,
+  "version": 1,
+  "created_at": "2026-06-03T00:00:00Z",
+  "last_updated": "2026-06-03T00:00:00Z",
+  "sir_confidence": 0.85,
+  "stages_with_data": ["stage_1_sir", "stage_2_registry"],
+  "has_comparison_report": false,
+  "repo_path": "paper-repos/paper_deep_learning_asset_pricing/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-06-03T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": ["all"]
+    }
+  ]
+}
