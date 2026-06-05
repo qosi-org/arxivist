@@ -1,0 +1,91 @@
+# Deep Learning in Asset Pricing — Configuration
+# Chen, Pelger, Zhu (2019)
+# Confidence annotations: [conf=X.XX] from SIR; # ASSUMED: <basis> for inferred values
+
+model:
+  # SDF Network (FFN for omega weights)
+  sdf_num_layers: 2           # [conf=0.95] HL=2, Table I
+  sdf_hidden_units: 64        # [conf=0.95] HU=64, Table I
+  sdf_macro_states: 4         # [conf=0.92] SMV=4, Table I
+  lstm_hidden_size: 4         # [conf=0.65] ASSUMED: equals output state dimension; paper ambiguous
+
+  # Conditional (Adversarial) Network
+  cond_num_layers: 0          # [conf=0.90] CHL=0, Table I (linear transform only)
+  cond_hidden_units: 8        # [conf=0.90] CHU=8 moment conditions, Table I
+  cond_macro_states: 32       # [conf=0.90] CSMV=32, Table I
+  cond_lstm_hidden_size: 32   # [conf=0.65] ASSUMED: equals output state dimension
+
+  # Architecture
+  activation: relu            # [conf=0.97] Section III.B: ReLU activation
+  num_firm_chars: 46          # [conf=0.99] 46 firm-specific characteristics
+  num_macro_vars: 178         # [conf=0.99] 178 macroeconomic time series
+
+training:
+  # Optimizer
+  optimizer: adam             # [conf=0.97] Section III.E
+  learning_rate: 0.001        # [conf=0.95] LR=0.001, Table I (optimal)
+  lr_candidates: [0.001, 0.0005, 0.0002, 0.0001]  # search space
+
+  # Regularization
+  dropout: 0.95               # [conf=0.95] DR=0.95, Table I
+  weight_decay: 0.0           # ASSUMED: not mentioned; Adam default
+
+  # Ensemble
+  num_ensemble_models: 9      # [conf=0.97] Section III.E: 9 models averaged
+  num_hyperparameter_configs: 384  # [conf=0.95] Table I caption
+
+  # Training procedure
+  max_epochs: 200             # ASSUMED: train to convergence; paper doesn't specify
+  early_stopping_patience: 20 # ASSUMED: stop if validation SR doesn't improve
+  early_stopping_metric: sharpe_ratio
+
+  # Batch / Panel
+  # ASSUMED: process full cross-section at each time step (all N stocks per t)
+  time_chunk_size: 12         # months per gradient step (memory management)
+  seed: 42                    # ASSUMED: for reproducibility
+
+data:
+  # Splits — explicitly stated in paper (Section V.A)
+  train_start: "1967-01"      # [conf=0.99]
+  train_end: "1986-12"        # [conf=0.99]
+  valid_start: "1987-01"      # [conf=0.99]
+  valid_end: "1991-12"        # [conf=0.99]
+  test_start: "1992-01"       # [conf=0.99]
+  test_end: "2016-12"         # [conf=0.99]
+
+  # Data paths (configure to your local data location)
+  crsp_returns_path: "data/crsp_returns.parquet"
+  firm_chars_path: "data/firm_characteristics.parquet"
+  macro_vars_path: "data/macro_variables.parquet"
+  fred_md_path: "data/fred_md.csv"
+
+  # Preprocessing
+  # [conf=0.88] cross-sectional quantile normalization per month
+  char_normalization: quantile
+  # [conf=0.85] separate long/short legs for linear model
+  separate_long_short: true
+  min_obs_for_stock: 60       # ASSUMED: minimum months to include a stock
+
+evaluation:
+  # Metrics — all from Section III.F
+  compute_sharpe_ratio: true
+  compute_explained_variation: true
+  compute_xs_r2: true
+  compute_variable_importance: true
+  annualize_sharpe: true      # multiply monthly SR by sqrt(12)
+
+  # Portfolio analysis
+  num_decile_portfolios: 10
+  beta_sort_freq: monthly     # re-sort portfolios monthly based on estimated beta
+
+hardware:
+  device: cuda                # cuda or cpu
+  precision: float32          # ASSUMED: mixed precision not mentioned
+  num_workers: 4              # data loading workers
+  deterministic: false        # set true for exact reproducibility (slower)
+
+paths:
+  checkpoint_dir: "checkpoints/"
+  results_dir: "results/"
+  log_dir: "logs/"
+  best_model_name: "best_model.pt"

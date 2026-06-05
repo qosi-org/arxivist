@@ -1,0 +1,31 @@
+{
+  "paper_id": "paper_deep_learning_asset_pricing",
+  "paper_title": "Deep Learning in Asset Pricing",
+  "current_stage": 6,
+  "stages_completed": ["stage_1_paper_parser", "stage_2_sir_registry", "stage_3_architecture_planner", "stage_4_code_generator", "stage_5_notebook_generator"],
+  "sir_path": "sir-registry/paper_deep_learning_asset_pricing/sir.json",
+  "repo_path": "paper-repos/paper_deep_learning_asset_pricing/",
+  "artifacts": {
+    "sir": "sir-registry/paper_deep_learning_asset_pricing/sir.json",
+    "architecture_plan": "sir-registry/paper_deep_learning_asset_pricing/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/paper_deep_learning_asset_pricing/notebooks/reproduce_paper_deep_learning_asset_pricing.ipynb",
+    "comparison_report": null
+  },
+  "confidence_flags": {
+    "architecture": 0.85,
+    "mathematical_spec": 0.94,
+    "training_pipeline": 0.82,
+    "evaluation_protocol": 0.97,
+    "overall": 0.85
+  },
+  "human_review_required": false,
+  "low_confidence_warnings": [
+    "LSTM internal hidden size is assumed to equal output state dimension (conf=0.65) — verify from paper or authors",
+    "Number of training iterations/epochs not specified (conf=0.55) — early stopping on validation SR recommended",
+    "g(.) normalization constraint is assumed L2 (conf=0.60)"
+  ],
+  "loop_count": 0,
+  "created_at": "2026-06-03T00:00:00Z",
+  "last_updated": "2026-06-03T00:00:00Z"
+}

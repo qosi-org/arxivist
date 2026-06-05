@@ -1,0 +1,17 @@
+{
+  "index_version": 1,
+  "total_papers": 1,
+  "papers": [
+    {
+      "paper_id": "paper_deep_learning_asset_pricing",
+      "title": "Deep Learning in Asset Pricing",
+      "domain": "Tabular / Finance",
+      "sir_version": 1,
+      "sir_confidence": 0.85,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": false,
+      "last_updated": "2026-06-03T00:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,380 @@
+{
+  "paper_id": "paper_deep_learning_asset_pricing",
+  "version": 1,
+  "provenance": {
+    "title": "Deep Learning in Asset Pricing",
+    "authors": ["Luyang Chen", "Markus Pelger", "Jason Zhu"],
+    "affiliations": [
+      "Institute for Computational and Mathematical Engineering, Stanford University",
+      "Department of Management Science & Engineering, Stanford University"
+    ],
+    "arxiv_id": null,
+    "submission_date": "2019-03-15",
+    "last_revised": "2019-06-12",
+    "abstract": "We propose a novel approach to estimate asset pricing models for individual stock returns that takes advantage of the vast amount of conditioning information, while keeping a fully flexible form and accounting for time-variation. Our general non-linear asset pricing model is estimated with deep neural networks applied to all U.S. equity data combined with a substantial set of macroeconomic and firm-specific information.",
+    "domain": "Tabular / Finance",
+    "key_claims": [
+      "GAN-based no-arbitrage model achieves out-of-sample annual Sharpe Ratio of 2.6, vs 1.7 for linear model and 0.8 for Fama-French 5",
+      "Including the no-arbitrage constraint in the learning algorithm significantly improves the risk premium signal",
+      "LSTM summarizes 178 macroeconomic time series into 4 hidden state processes capturing business cycle dynamics",
+      "GAN achieves cross-sectional R2 > 90% on all 46 anomaly-sorted decile portfolios",
+      "Non-linearities matter for interactions between characteristics, not for individual characteristics in isolation"
+    ],
+    "parsed_at": "2026-06-03T00:00:00Z"
+  },
+  "architecture": {
+    "confidence": 0.85,
+    "description": "Three-network GAN architecture: SDF Network (FFN+LSTM), Conditional Network (FFN+LSTM), trained via minimax adversarial game",
+    "primary_variant": "GAN",
+    "variants": ["GAN", "FFN (forecasting baseline)", "EN (elastic net linear)", "LS (linear unregularized)"],
+    "modules": [
+      {
+        "name": "StateMacroRNN",
+        "type": "LSTM",
+        "role": "Encode macroeconomic time series history into hidden state h_t for SDF network",
+        "input": {"name": "macro_series", "shape": "[T, 178]", "dtype": "float32"},
+        "output": {"name": "h_t", "shape": "[T, 4]", "dtype": "float32"},
+        "hidden_size": 4,
+        "confidence": 0.92,
+        "notes": "4 hidden states (SMV=4 from hyperparameter table). Processes all 178 macro variables sequentially."
+      },
+      {
+        "name": "ConditionalMacroRNN",
+        "type": "LSTM",
+        "role": "Encode macroeconomic time series history into hidden state h_t^g for Conditional (adversarial) network",
+        "input": {"name": "macro_series", "shape": "[T, 178]", "dtype": "float32"},
+        "output": {"name": "h_t_g", "shape": "[T, 32]", "dtype": "float32"},
+        "hidden_size": 32,
+        "confidence": 0.90,
+        "notes": "32 hidden states (CSMV=32 from hyperparameter table). Separate LSTM from SDF network."
+      },
+      {
+        "name": "SDFNetwork",
+        "type": "FeedForward",
+        "role": "Compute SDF portfolio weights omega_{t,i} from macro hidden states + firm characteristics",
+        "input": {"name": "[h_t, I_{t,i}]", "shape": "[N, 4+46]", "dtype": "float32"},
+        "output": {"name": "omega", "shape": "[N, 1]", "dtype": "float32"},
+        "num_layers": 2,
+        "hidden_units": 64,
+        "activation": "ReLU",
+        "dropout": 0.95,
+        "confidence": 0.93,
+        "notes": "HL=2, HU=64, DR=0.95 from hyperparameter table. Output omega_{t,i} for each stock i."
+      },
+      {
+        "name": "ConditionalNetwork",
+        "type": "FeedForward",
+        "role": "Compute conditioning instruments g_{t,j} to find hardest-to-explain moment conditions",
+        "input": {"name": "[h_t_g, I_{t,j}]", "shape": "[N, 32+46]", "dtype": "float32"},
+        "output": {"name": "g", "shape": "[N, 8]", "dtype": "float32"},
+        "num_layers": 0,
+        "hidden_units": 8,
+        "activation": "linear",
+        "confidence": 0.88,
+        "notes": "CHL=0 (no hidden layer), CHU=8 moments. Essentially a linear transformation of inputs."
+      },
+      {
+        "name": "SDFConstructor",
+        "type": "Custom",
+        "role": "Build SDF M_{t+1} = 1 - sum_i omega_{t,i} * R^e_{t+1,i}",
+        "input": {"name": "[omega, returns]", "shape": "[N, 1], [T, N]", "dtype": "float32"},
+        "output": {"name": "M_t+1", "shape": "[T, 1]", "dtype": "float32"},
+        "confidence": 0.97,
+        "notes": "Eq. (model section): M_{t+1} = 1 - omega_t^T R^e_{t+1}"
+      },
+      {
+        "name": "MomentConditionLoss",
+        "type": "Custom",
+        "role": "Compute GAN pricing error loss: E[M_{t+1} * R^e_{t+1,j} * g(I_t, I_{t,j})]^2",
+        "confidence": 0.95,
+        "notes": "Eq. (3) in paper. Weighted by sqrt(T_i/T) for unbalanced panel."
+      },
+      {
+        "name": "LoadingNetwork",
+        "type": "FeedForward",
+        "role": "Estimate beta_{t,i} = E_t[R^e_{t+1,i} * F_{t+1}] via second-moment regression",
+        "input": {"name": "[h_t, I_{t,i}]", "shape": "[N, 4+46]", "dtype": "float32"},
+        "output": {"name": "beta", "shape": "[N, 1]", "dtype": "float32"},
+        "confidence": 0.80,
+        "notes": "Same architecture as SDFNetwork. Trained separately to predict R^e * F_{t+1}."
+      }
+    ],
+    "connections": [
+      {"from": "StateMacroRNN", "to": "SDFNetwork"},
+      {"from": "ConditionalMacroRNN", "to": "ConditionalNetwork"},
+      {"from": "SDFNetwork", "to": "SDFConstructor"},
+      {"from": "SDFConstructor", "to": "MomentConditionLoss"},
+      {"from": "ConditionalNetwork", "to": "MomentConditionLoss"},
+      {"from": "StateMacroRNN", "to": "LoadingNetwork"}
+    ],
+    "ambiguities": [
+      {
+        "location": "Section III.E, Table I",
+        "description": "LSTM cell size (number of units per gate) not explicitly stated — only number of hidden states output",
+        "primary_assumption": "hidden_size == num_hidden_states (4 for SDF, 32 for conditional)",
+        "alternatives": [64, 128],
+        "confidence": 0.65
+      },
+      {
+        "location": "Section III.D",
+        "description": "Exact normalization applied to g(.) outputs not fully specified",
+        "primary_assumption": "L2 normalization per batch",
+        "alternatives": ["tanh squashing", "no normalization"],
+        "confidence": 0.60
+      }
+    ]
+  },
+  "mathematical_spec": {
+    "confidence": 0.94,
+    "equations": [
+      {
+        "id": "eq_sdf_definition",
+        "name": "Stochastic Discount Factor",
+        "latex": "M_{t+1} = 1 - \\sum_{i=1}^{N} \\omega_{t,i} R^e_{t+1,i} = 1 - \\omega_t^\\top R^e_{t+1}",
+        "role": "model",
+        "variables": {"omega_t": "SDF portfolio weights [N]", "R_e": "excess returns [N]"},
+        "confidence": 0.99
+      },
+      {
+        "id": "eq_no_arbitrage",
+        "name": "No-Arbitrage Moment Condition",
+        "latex": "E[M_{t+1} R^e_{t+1,i} g(I_t, I_{t,i})] = 0",
+        "role": "training_constraint",
+        "confidence": 0.99
+      },
+      {
+        "id": "eq_gan_loss",
+        "name": "GAN Minimax Loss",
+        "latex": "\\min_{\\omega} \\max_{g} \\frac{1}{N} \\sum_{j=1}^{N} \\left\\| E\\left[\\left(1 - \\sum_{i=1}^{N} \\omega(I_t, I_{t,i}) R^e_{t+1,i}\\right) R^e_{t+1,j} g(I_t, I_{t,j})\\right] \\right\\|^2",
+        "role": "training_objective",
+        "confidence": 0.97
+      },
+      {
+        "id": "eq_empirical_loss",
+        "name": "Empirical Loss Function",
+        "latex": "L(\\omega | g, I_t, I_{t,i}) = \\frac{1}{N} \\sum_{i=1}^{N} \\frac{T_i}{T} \\left\\| \\frac{1}{T_i} \\sum_{t \\in T_i} M_{t+1} R^e_{t+1,i} \\hat{g}(I_t, I_{t,i}) \\right\\|^2",
+        "role": "training",
+        "notes": "Eq. (3). Weighted by T_i/T for unbalanced panel.",
+        "confidence": 0.96
+      },
+      {
+        "id": "eq_sharpe_ratio",
+        "name": "Sharpe Ratio",
+        "latex": "SR = \\frac{\\hat{E}[F_t]}{\\sqrt{\\hat{Var}(F_t)}}",
+        "role": "evaluation",
+        "confidence": 0.99
+      },
+      {
+        "id": "eq_explained_variation",
+        "name": "Explained Variation (time-series R2)",
+        "latex": "EV = 1 - \\frac{\\frac{1}{T}\\sum_t \\frac{1}{N_t}\\sum_i \\hat{\\epsilon}_{t+1,i}^2}{\\frac{1}{T}\\sum_t \\frac{1}{N_t}\\sum_i (R^e_{t+1,i})^2}",
+        "role": "evaluation",
+        "confidence": 0.97
+      },
+      {
+        "id": "eq_xs_r2",
+        "name": "Cross-Sectional R2",
+        "latex": "XS\\text{-}R^2 = 1 - \\frac{\\frac{1}{N}\\sum_i \\frac{T_i}{T}\\left(\\frac{1}{T_i}\\sum_{t\\in T_i}\\hat{\\epsilon}_{t+1,i}\\right)^2}{\\frac{1}{N}\\sum_i \\frac{T_i}{T}\\left(\\frac{1}{T_i}\\sum_{t\\in T_i}\\hat{R}_{t+1,i}\\right)^2}",
+        "role": "evaluation",
+        "confidence": 0.97
+      },
+      {
+        "id": "eq_lstm_cell",
+        "name": "LSTM Cell Update",
+        "latex": "\\tilde{c}_t = \\tanh(W_h^{(c)} h_{t-1} + W_x^{(c)} x_t + w_0^{(c)}), \\quad c_t = f_t \\circ c_{t-1} + i_t \\circ \\tilde{c}_t, \\quad h_t = o_t \\circ \\tanh(c_t)",
+        "role": "model",
+        "confidence": 0.99
+      },
+      {
+        "id": "eq_sdf_weights",
+        "name": "Optimal SDF Weights",
+        "latex": "\\omega_t = E_t[R^e_{t+1} R^{e\\top}_{t+1}]^{-1} E_t[R^e_{t+1}]",
+        "role": "model",
+        "notes": "Eq. (1) — the GAN implicitly finds this without inverting a large covariance matrix.",
+        "confidence": 0.99
+      },
+      {
+        "id": "eq_sensitivity",
+        "name": "Variable Importance Sensitivity",
+        "latex": "\\text{Sensitivity}(x_j) = \\frac{1}{C} \\sum_{i=1}^{N} \\sum_{t=1}^{T} \\left| \\frac{\\partial \\omega(I_t, I_{t,i})}{\\partial x_j} \\right|",
+        "role": "analysis",
+        "confidence": 0.98
+      }
+    ]
+  },
+  "tensor_semantics": {
+    "confidence": 0.78,
+    "tensors": [
+      {"name": "macro_series", "shape": "[T, 178]", "dtype": "float32", "role": "input", "description": "178 macroeconomic time series at each month t"},
+      {"name": "firm_chars", "shape": "[T, N, 46]", "dtype": "float32", "role": "input", "description": "46 firm-specific characteristics for N stocks at time t, cross-sectionally rank-normalized to quantiles"},
+      {"name": "excess_returns", "shape": "[T, N]", "dtype": "float32", "role": "input", "description": "Monthly excess returns R^e_{t+1,i} for N stocks"},
+      {"name": "h_t_macro", "shape": "[T, 4]", "dtype": "float32", "role": "intermediate", "description": "LSTM hidden state — 4 macroeconomic state variables for SDF network"},
+      {"name": "h_t_cond", "shape": "[T, 32]", "dtype": "float32", "role": "intermediate", "description": "LSTM hidden state — 32 states for conditional network"},
+      {"name": "sdf_input", "shape": "[T*N, 50]", "dtype": "float32", "role": "intermediate", "description": "Concatenation of [h_t (4), firm_chars (46)] for each stock-time pair"},
+      {"name": "omega", "shape": "[T, N]", "dtype": "float32", "role": "intermediate", "description": "SDF portfolio weights per stock per time"},
+      {"name": "g_instruments", "shape": "[T, N, 8]", "dtype": "float32", "role": "intermediate", "description": "Conditioning instruments from adversarial network"},
+      {"name": "M_t", "shape": "[T]", "dtype": "float32", "role": "intermediate", "description": "Stochastic discount factor M_{t+1} = 1 - omega_t^T R^e_{t+1}"},
+      {"name": "F_t", "shape": "[T]", "dtype": "float32", "role": "output", "description": "SDF factor F_{t+1} = omega_t^T R^e_{t+1} (tangency portfolio return)"},
+      {"name": "beta", "shape": "[T, N]", "dtype": "float32", "role": "output", "description": "Risk loadings beta_{t,i} proportional to E_t[R^e_{t+1,i} F_{t+1}]"}
+    ]
+  },
+  "training_pipeline": {
+    "confidence": 0.82,
+    "optimizer": {
+      "name": "Adam",
+      "learning_rate": 0.001,
+      "lr_candidates": [0.001, 0.0005, 0.0002, 0.0001],
+      "confidence": 0.95
+    },
+    "regularization": {
+      "type": "Dropout",
+      "rate": 0.95,
+      "note": "DR=0.95 — applied during training only",
+      "confidence": 0.95
+    },
+    "ensemble": {
+      "num_models": 9,
+      "strategy": "average outputs",
+      "note": "9 models with different random initializations, averaged",
+      "confidence": 0.97
+    },
+    "hyperparameter_selection": {
+      "num_configs_searched": 384,
+      "top_configs_selected": 4,
+      "final_selection_metric": "Sharpe Ratio on validation set",
+      "confidence": 0.95
+    },
+    "data_split": {
+      "train": "1967-01 to 1986-12 (20 years)",
+      "validation": "1987-01 to 1991-12 (5 years)",
+      "test": "1992-01 to 2016-12 (25 years)",
+      "confidence": 0.99
+    },
+    "training_procedure": {
+      "step1": "Initialize SDF network; minimize unconditional loss (g=constant)",
+      "step2": "Fix SDF network; maximize loss over conditional network parameters",
+      "step3": "Fix conditional network; minimize conditional loss over SDF network",
+      "note": "Algorithm converges after one pass of these 3 steps (no iterative GAN loop needed)",
+      "confidence": 0.90
+    },
+    "input_normalization": {
+      "firm_characteristics": "Cross-sectional rank → quantile (0 to 1), centered around mean",
+      "macro_variables": "Standard transformations per McCracken & Ng (2016): levels, differences, log-differences",
+      "confidence": 0.88
+    },
+    "batch_structure": {
+      "note": "Full cross-section per time step (all N stocks at time t). Not mini-batch over stocks.",
+      "confidence": 0.72
+    },
+    "missing_details": [
+      "Number of training epochs / total gradient steps not explicitly stated",
+      "Exact batch size for gradient computation not stated",
+      "Weight initialization scheme not specified"
+    ]
+  },
+  "evaluation_protocol": {
+    "confidence": 0.97,
+    "datasets": [
+      {
+        "name": "CRSP U.S. Equities",
+        "description": "All U.S. stocks monthly returns 1967-2016, ~10,000 stocks per month with all 46 characteristics available",
+        "splits": {"train": "1967-1986", "valid": "1987-1991", "test": "1992-2016"},
+        "access": "Proprietary (CRSP subscription required)"
+      },
+      {
+        "name": "FRED-MD",
+        "description": "124 macroeconomic predictors",
+        "access": "Public"
+      },
+      {
+        "name": "Welch & Goyal (2008) predictors",
+        "description": "8 equity premium predictors",
+        "access": "Public"
+      }
+    ],
+    "metrics": [
+      {"name": "Sharpe Ratio (SR)", "description": "Annual unconditional SR of SDF factor portfolio", "higher_is_better": true},
+      {"name": "Explained Variation (EV)", "description": "Time-series R2 of individual stock returns explained by model", "higher_is_better": true},
+      {"name": "Cross-Sectional R2 (XS-R2)", "description": "Cross-sectional mean R2 of pricing errors", "higher_is_better": true}
+    ],
+    "reported_results": {
+      "GAN": {"SR_train": 2.68, "SR_valid": 1.43, "SR_test": 0.75, "EV_test": 0.08, "XS_R2_test": 0.23},
+      "FFN": {"SR_train": 0.45, "SR_valid": 0.42, "SR_test": 0.44, "EV_test": 0.04, "XS_R2_test": 0.15},
+      "EN":  {"SR_train": 1.37, "SR_valid": 1.15, "SR_test": 0.50, "EV_test": 0.04, "XS_R2_test": 0.19},
+      "LS":  {"SR_train": 1.80, "SR_valid": 0.58, "SR_test": 0.42, "EV_test": 0.03, "XS_R2_test": 0.14},
+      "FF5": {"SR_test": 0.22},
+      "note": "Monthly Sharpe Ratios; annual SR_test for GAN = 2.6 (annualized)"
+    },
+    "baselines": ["Fama-French 3 Factor", "Fama-French 5 Factor", "FFN (Gu et al. 2018)", "Elastic Net (Kozak et al. 2018)", "Linear Squares"]
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "LSTM hidden size equals the number of output state processes (4 for SDF, 32 for conditional)",
+      "basis": "Standard LSTM usage; paper only reports number of hidden states output",
+      "confidence": 0.65,
+      "alternatives": ["hidden_size=64", "hidden_size=128 with projection layer"]
+    },
+    {
+      "assumption": "PyTorch is the implementation framework",
+      "basis": "Domain convention for tabular/finance research; no framework stated in paper",
+      "confidence": 0.75,
+      "alternatives": ["TensorFlow", "JAX"]
+    },
+    {
+      "assumption": "Gradient clipping not used (not mentioned)",
+      "basis": "Paper does not mention it; LSTM with gates reduces vanishing/exploding gradient issues",
+      "confidence": 0.60,
+      "alternatives": ["clip_grad_norm=1.0 (common practice)"]
+    },
+    {
+      "assumption": "Beta estimation network shares same architecture as SDF network (2 hidden layers, 64 units)",
+      "basis": "Paper describes beta as predicted by a FFN, same input structure as omega network",
+      "confidence": 0.72,
+      "alternatives": ["separate hyperparameter search for beta network"]
+    },
+    {
+      "assumption": "Cross-sectional quantile normalization: rank/(N+1) within each month",
+      "basis": "Standard practice; paper says characteristics converted to quantiles cross-sectionally",
+      "confidence": 0.80,
+      "alternatives": ["rank/N", "fractional ranking"]
+    },
+    {
+      "assumption": "SDF weights normalized: sum(|omega|) = 1 (unit L1 norm mentioned in turnover calculation)",
+      "basis": "Paper mentions kwtk_1 = 1 in turnover calculation footnote",
+      "confidence": 0.85,
+      "alternatives": ["no normalization", "L2 normalization"]
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.85,
+    "mathematical_spec": 0.94,
+    "tensor_semantics": 0.78,
+    "training_pipeline": 0.82,
+    "evaluation_protocol": 0.97,
+    "implementation_assumptions": 0.72,
+    "overall_sir_confidence": 0.85
+  },
+  "ambiguities": [
+    {
+      "location": "Section III.E, Table I",
+      "description": "LSTM internal hidden size not specified — only output hidden state dimension given",
+      "primary_assumption": "hidden_size == num_states (4 or 32)",
+      "alternatives": [64, 128],
+      "confidence": 0.65
+    },
+    {
+      "location": "Section III.D",
+      "description": "Normalization constraint on g(.) function not precisely defined",
+      "primary_assumption": "L2 normalization",
+      "alternatives": ["tanh squashing", "softmax", "none"],
+      "confidence": 0.60
+    },
+    {
+      "location": "Section III.A",
+      "description": "Exact number of training epochs/iterations not specified",
+      "primary_assumption": "Train until validation SR plateaus",
+      "alternatives": ["fixed epoch count (e.g. 100)", "fixed step count"],
+      "confidence": 0.55
+    }
+  ]
+}
