@@ -1,0 +1,30 @@
+# requirements.txt — APEX LOB Trader (arXiv:2301.08688)
+# Core dependencies with pinned versions for reproducibility
+
+# Deep learning framework (paper uses PyTorch via RLlib)
+torch>=2.1.0
+torchvision>=0.16.0  # not directly used but commonly required alongside torch
+
+# RL framework — for full distributed APEX (42 workers, 300M steps)
+ray[rllib]>=2.7.0
+
+# Gym environment
+gymnasium>=0.29.0
+
+# Scientific computing
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Configuration management
+pyyaml>=6.0.1
+
+# Data handling
+pandas>=2.0.0
+
+# Notebook support
+jupyter>=1.0.0
+ipywidgets>=8.0.0
+
+# Visualisation
+matplotlib>=3.7.0
+seaborn>=0.12.0

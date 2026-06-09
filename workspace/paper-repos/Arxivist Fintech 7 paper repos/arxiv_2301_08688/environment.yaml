@@ -1,0 +1,24 @@
+name: apex-lob-trader
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pytorch>=2.1.0
+  - pytorch-cuda=11.8
+  - numpy>=1.24.0
+  - scipy>=1.11.0
+  - pyyaml>=6.0.1
+  - pandas>=2.0.0
+  - matplotlib>=3.7.0
+  - seaborn>=0.12.0
+  - jupyter
+  - ipywidgets
+  - pip
+  - pip:
+    - gymnasium>=0.29.0
+    - ray[rllib]>=2.7.0
+    - -e .

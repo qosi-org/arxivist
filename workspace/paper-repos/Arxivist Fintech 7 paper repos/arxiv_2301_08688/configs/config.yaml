@@ -1,0 +1,93 @@
+# config.yaml — APEX LOB Trader
+# Paper: arxiv:2301.08688 — Nagy, Calliess, Zohren (2023)
+# Confidence annotations: [HIGH >= 0.8] [MED 0.6-0.79] [LOW < 0.6 — ASSUMED]
+
+project_name: apex_lob_trader
+seed: 42
+
+# ── Environment ─────────────────────────────────────────────────────────────
+env:
+  action_freq_sec: 0.1          # [HIGH] agent acts every 100ms
+  episode_start_time: "09:30"   # [HIGH] opening hour only
+  episode_end_time:   "10:30"   # [HIGH]
+  history_len: 100              # [HIGH] l=100 LOB state history steps
+  state_dim_per_step: 10        # [MED] reconstructed from state listing
+
+  inventory:
+    pos_min: -10                # [HIGH] explicitly stated
+    pos_max:  10                # [HIGH] explicitly stated
+
+  data:
+    asset: "AAPL"               # [HIGH]
+    source: "LOBSTER"           # [HIGH]
+    train_start: "2012-01-01"   # [HIGH]
+    train_end:   "2012-05-16"   # [HIGH]
+    test_start:  "2012-05-17"   # [HIGH]
+    test_end:    "2012-06-30"   # [HIGH]
+    # NOTE: LOBSTER data is proprietary. See data/README_data.md for instructions.
+    data_dir: "data/lobster/"
+
+# ── Signal ───────────────────────────────────────────────────────────────────
+signal:
+  horizon_h: 10                 # [HIGH] 10-second forward return horizon
+  persistence_phi: 0.9          # [HIGH] exponential smoothing coefficient
+  return_threshold_k: 0.00004   # [HIGH] k = 4e-5
+
+  # Noise levels tested in paper (a_H parameter; a_L fixed at 1.0)
+  noise_level_a: 1.3            # [HIGH] default: mid noise. Options: 1.1, 1.3, 1.6
+  a_L: 1.0                      # [HIGH] fixed
+
+# ── Model ────────────────────────────────────────────────────────────────────
+model:
+  num_ff_layers: 3              # [HIGH] explicitly stated
+  hidden_dim: 256               # [LOW — ASSUMED] not stated; 256 is common for DQN in finance
+  lstm_hidden_dim: 256          # [LOW — ASSUMED] same as above
+  num_actions: 7                # [HIGH] 7 discrete actions
+
+# ── Training ─────────────────────────────────────────────────────────────────
+training:
+  framework: "torch"            # [HIGH] RLlib param
+  algorithm: "APEX_DQN"        # [HIGH]
+  total_timesteps: 300000000   # [HIGH] 300e6
+  gamma: 0.99                   # [HIGH]
+  num_workers: 42               # [HIGH]
+  num_gpus: 1                   # [HIGH]
+  batch_mode: "truncate_episode" # [HIGH]
+
+  replay_buffer:
+    size: 2000000               # [HIGH] 2e6
+    prioritized: false          # [HIGH] explicitly disabled
+
+  learning:
+    learning_starts: 5000       # [HIGH]
+    train_batch_size: 50        # [HIGH]
+    rollout_fragment_length: 50 # [HIGH]
+    target_update_freq: 5000    # [HIGH] target_network_update_freq
+    n_step: 3                   # [HIGH]
+
+  lr_schedule:
+    - [0, 0.00002]              # [HIGH] [[0, 2e-5], [1e6, 5e-6]]
+    - [1000000, 0.000005]
+
+  reward:
+    w_dir_initial: 0.5          # [LOW — ASSUMED] not stated; must start > 0 for curriculum
+    psi_decay: 0.9999           # [LOW — ASSUMED] decays w_dir to ~0 over training
+    kappa: 1.0                  # [LOW — ASSUMED] directional reward scale; not specified
+
+# ── Evaluation ───────────────────────────────────────────────────────────────
+evaluation:
+  num_test_episodes: 31         # [HIGH]
+  confidence_interval: 0.95    # [HIGH]
+  metrics: ["mean_log_return", "sharpe_ratio", "turnover", "outperformance_pp"]
+
+# ── Hardware ─────────────────────────────────────────────────────────────────
+hardware:
+  device: "cuda"                # auto-falls-back to cpu
+  deterministic: false          # set true for full reproducibility (slower)
+
+# ── Logging & Checkpointing ───────────────────────────────────────────────────
+logging:
+  log_every_n_steps: 1000
+  checkpoint_every_n_steps: 50000
+  checkpoint_dir: "checkpoints/"
+  results_dir: "results/"

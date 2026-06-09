@@ -1,0 +1,22 @@
+{
+  "paper_id": "arxiv_2301_08688",
+  "title": "Asynchronous Deep Double Duelling Q-Learning for Trading-Signal Execution in Limit Order Book Markets",
+  "authors": ["Peer Nagy", "Jan-Peter Calliess", "Stefan Zohren"],
+  "domain": "RL",
+  "arxiv_id": "2301.08688",
+  "version": 1,
+  "created_at": "2026-06-07T00:00:00Z",
+  "last_updated": "2026-06-07T00:00:00Z",
+  "sir_confidence": 0.81,
+  "stages_with_data": ["stage1_parser", "stage2_registry", "stage3_planner", "stage4_codegen", "stage5_notebook"],
+  "has_comparison_report": false,
+  "repo_path": "paper-repos/arxiv_2301_08688/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-06-07T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    }
+  ]
+}

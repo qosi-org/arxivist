@@ -1,0 +1,17 @@
+{
+  "index_version": 1,
+  "total_papers": 1,
+  "papers": [
+    {
+      "paper_id": "arxiv_2301_08688",
+      "title": "Asynchronous Deep Double Duelling Q-Learning for Trading-Signal Execution in Limit Order Book Markets",
+      "domain": "RL",
+      "sir_version": 1,
+      "sir_confidence": 0.81,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": false,
+      "last_updated": "2026-06-07T00:00:00Z"
+    }
+  ]
+}
