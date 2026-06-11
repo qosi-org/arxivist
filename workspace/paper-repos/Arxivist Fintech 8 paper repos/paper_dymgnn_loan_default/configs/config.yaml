@@ -1,0 +1,113 @@
+# config.yaml — DYMGNN Loan Default Predictor
+# Paper: "Attention-based dynamic multilayer graph neural networks for loan default prediction"
+# Zandi, Korangi, Óskarsdóttir, Mues, Bravo (EJOR 2025)
+# DOI: 10.1016/j.ejor.2024.09.025
+#
+# Confidence annotations: [HIGH >= 0.9] [MED 0.7-0.89] [LOW < 0.7 — ASSUMED]
+
+project_name: dymgnn
+seed: 42
+
+# ── Model Architecture ────────────────────────────────────────────────────────
+model:
+  gnn_type: "GAT"           # [HIGH] best model uses GAT. Options: "GCN", "GAT"
+  rnn_type: "LSTM"          # [HIGH] best model uses LSTM. Options: "LSTM", "GRU"
+  use_attention: true       # [HIGH] GNN-RNN-ATT (true) vs GNN-RNN (false)
+  network_type: "double"    # [HIGH] best model. Options: "area", "company", "double"
+
+  embedding_dim: 64         # [LOW — ASSUMED] D: embedding size. Not stated. Common: 32,64,128
+  num_gat_heads: 4          # [LOW — ASSUMED] H: GAT multi-head count. Not stated. Common: 4,8
+  num_gnn_layers: 1         # [MED] single-layer GNN implied by equations
+  num_rnn_layers: 1         # [MED] single LSTM/GRU layer implied by architecture
+
+  # Decoder architecture (Fig. 5 — explicitly stated)
+  decoder_hidden_1: 20      # [HIGH] Fig. 5: Dense Layer (20, 10)
+  decoder_hidden_2: 10      # [HIGH] Fig. 5: Dense Layer (10, 1)
+  decoder_dropout: 0.5      # [HIGH] Fig. 5: Dropout (p=0.5)
+
+  num_snapshots: 6          # [HIGH] tau=6 snapshots per window (Section 4.2)
+  num_features: 16          # [HIGH] d=16 node features (Table 1)
+
+# ── Network Construction ──────────────────────────────────────────────────────
+network:
+  # Area layer: borrow ers with same first 2 zip-code digits are connected
+  area_zip_digits: 2        # [HIGH] Section 4.2
+  # Company layer: borrowers sharing same mortgage provider are connected
+  # Double layer: both layers combined via supra-adjacency matrix
+
+  node_dropout: 0.5         # [HIGH] 50% nodes randomly isolated per snapshot (Section 4.2)
+  node_dropout_train_only: true  # [MED — ASSUMED] dropout at training time only
+
+# ── Training ──────────────────────────────────────────────────────────────────
+training:
+  epochs: 200               # [HIGH] Table C.1
+  early_stopping_patience: 50  # [HIGH] Table C.1
+  learning_rate: 0.001      # [HIGH] Table C.1
+  optimizer: "Adam"         # [HIGH] Table C.1
+
+  # Loss
+  loss: "binary_cross_entropy"  # [HIGH] Section 3.6, Eq. 19
+
+  # Data windowing
+  num_train_windows: 13     # [HIGH] Section 4.2
+  num_test_windows: 1       # [HIGH] Section 4.2
+  window_shift_months: 1    # [HIGH] rolling windows shifted by 1 month
+  prediction_horizon_months: 12  # [HIGH] 1-year-ahead default prediction
+
+  # RNN initialization
+  init_hidden_zeros: true   # [MED — ASSUMED] zeros vs learned; zeros is default
+
+# ── Data & Preprocessing ──────────────────────────────────────────────────────
+data:
+  data_dir: "data/freddie_mac/"
+  train_origination_years: [2009, 2010]   # [HIGH] Section 4.2
+  train_behavioral_start: "2012-01"       # [HIGH] Section 4.2
+  train_behavioral_end:   "2013-06"       # [HIGH] Section 4.2
+  test_behavioral_start:  "2013-07"       # [HIGH] Section 4.2
+  test_behavioral_end:    "2013-12"       # [HIGH] Section 4.2
+
+  # Preprocessing (Section 4.1)
+  outlier_percentile_cap: [1, 99]   # [HIGH] capped at 1st and 99th percentile
+  null_strategy: "median"           # [HIGH] median imputation
+  numerical_scaling: "minmax"       # [HIGH] min-max normalization
+  categorical_encoding: "binary"    # [HIGH] one-vs-rest binary
+
+  # Node features (Table 1)
+  static_features:
+    - fico
+    - if_fthb
+    - mi_pct
+    - cnt_units
+    - if_prim_res
+    - dti
+    - ltv
+    - if_corr
+    - if_sf
+    - if_purc
+    - cnt_borr
+    - if_sc
+  dynamic_features:   # change month-to-month
+    - current_upb
+    - if_delq_sts
+    - mths_remng
+    - current_int_rt
+  target: "default"
+
+# ── Evaluation ────────────────────────────────────────────────────────────────
+evaluation:
+  metrics: ["AUC", "F1"]
+  ci_bootstrap: true          # [HIGH] 95% bootstrap CI
+  ci_confidence: 0.95
+  interpretability: "SHAP"    # [HIGH] Shapley values used in paper
+
+# ── Hardware ──────────────────────────────────────────────────────────────────
+hardware:
+  device: "cuda"   # auto-fallback to cpu
+  gpu_type: "A100" # paper used NVidia A100 40GB (Table C.2)
+
+# ── Logging & Checkpointing ───────────────────────────────────────────────────
+logging:
+  log_every_n_epochs: 10
+  checkpoint_dir: "checkpoints/"
+  results_dir: "results/"
+  checkpoint_best_metric: "AUC"   # save best model by AUC

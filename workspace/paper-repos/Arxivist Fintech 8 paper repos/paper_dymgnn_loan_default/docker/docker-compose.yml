@@ -1,0 +1,31 @@
+version: "3.9"
+services:
+  train:
+    build: ..
+    image: dymgnn:latest
+    volumes:
+      - ../data:/workspace/data
+      - ../checkpoints:/workspace/checkpoints
+      - ../results:/workspace/results
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python train.py --config configs/config.yaml
+
+  notebook:
+    build: ..
+    image: dymgnn:latest
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../notebooks:/workspace/notebooks
+      - ../data:/workspace/data
+      - ../checkpoints:/workspace/checkpoints
+    command: >
+      jupyter notebook --ip=0.0.0.0 --port=8888
+      --no-browser --allow-root
+      --notebook-dir=/workspace/notebooks
