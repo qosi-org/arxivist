@@ -1,0 +1,22 @@
+{
+  "gmlp_mlm_smoke": {
+    "params": 656868,
+    "loss_first": 6.309567451477051,
+    "loss_final": 3.2417850494384766,
+    "perplexity_last10": 29.327019526406225,
+    "steps": 60
+  },
+  "amlp_mlm_smoke": {
+    "params": 738788,
+    "loss_first": 6.3066487312316895,
+    "loss_final": 3.2365996837615967,
+    "perplexity_last10": 30.148988994061227,
+    "steps": 60
+  },
+  "vision_smoke": {
+    "params": 426186,
+    "loss_first": 2.3250279426574707,
+    "loss_final": 2.3356144428253174,
+    "steps": 60
+  }
+}

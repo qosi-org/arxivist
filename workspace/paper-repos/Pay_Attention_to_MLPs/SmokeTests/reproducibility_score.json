@@ -1,0 +1,52 @@
+{
+  "paper_id": "arxiv_2105_08050",
+  "comparison_date": "2026-06-12",
+  "comparison_type": "pipeline_smoke_test",
+  "reproducibility_score": null,
+  "score_confidence": "not_applicable",
+  "note": "No reproducibility score computed. This run validates code execution only (tiny model, synthetic data, 60 steps, CPU). No paper-reported metrics were targeted or matched.",
+  "metrics_compared": 0,
+  "metrics_matched": 0,
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 0,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "architecture_plan_version_used": 1,
+  "requires_manual_review": false,
+  "smoke_test_summary": {
+    "gmlp_nlp": {
+      "params": 656868,
+      "steps": 60,
+      "loss_start": 6.3096,
+      "loss_end": 3.2418,
+      "loss_decrease_pct": 48.6,
+      "status": "pass"
+    },
+    "amlp_nlp": {
+      "params": 738788,
+      "steps": 60,
+      "loss_start": 6.3066,
+      "loss_end": 3.2366,
+      "loss_decrease_pct": 48.7,
+      "status": "pass"
+    },
+    "gmlp_vision": {
+      "params": 426186,
+      "steps": 60,
+      "loss_start": 2.3250,
+      "loss_end": 2.3356,
+      "loss_decrease_pct": -0.5,
+      "status": "pass_no_signal_expected_on_random_data"
+    }
+  },
+  "next_step": "Run gmlp-base-ablation preset (125K steps, C4/RealNews) for a real comparison against paper Table 3 (target perplexity 4.35)."
+}
