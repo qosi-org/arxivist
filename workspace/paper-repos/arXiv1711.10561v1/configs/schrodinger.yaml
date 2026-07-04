@@ -1,0 +1,37 @@
+# Nonlinear Schrödinger equation — Continuous-time PINN
+# Paper: Section 2.2
+# Target relative L2 error: 1.97e-3
+
+model:
+  type: continuous
+  pde: schrodinger
+  hidden_layers: 5      # 5 layers × 100 neurons (Section 2.2)
+  hidden_neurons: 100
+  activation: tanh
+  output_dim: 2         # Complex: [Re(h), Im(h)]
+
+data:
+  N0: 50                # Initial data points (t=0)
+  Nb: 50                # Boundary collocation points (periodic BC)
+  Nf: 20000             # Physics collocation points
+  t_domain: [0.0, 1.5707963267948966]   # [0, π/2]
+  x_domain: [-5.0, 5.0]
+  sampling_method: lhs
+  seed: 42
+
+training:
+  optimizer: lbfgs
+  max_iter: 50000
+  tolerance_grad: 1.0e-7
+  tolerance_change: 1.0e-9
+  history_size: 50
+  line_search_fn: strong_wolfe
+
+evaluation:
+  grid_t: 201
+  grid_x: 256
+  metric: relative_l2
+
+hardware:
+  device: cuda
+  dtype: float32

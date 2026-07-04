@@ -1,0 +1,35 @@
+# Burgers equation — Discrete-time PINN (implicit Runge-Kutta)
+# Paper: Section 3.1, Table 3 & 4
+# Target relative L2 error: 8.2e-4 (q=500, dt=0.8, 4L×50N)
+
+model:
+  type: discrete
+  pde: burgers
+  hidden_layers: 4      # Table 3: 4 layers × 50 neurons
+  hidden_neurons: 50
+  activation: tanh
+  q: 500                # Runge-Kutta stages (Table 4)
+  dt: 0.8               # Time step Δt (Table 4)
+  t_start: 0.1          # Snapshot time (Section 3.1)
+  t_end: 0.9            # Prediction time (Section 3.1)
+
+data:
+  Nn: 250               # Spatial data points at t_start (Section 3.1)
+  x_domain: [-1.0, 1.0]
+  seed: 42
+
+training:
+  optimizer: lbfgs
+  max_iter: 50000
+  tolerance_grad: 1.0e-7
+  tolerance_change: 1.0e-9
+  history_size: 50
+  line_search_fn: strong_wolfe
+
+evaluation:
+  grid_x: 256
+  metric: relative_l2
+
+hardware:
+  device: cuda
+  dtype: float32

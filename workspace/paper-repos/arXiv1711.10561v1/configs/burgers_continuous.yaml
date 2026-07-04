@@ -1,0 +1,36 @@
+# Burgers equation — Continuous-time PINN
+# Paper: Section 2.1, Table 1 & 2
+# Target relative L2 error: 6.7e-4
+
+model:
+  type: continuous
+  pde: burgers
+  hidden_layers: 8    # Paper says "9-layer": input+8hidden+output=10, but 8 hidden gives 3021 params (paper-verified)
+  hidden_neurons: 20
+  activation: tanh
+  output_dim: 1
+
+data:
+  Nu: 100               # Initial + boundary data (Table 1)
+  Nf: 10000             # Collocation points (Table 1)
+  t_domain: [0.0, 1.0]
+  x_domain: [-1.0, 1.0]
+  sampling_method: lhs
+  seed: 42
+
+training:
+  optimizer: lbfgs
+  max_iter: 50000
+  tolerance_grad: 1.0e-7
+  tolerance_change: 1.0e-9
+  history_size: 50
+  line_search_fn: strong_wolfe
+
+evaluation:
+  grid_t: 100
+  grid_x: 256
+  metric: relative_l2
+
+hardware:
+  device: cuda
+  dtype: float32

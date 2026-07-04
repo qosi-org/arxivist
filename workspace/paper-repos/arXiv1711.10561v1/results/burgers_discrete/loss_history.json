@@ -1,0 +1,62 @@
+[
+  {
+    "iter": 1,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": 15.962717056274414
+  },
+  {
+    "iter": 2,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  },
+  {
+    "iter": 3,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  },
+  {
+    "iter": 4,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  },
+  {
+    "iter": 5,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  },
+  {
+    "iter": 6,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  },
+  {
+    "iter": 7,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  },
+  {
+    "iter": 8,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  },
+  {
+    "iter": 9,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  },
+  {
+    "iter": 10,
+    "loss": NaN,
+    "sse_n": NaN,
+    "sse_b": NaN
+  }
+]

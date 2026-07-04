@@ -1,0 +1,32 @@
+data:
+  Nf: 5000
+  Nu: 100
+  sampling_method: lhs
+  seed: 42
+  t_domain:
+  - 0.0
+  - 1.0
+  x_domain:
+  - -1.0
+  - 1.0
+evaluation:
+  grid_t: 100
+  grid_x: 256
+  metric: relative_l2
+hardware:
+  device: cuda
+  dtype: float32
+model:
+  activation: tanh
+  hidden_layers: 8
+  hidden_neurons: 20
+  output_dim: 1
+  pde: burgers
+  type: continuous
+training:
+  history_size: 50
+  line_search_fn: strong_wolfe
+  max_iter: 10000
+  optimizer: lbfgs
+  tolerance_change: 1.0e-09
+  tolerance_grad: 1.0e-07

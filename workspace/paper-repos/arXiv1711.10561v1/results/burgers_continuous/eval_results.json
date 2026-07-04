@@ -1,0 +1,6 @@
+{
+  "pde": "burgers",
+  "relative_l2_error": 0.5119664559160965,
+  "grid_nt": 100,
+  "grid_nx": 256
+}
