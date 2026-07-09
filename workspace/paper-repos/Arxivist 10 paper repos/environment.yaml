@@ -1,0 +1,16 @@
+name: rlte
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy>=1.24
+  - pyyaml>=6.0
+  - pandas>=2.0
+  - matplotlib>=3.7
+  - tqdm>=4.66
+  - pip:
+      - torch>=2.1.0
+      - gymnasium>=0.29
