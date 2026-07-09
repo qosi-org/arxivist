@@ -1,0 +1,23 @@
+model:
+  z_dim: 100              # ASSUMED — not in paper (confidence: 0.45)
+  g_hidden_units: 240     # ASSUMED — from original GitHub repo (confidence: 0.45)
+  d_hidden_units: 1200    # ASSUMED (confidence: 0.45)
+  input_dim: 784          # MNIST 28x28 flattened
+
+training:
+  optimizer: sgd_momentum
+  learning_rate: 0.001    # ASSUMED (confidence: 0.4)
+  momentum: 0.5           # ASSUMED (confidence: 0.4)
+  k_discriminator_steps: 1  # explicit in paper (confidence: 0.99)
+  batch_size: 100          # ASSUMED (confidence: 0.4)
+  epochs: 50               # ASSUMED — not stated in paper (confidence: 0.3)
+  dropout_p: 0.5
+
+evaluation:
+  metric: parzen_log_likelihood
+  sigma: 0.2               # ASSUMED (confidence: 0.5)
+  n_samples: 10000
+
+hardware:
+  device: cpu              # small MLPs, CPU-friendly
+  seed: 42
