@@ -1,0 +1,47 @@
+# Default config: LN algorithm, noise-trader market, 20-lot initial position.
+# Values marked "# ASSUMED" were not explicitly stated in the paper
+# (arXiv:2507.06345); see architecture_plan.json / README for details.
+
+model:
+  K: 6                       # simplex dim (Section 6.3, confidence 0.95)
+  hidden_layers: 2
+  hidden_units: 128
+  hidden_activation: tanh
+  policy_output_gain: 1.0e-5
+  other_layers_gain: 0.01
+
+training:
+  algorithm: LN               # LN | DR
+  num_envs: 128
+  traj_per_env: 10
+  N_steps: 10
+  H_iterations: 400
+  learning_rate: 0.0005
+  adam_beta1: 0.9              # ASSUMED: PyTorch default (confidence 0.6)
+  adam_beta2: 0.999             # ASSUMED: PyTorch default (confidence 0.6)
+  sigma_init: 1.0
+  sigma_final: 0.1
+  gae_lambda: 1.0
+  log_every: 10
+  checkpoint_every: 50
+
+data:
+  market_type: noise_tactical_strategic           # noise | noise_tactical | noise_tactical_strategic
+  D_levels: 30
+  initial_lots: 60              # 20 (small) or 60 (large) in the paper
+  T_seconds: 150
+  dt_seconds: 15
+  start_offset_seconds: -15
+  init_bid_price: 1000.0
+  init_ask_price: 1001.0
+
+evaluation:
+  num_sims: 10000
+  eval_seed: 1                  # ASSUMED: not stated in paper (confidence 0.4)
+
+hardware:
+  device: cpu                   # cuda optional; simulator is CPU-bound
+  num_workers: 128
+  precision: float32
+  deterministic: false          # set true for full reproducibility (slower)
+  seed: 0
