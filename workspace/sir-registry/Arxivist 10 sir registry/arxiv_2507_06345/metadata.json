@@ -1,0 +1,22 @@
+{
+  "paper_id": "arxiv_2507_06345",
+  "title": "Reinforcement Learning for Trade Execution with Market and Limit Orders",
+  "authors": ["Patrick Cheridito", "Moritz Weiss"],
+  "domain": "RL",
+  "arxiv_id": "2507.06345v2",
+  "version": 1,
+  "created_at": "2026-07-08T00:00:00Z",
+  "last_updated": "2026-07-08T00:00:00Z",
+  "sir_confidence": 0.83,
+  "stages_with_data": ["stage1_paper_parser", "stage2_sir_registry", "stage3_architecture_planner", "stage4_code_generator", "stage5_notebook_generator"],
+  "has_comparison_report": false,
+  "repo_path": "paper-repos/arxiv_2507_06345/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-08T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": ["all"]
+    }
+  ]
+}

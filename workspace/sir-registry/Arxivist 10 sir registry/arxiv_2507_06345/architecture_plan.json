@@ -1,0 +1,450 @@
+{
+  "paper_id": "arxiv_2507_06345",
+  "plan_version": 1,
+  "created_at": "2026-07-08T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "The paper explicitly bases its implementation on the CleanRL PPO codebase (Huang et al., 2022, https://github.com/vwxyzjn/cleanrl), which is PyTorch-based. The models are small feed-forward MLPs and the bottleneck is the pure-Python/CPU limit order book simulator (128 parallel CPU environments), so CUDA is optional/recommended-but-not-required. Config needs are modest (flat hyperparameter sets per market/algorithm), so plain YAML is sufficient and keeps the repo dependency-light rather than pulling in Hydra/OmegaConf."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/rlte/__init__.py",
+      "description": "Package init, version string.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/rlte/models/policy.py",
+      "description": "Logistic-normal and Dirichlet policy networks (actor).",
+      "sir_modules_mapped": ["PolicyNetwork", "LogisticNormalTransform", "DirichletPolicyNetwork"],
+      "classes": [
+        {
+          "name": "LogisticNormalPolicy",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "forward(self, state: torch.Tensor) -> torch.Tensor", "returns": "mu: [B, K] mean of underlying normal"},
+            {"name": "sample", "signature": "sample(self, state: torch.Tensor, sigma: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]", "returns": "(action a in S^K [B,K+1], raw normal sample x [B,K])"},
+            {"name": "log_prob", "signature": "log_prob(self, state: torch.Tensor, x: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor", "returns": "log phi_theta(x|s): [B]"},
+            {"name": "deterministic_action", "signature": "deterministic_action(self, state: torch.Tensor) -> torch.Tensor", "returns": "h(mu_theta): [B, K+1]"}
+          ]
+        },
+        {
+          "name": "DirichletPolicy",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "forward(self, state: torch.Tensor) -> torch.Tensor", "returns": "alpha: [B, K+1] concentration parameters (softplus output)"},
+            {"name": "sample", "signature": "sample(self, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]", "returns": "(action a in S^K [B,K+1], alpha [B,K+1])"},
+            {"name": "log_prob", "signature": "log_prob(self, alpha: torch.Tensor, a: torch.Tensor) -> torch.Tensor", "returns": "log Dirichlet density: [B]"},
+            {"name": "deterministic_action", "signature": "deterministic_action(self, state: torch.Tensor) -> torch.Tensor", "returns": "E[a]=alpha/sum(alpha): [B, K+1]"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/models/value.py",
+      "description": "Critic / value function network shared by LN and DR algorithms.",
+      "sir_modules_mapped": ["ValueNetwork"],
+      "classes": [
+        {
+          "name": "ValueNetwork",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "forward(self, state: torch.Tensor) -> torch.Tensor", "returns": "V(s): [B, 1]"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/models/distributions.py",
+      "description": "Logistic-normal and Dirichlet distribution math: transform h, inverse h^-1, density, variance schedule.",
+      "sir_modules_mapped": ["LogisticNormalTransform"],
+      "classes": [
+        {
+          "name": "LogisticNormalTransform",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "forward", "signature": "forward(x: torch.Tensor) -> torch.Tensor", "returns": "a in S^K: [B, K+1]"},
+            {"name": "inverse", "signature": "inverse(a: torch.Tensor) -> torch.Tensor", "returns": "x in R^K: [B, K]"},
+            {"name": "variance_schedule", "signature": "variance_schedule(step: int, sigma_init: float, sigma_final: float, H: int) -> float", "returns": "sigma_i per Eq. 12"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/env/order_book.py",
+      "description": "Core discrete limit order book data structure with FIFO queues per price level.",
+      "sir_modules_mapped": ["LimitOrderBookSimulator"],
+      "classes": [
+        {
+          "name": "LimitOrderBook",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "submit_market_order", "signature": "submit_market_order(self, side: str, size: int) -> float", "returns": "cash flow generated"},
+            {"name": "submit_limit_order", "signature": "submit_limit_order(self, side: str, level: int, size: int, owner: str) -> str", "returns": "order_id"},
+            {"name": "cancel_order", "signature": "cancel_order(self, order_id: str) -> bool", "returns": "success flag"},
+            {"name": "best_bid_ask", "signature": "best_bid_ask(self) -> tuple[float, float]", "returns": "(p_b, p_a)"},
+            {"name": "get_volumes", "signature": "get_volumes(self, k: int) -> tuple[list[int], list[int]]", "returns": "(bid volumes, ask volumes) first k levels"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/env/traders.py",
+      "description": "Noise, Tactical, and Strategic trader agent behaviors (Poisson processes and imbalance reactions).",
+      "sir_modules_mapped": ["NoiseTraderAgents", "TacticalTraderAgents", "StrategicTraderAgent"],
+      "classes": [
+        {
+          "name": "NoiseTraders",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "step", "signature": "step(self, book: 'LimitOrderBook', dt: float, rng: 'np.random.Generator') -> None", "returns": "None (mutates book in place)"}
+          ]
+        },
+        {
+          "name": "TacticalTraders",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "step", "signature": "step(self, book: 'LimitOrderBook', dt: float, rng: 'np.random.Generator') -> None", "returns": "None (mutates book in place)"}
+          ]
+        },
+        {
+          "name": "StrategicTrader",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "step", "signature": "step(self, book: 'LimitOrderBook', t: float, rng: 'np.random.Generator') -> None", "returns": "None (mutates book in place)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/env/execution_env.py",
+      "description": "Gym-like RL environment wrapping the order book + trader agents; exposes reset/step producing states/rewards per Sections 3.1-3.3, and computes the normalized feature vectors of Appendix B.3.",
+      "sir_modules_mapped": ["LimitOrderBookSimulator", "NoiseTraderAgents", "TacticalTraderAgents", "StrategicTraderAgent"],
+      "classes": [
+        {
+          "name": "TradeExecutionEnv",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "reset", "signature": "reset(self, seed: int | None = None) -> np.ndarray", "returns": "initial normalized state vector"},
+            {"name": "step", "signature": "step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, dict]", "returns": "(next_state, reward, done, info)"}
+          ]
+        },
+        {
+          "name": "VectorizedTradeExecutionEnv",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "reset", "signature": "reset(self, seeds: list[int] | None = None) -> np.ndarray", "returns": "[num_envs, state_dim] batch of initial states"},
+            {"name": "step", "signature": "step(self, actions: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[dict]]", "returns": "batched (next_states, rewards, dones, infos) across 128 parallel CPU workers"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/training/trainer.py",
+      "description": "Actor-critic training loop (Algorithm 1): trajectory collection, policy loss (Eq. 14), value loss (Eq. 15), variance scheduling.",
+      "sir_modules_mapped": ["PolicyNetwork", "ValueNetwork"],
+      "classes": [
+        {
+          "name": "ActorCriticTrainer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "collect_trajectories", "signature": "collect_trajectories(self, num_traj: int) -> dict", "returns": "batch of (states, actions, rewards) tensors"},
+            {"name": "compute_advantages", "signature": "compute_advantages(self, batch: dict) -> torch.Tensor", "returns": "advantage estimates per Eq. 13"},
+            {"name": "update_policy", "signature": "update_policy(self, batch: dict, advantages: torch.Tensor) -> float", "returns": "policy loss value"},
+            {"name": "update_value", "signature": "update_value(self, batch: dict) -> float", "returns": "value loss value"},
+            {"name": "train", "signature": "train(self, num_iterations: int) -> dict", "returns": "training history (returns per iteration)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/training/losses.py",
+      "description": "Policy gradient loss (Eq. 14) and value MSE loss (Eq. 15) as standalone pure functions for testability.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "LossFunctions",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "policy_loss", "signature": "policy_loss(advantages: torch.Tensor, log_probs: torch.Tensor) -> torch.Tensor", "returns": "scalar loss per Eq. 14"},
+            {"name": "value_loss", "signature": "value_loss(values: torch.Tensor, returns: torch.Tensor) -> torch.Tensor", "returns": "scalar MSE loss per Eq. 15"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/evaluation/benchmarks.py",
+      "description": "Heuristic baseline algorithms: Submit-and-Leave (SL) and TWAP.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "SubmitAndLeave",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "act", "signature": "act(self, state: dict, step: int) -> np.ndarray", "returns": "action allocation vector"}
+          ]
+        },
+        {
+          "name": "TWAP",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "act", "signature": "act(self, state: dict, step: int) -> np.ndarray", "returns": "action allocation vector"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/evaluation/metrics.py",
+      "description": "Evaluation loop computing expected normalized reward and std dev across 10,000 simulations (Table 1).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "Evaluator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "evaluate", "signature": "evaluate(self, policy, env_factory, num_sims: int = 10000, seed: int = 1) -> dict", "returns": "{'mean': float, 'std': float, 'rewards': np.ndarray}"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/utils/config.py",
+      "description": "YAML config loading/validation and dataclass hyperparameter containers.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "Config",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "load", "signature": "load(path: str) -> 'Config'", "returns": "parsed Config object"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/rlte/utils/features.py",
+      "description": "Feature normalization functions from Appendix B.3 (prices, volumes, order flows, private state encodings).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "FeatureNormalizer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "normalize_state", "signature": "normalize_state(self, raw_state: dict) -> np.ndarray", "returns": "normalized flat feature vector"}
+          ]
+        }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "LN policy forward + sample",
+      "input": {"name": "state", "shape": "[B, state_dim]", "dtype": "float32"},
+      "output": {"name": "action", "shape": "[B, K+1]", "dtype": "float32"},
+      "steps": [
+        "state: [B, state_dim] <- input (market + private normalized features, Appendix B.3)",
+        "h1 = tanh(Linear(state))  -> [B, 128]",
+        "h2 = tanh(Linear(h1))     -> [B, 128]",
+        "mu = Linear(h2)           -> [B, K]  (K=6, output layer bias init to -1, weight gain 1e-5)",
+        "x ~ Normal(mu, Sigma) where Sigma = sigma_i * I_K (variance from Eq. 12 schedule)  -> [B, K]",
+        "a = LogisticNormalTransform.forward(x)  -> [B, K+1]  (Eq. in Section 4.2)",
+        "return a, x, mu"
+      ]
+    },
+    {
+      "name": "Value network forward",
+      "input": {"name": "state", "shape": "[B, state_dim]", "dtype": "float32"},
+      "output": {"name": "value", "shape": "[B, 1]", "dtype": "float32"},
+      "steps": [
+        "state: [B, state_dim] <- input",
+        "h1 = tanh(Linear(state)) -> [B, 128]",
+        "h2 = tanh(Linear(h1))    -> [B, 128]",
+        "v = Linear(h2)           -> [B, 1]",
+        "return v"
+      ]
+    },
+    {
+      "name": "One environment step (execution_env)",
+      "input": {"name": "action", "shape": "[K+1] simplex vector", "dtype": "float32"},
+      "output": {"name": "(next_state, reward, done, info)", "shape": "[state_dim], scalar, bool, dict", "dtype": "float32/bool"},
+      "steps": [
+        "action a=(a_0,...,a_K) <- input, a_0*M(t) rounded to market order size, a_1..a_{K-1}*M(t) rounded sequentially to limit order sizes at ticks 1..K-1 above best bid (Section 3.2)",
+        "cancel existing algorithm limit orders as needed, worst queue position first, to reach new allocation",
+        "submit market order of size floor(a_0*M(t)) -> immediate cash flow via LimitOrderBook.submit_market_order",
+        "submit/adjust limit orders at levels 1..K-1 via LimitOrderBook.submit_limit_order",
+        "advance simulation clock by dt=15s: run NoiseTraders.step, TacticalTraders.step, StrategicTrader.step (if present) at their own Poisson/periodic rates within (t, t+dt]",
+        "accumulate cash flow r_bar(s_n,a_n) from all market/limit fills of the algorithm's orders in (t, t+dt]",
+        "if n == N-1 and inventory remains: force market order of size M(t_N), add to cash flow",
+        "normalize reward via r = (r_bar - gamma_n * p_b(0)) / M  (Section 3.3)",
+        "compute next normalized state vector via FeatureNormalizer.normalize_state (Appendix B.3)",
+        "return next_state, reward, done=(n==N-1), info"
+      ]
+    },
+    {
+      "name": "Training iteration (Algorithm 1)",
+      "input": {"name": "policy/value params theta_i, vartheta_i", "shape": "n/a", "dtype": "float32"},
+      "output": {"name": "policy/value params theta_{i+1}, vartheta_{i+1}", "shape": "n/a", "dtype": "float32"},
+      "steps": [
+        "collect tau=1280 trajectories of length N=10 from 128 parallel envs (10 trajectories per env) using current stochastic policy phi_theta_i",
+        "for each (s_n,k, a_n,k) compute advantage A = sum_{l=n}^{N-1} r(s_l,k,a_l,k) - V_vartheta_i(s_n,k)  (Eq. 13)",
+        "policy loss = -(1/(tau*N)) * sum A * log phi_theta(x_n,k | s_n,k)  (Eq. 14); backprop, Adam step lr=5e-4",
+        "value loss = (1/(tau*N)) * sum (V_vartheta(s_n,k) - sum_l r(s_l,k,a_l,k))^2  (Eq. 15); backprop, Adam step lr=5e-4",
+        "scale down covariance Sigma = sigma_{i+1} * I_K per Eq. 12",
+        "repeat for H=400 iterations"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "K": "6  # simplex dim: market order + 5 limit levels + no-order action (confidence 0.95)",
+      "hidden_layers": 2,
+      "hidden_units": 128,
+      "hidden_activation": "tanh",
+      "policy_output_bias_init": [-1, -1, -1, -1, -1, -1],
+      "policy_output_gain": 1e-05,
+      "other_layers_gain": 0.01
+    },
+    "training": {
+      "algorithm": "LN  # or 'DR' for Dirichlet benchmark",
+      "num_envs": 128,
+      "traj_per_env": 10,
+      "tau_total_trajectories": 1280,
+      "N_steps_per_traj": 10,
+      "H_iterations": 400,
+      "learning_rate": 0.0005,
+      "adam_beta1": "0.9  # ASSUMED: PyTorch default, not stated in paper (confidence 0.6)",
+      "adam_beta2": "0.999  # ASSUMED: PyTorch default, not stated in paper (confidence 0.6)",
+      "sigma_init": 1.0,
+      "sigma_final": 0.1,
+      "gae_lambda": 1.0
+    },
+    "data": {
+      "market_type": "noise | noise_tactical | noise_tactical_strategic",
+      "initial_lots_small": 20,
+      "initial_lots_large": 60,
+      "T_seconds": 150,
+      "dt_seconds": 15,
+      "N_decision_steps": 10,
+      "start_time_offset_seconds": -15,
+      "D_visible_levels": 30
+    },
+    "evaluation": {
+      "num_eval_simulations": 10000,
+      "eval_seed": "1  # ASSUMED: different seed than training, exact value not stated (confidence 0.4)"
+    },
+    "hardware": {
+      "device": "cpu  # simulator is CPU-bound; policy/value nets can use cuda if available",
+      "num_workers": 128,
+      "precision": "float32"
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": ">=2.1.0", "reason": "Policy/value neural networks, Adam optimizer, autograd for policy/value losses"},
+      {"package": "numpy", "version": ">=1.24", "reason": "Order book state, RNG, feature vectors"},
+      {"package": "gymnasium", "version": ">=0.29", "reason": "Standard RL env interface conventions for TradeExecutionEnv (optional but idiomatic)"},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "Config file loading (config.yaml)"},
+      {"package": "pandas", "version": ">=2.0", "reason": "Aggregating and tabulating evaluation results (Table 1 reproduction)"},
+      {"package": "matplotlib", "version": ">=3.7", "reason": "Reward histograms, inventory curves, training curves (Figures 3-13)"},
+      {"package": "tqdm", "version": ">=4.66", "reason": "Progress bars during training/evaluation"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=7.4"},
+      {"package": "black", "version": ">=23.0"},
+      {"package": "ruff", "version": ">=0.1"},
+      {"package": "mypy", "version": ">=1.5"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Train the LN (or DR) actor-critic policy for a given market and position size configuration.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to YAML config file"},
+        {"flag": "--algorithm", "type": "str", "required": false, "default": "LN", "help": "'LN' or 'DR'"},
+        {"flag": "--market", "type": "str", "required": false, "default": "noise", "help": "'noise' | 'noise_tactical' | 'noise_tactical_strategic'"},
+        {"flag": "--lots", "type": "int", "required": false, "default": 20, "help": "Initial inventory size (20 or 60)"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 0, "help": "Random seed"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "runs/", "help": "Where to save checkpoints and logs"}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Evaluate a trained (or heuristic) policy over 10,000 market simulations and reproduce Table 1 / Figure 4 style outputs.",
+      "cli_args": [
+        {"flag": "--checkpoint", "type": "str", "required": false, "default": null, "help": "Path to trained policy checkpoint; omit for heuristic baselines"},
+        {"flag": "--policy", "type": "str", "required": false, "default": "LN", "help": "'LN' | 'DR' | 'SL' | 'TWAP'"},
+        {"flag": "--market", "type": "str", "required": false, "default": "noise", "help": "Market configuration"},
+        {"flag": "--lots", "type": "int", "required": false, "default": 20, "help": "Initial inventory size"},
+        {"flag": "--num-sims", "type": "int", "required": false, "default": 10000, "help": "Number of Monte Carlo evaluation simulations"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 1, "help": "Evaluation random seed (different from training)"}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Run a single trade execution episode with a trained policy and print/plot the resulting order book evolution and actions (reproducing Figures 1-2, 6-7 style output).",
+      "cli_args": [
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to trained policy checkpoint"},
+        {"flag": "--market", "type": "str", "required": false, "default": "noise", "help": "Market configuration"},
+        {"flag": "--lots", "type": "int", "required": false, "default": 20, "help": "Initial inventory size"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "Episode random seed"},
+        {"flag": "--plot", "type": "bool", "required": false, "default": true, "help": "Whether to save a plot of the episode"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["build-essential", "git"],
+    "workdir": "/workspace/rlte",
+    "default_cmd": "python train.py --config configs/noise_20lots.yaml"
+  },
+  "risk_assessment": [
+    {
+      "severity": "Medium",
+      "description": "Exact integer-rounding procedure for converting continuous simplex allocations to lot counts is under-specified (SIR ambiguity, confidence 0.6).",
+      "source": "SIR ambiguities[0]",
+      "mitigation": "Implement a configurable RoundingStrategy in execution_env.py with the paper's described 'sequential floor' as default; expose alternative largest-remainder strategy behind a config flag and document the assumption clearly in code comments."
+    },
+    {
+      "severity": "Low",
+      "description": "Value network initialization gains not 100% explicitly re-confirmed as identical to policy network (SIR ambiguity, confidence 0.65).",
+      "source": "SIR ambiguities[1]",
+      "mitigation": "Use orthogonal init with gain=0.01 for all value network layers (matching policy network's non-final layers) and flag this with a `# ASSUMED` comment in models/value.py."
+    },
+    {
+      "severity": "Low",
+      "description": "Adam optimizer beta1/beta2 not stated in paper (confidence 0.6).",
+      "source": "SIR implementation_assumptions[0]",
+      "mitigation": "Use PyTorch defaults (0.9, 0.999) and expose as config-overridable hyperparameters in config.yaml."
+    },
+    {
+      "severity": "Medium",
+      "description": "The limit order book simulator with FIFO queues, Poisson-process traders, and imbalance-reactive tactical traders is a non-trivial custom simulation component central to reproducing market impact results; a naive implementation could be too slow for 128-parallel-env training or could subtly diverge from the paper's dynamics.",
+      "source": "SIR architecture modules: LimitOrderBookSimulator, NoiseTraderAgents, TacticalTraderAgents",
+      "mitigation": "Implement order book with per-price-level deque-based FIFO queues and vectorize across environments using multiprocessing.Pool (128 workers) matching the paper's reported vectorized architecture; provide a unit test suite (test_order_book.py) checking conservation of shares and correct FIFO matching against hand-constructed scenarios (e.g., reproducing Figure 1's example exactly)."
+    },
+    {
+      "severity": "Low",
+      "description": "Random seeds are not reported in the paper for exact reproduction of Table 1 numbers.",
+      "source": "SIR implementation_assumptions[7]",
+      "mitigation": "Document that exact numeric reproduction is not guaranteed; report mean +/- std over multiple seeds in evaluate.py, and reference the paper's own code release (https://github.com/moritzweiss/rlte) as a cross-check in the README."
+    },
+    {
+      "severity": "Medium",
+      "description": "Training is computationally expensive (paper reports ~1.2-2 hours per configuration on a 64-core/128-thread server); users on modest hardware may not be able to reproduce full results within a reasonable time.",
+      "source": "SIR evaluation_protocol.compute",
+      "mitigation": "Provide a --quick-test mode in train.py with reduced num_envs/H_iterations for smoke-testing the pipeline, and document expected full-scale runtime and hardware requirements in the README."
+    },
+    {
+      "severity": "Low",
+      "description": "GAE lambda=1 vs 0.95 ablation was only tested at a smaller trajectory count (tau=320) in the paper's Appendix C.1, not at the main tau=1280 setting, creating minor ambiguity about the optimal setting for the default config.",
+      "source": "SIR ambiguities[2]",
+      "mitigation": "Default to lambda=1.0 with tau=1280 (matching Table 1's main results) and expose --gae-lambda and --tau as config-overridable for users who want to replicate the Appendix C.1 ablation."
+    }
+  ]
+}
