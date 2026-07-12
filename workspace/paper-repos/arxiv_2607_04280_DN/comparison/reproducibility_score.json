@@ -1,0 +1,43 @@
+{
+  "paper_id": "arxiv_2607_04280",
+  "comparison_date": "2026-07-11T00:00:00Z",
+  "reproducibility_score": 0.0,
+  "score_confidence": "low",
+  "metrics_compared": 14,
+  "metrics_matched": 2,
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 2
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 3,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": true,
+  "matched_metrics_detail": [
+    {
+      "metric": "delta",
+      "dataset": "Baseline (pooled)",
+      "paper_value": 0.549,
+      "user_value": 1.045,
+      "absolute_deviation": 0.496,
+      "percentage_deviation": 90.35,
+      "severity": "critical"
+    },
+    {
+      "metric": "delta",
+      "dataset": "Ablation: No splitting",
+      "paper_value": 0.324,
+      "user_value": 1.014,
+      "absolute_deviation": 0.69,
+      "percentage_deviation": 212.96,
+      "severity": "critical"
+    }
+  ],
+  "notes": "User ran a demo-scale reproduction (1 stock, 60,000 steps vs paper's 1,000,000; min_points_per_bin relaxed to 5 vs paper's 30). Both raw deviations are Critical, and more importantly the qualitative ablation effect (splitting removal should collapse delta by ~41%) is not visible: baseline and no_splitting differ by only ~3%. Score reflects this run's outputs only and should be recomputed after a full or near-full-scale re-run."
+}
