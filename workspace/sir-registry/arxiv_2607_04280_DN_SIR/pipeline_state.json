@@ -1,0 +1,56 @@
+{
+  "paper_id": "arxiv_2607_04280",
+  "paper_title": "Order Splitting and Liquidity Replenishment Are Jointly Necessary for the Square-Root Law of Market Impact: A Counterfactual Dissection",
+  "current_stage": 6,
+  "stages_completed": [1, 2, 3, 4, 5, 6],
+  "stage_timestamps": {
+    "1": "2026-07-10T00:00:00Z",
+    "2": "2026-07-10T00:00:00Z",
+    "3": "2026-07-10T00:00:00Z",
+    "4": "2026-07-10T00:00:00Z",
+    "5": "2026-07-10T00:00:00Z",
+    "6": "2026-07-11T00:00:00Z"
+  },
+  "stage_confidence": {
+    "1": 0.79,
+    "2": 1.0,
+    "3": null,
+    "4": null,
+    "5": null,
+    "6": null
+  },
+  "sir_path": "sir-registry/arxiv_2607_04280/sir.json",
+  "repo_path": "paper-repos/arxiv_2607_04280/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2607_04280/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2607_04280/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2607_04280/notebooks/reproduction_walkthrough.ipynb",
+    "comparison_report": "paper-repos/arxiv_2607_04280/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": {
+    "implementation_assumptions": 0.55,
+    "hft_adaptive_spread_rule": 0.4,
+    "news_agent_trigger_process": 0.35,
+    "price_limit_momentum_ablation_params": 0.4
+  },
+  "human_review_required": true,
+  "human_review_reasons": [
+    "architecture_plan.json flags a High-severity risk: HFT adaptive-spread rule is not numerically specified in the paper",
+    "Stage 6 comparison (2026-07-11) found Critical deviations on both reported metrics (baseline delta +90.3%, no_splitting delta +212.9%) and recommended manual review before further automated comparison",
+    "Post-comparison debugging (outside the formal 6-stage pipeline) identified and patched a flat HFT quote-depth profile in src/sqrt_law_abm/models/agents.py; fix is unit-tested and smoke-tested but not yet confirmed against a full-scale user re-run"
+  ],
+  "loop_count": 1,
+  "retry_history": [
+    {
+      "stage": 4,
+      "retry_at": "2026-07-12T00:00:00Z",
+      "reason": "User's iterative testing (60k steps -> 200k steps -> tuned HFT spread config) isolated that baseline delta improved to ~0.542 after config tuning, but no_splitting delta moved the wrong direction (0.977 -> 0.843 vs paper's 0.324). Root-caused to HFTMarketMakerAgent posting flat quote size across all 50 levels, giving a linear (gamma=0) depth profile instead of the paper's reported concentrated-near-best-quote profile (gamma in [1.5, 3.6]).",
+      "outcome": "success"
+    }
+  ],
+  "created_at": "2026-07-10T00:00:00Z",
+  "last_updated": "2026-07-12T00:00:00Z",
+  "pipeline_complete": true,
+  "notes": "pipeline_complete=true reflects that all 6 formal stages have run at least once. However, the Stage 6 comparison on file is now STALE: it reflects the pre-patch code and the user's earliest (60k-step) results. A fresh Stage 6 comparison is recommended once the user re-runs with the patched agents.py and reports new baseline/no_splitting numbers -- see retry_history above."
+}

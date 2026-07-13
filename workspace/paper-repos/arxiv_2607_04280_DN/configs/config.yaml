@@ -1,0 +1,100 @@
+# ArXivist-generated config for arxiv_2607_04280
+# "Order Splitting and Liquidity Replenishment Are Jointly Necessary for the SRL"
+#
+# NOTE ON VOCABULARY: this is a discrete-event agent-based market simulation, not a
+# gradient-trained model. `model:` describes the agent population, `simulation:` plays the
+# role of "training:" in the ArXivist template. Values with a `# ASSUMED` comment were not
+# explicitly stated in the paper (see SIR implementation_assumptions / ambiguities).
+
+seed: 42
+
+model:
+  tick_size_bp: 1                  # explicit: tick = 1 bp of initial price
+  n_institutional: 20              # explicit
+  n_hft_min: 3                     # explicit range [3, 10]
+  n_hft_max: 10
+  n_retail_min: 100                # explicit range [100, 400]
+  n_retail_max: 400
+  n_news: 3                        # explicit
+
+  institutional:
+    pareto_xi_min: 1.5             # explicit
+    pareto_xi_max: 3.5
+    child_count_min: 5             # explicit (Fig. 8b caption)
+    child_count_max: 50
+    poisson_gap_lambda_ticks: 3    # explicit
+    splitting_rule: dirichlet      # explicit name; "uniform" and "front_loaded" also available
+    dirichlet_concentration: 1.0   # ASSUMED: symmetric Dirichlet, concentration not specified (confidence 0.55)
+    qmin_log_min: 1                # explicit
+    qmin_log_max: 2000
+
+  hft:
+    quote_levels: 50               # explicit
+    replenish_prob: 0.9            # explicit
+    spread_rule: volatility_scaled # ASSUMED: exact adaptive-spread formula not specified (confidence 0.4)
+    base_spread_ticks: 1            # TUNED by user testing 2026-07-11: paper's baseline delta=0.549
+                                     # reproduced almost exactly (0.542) at this value vs. original
+                                     # default of 4 (which gave delta~1.0)
+    spread_vol_sensitivity: 0.5     # TUNED alongside base_spread_ticks, see above
+    depth_profile_power: 1.5        # ASSUMED (added post-generation, confidence 0.4): quote size per
+                                     # level ~ (level+1)^depth_profile_power instead of flat, so that
+                                     # cumulative depth V(q) ~ q^(1+depth_profile_power). A flat profile
+                                     # (power=0) gives gamma=0, which made the no-splitting ablation's
+                                     # delta go toward 1 instead of the paper's low delta~0.32. Paper
+                                     # reports gamma in [1.5, 3.6] ("concentrated near-best-quote
+                                     # liquidity"); depth_profile_power=1.5 targets the low end of that
+                                     # range. If your fitted gamma (via estimate_depth_profile_gamma)
+                                     # comes out below 1.5, try raising this value.
+
+  retail:
+    order_size_min: 1              # explicit
+    order_size_max: 10
+
+  news:
+    trigger_rate: 0.001            # ASSUMED: low-frequency Poisson trigger, not specified (confidence 0.35)
+    size_multiplier: 20.0          # ASSUMED: large relative to retail orders, tuned to reproduce kurtosis ~29.5
+
+  momentum:                        # only active in the "momentum" ablation scenario
+    enabled: false
+    lookback_ticks: 30             # ASSUMED (confidence 0.4)
+    n_agents: 5                    # ASSUMED
+
+  price_limits:                    # only active in the "price_limits" ablation scenario
+    enabled: false
+    band_pct: 10.0                 # ASSUMED: +/-10% daily band, common equity circuit-breaker convention
+
+simulation:
+  n_steps: 1000000                 # explicit: T = 1e6
+  warmup_steps: 50000              # explicit: 5e4
+  n_stocks_full: 2000               # explicit
+  n_stocks_counterfactual: 20       # explicit
+  initial_price_log_min: 1000        # explicit
+  initial_price_log_max: 50000
+  convergence_tolerance: 0.01         # explicit: delta agreement between traj halves
+  trading_days: 200                  # explicit: 1e6 steps / 5000 steps-per-day
+  steps_per_day: 5000                # explicit
+
+data:
+  metaorder_delta_t_ticks: 10       # explicit
+  min_qnorm_threshold_pct: 0.01     # explicit
+  log_bins: 20                      # explicit
+  min_points_per_bin: 30            # explicit
+
+evaluation:
+  tse_benchmark_mean_delta: 0.489   # explicit (Sato & Kanazawa 2025)
+  tse_benchmark_mean_c: 0.842       # explicit
+  scenarios:
+    - baseline
+    - no_splitting
+    - no_hft
+    - price_limits
+    - low_liquidity
+    - momentum
+    - uniform_split
+    - front_loaded
+
+hardware:
+  device: cpu                       # "cuda" also supported (optional; no GPU required)
+  num_workers: -1                   # -1 = use all available cores (joblib)
+  precision: float64                # simulation accumulates prices/volumes in double precision
+  deterministic: false              # set true for bit-exact reruns (slower)
