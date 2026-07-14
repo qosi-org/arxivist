@@ -1,0 +1,63 @@
+# ArXivist-generated config for "Asset Pricing in Pre-trained Transformers" (arXiv:2505.01575)
+# Default variant: P_Trans_H3 (pre-trained Transformer, 3 attention heads) — the paper's
+# best-performing model across periods (Section 5.1, Table 3).
+#
+# Values annotated "# ASSUMED: <basis>" were NOT explicitly given in the paper (SIR confidence
+# < 0.7) and are literature-standard defaults. See sir-registry/arxiv_2505_01575/sir.json ->
+# implementation_assumptions for full provenance.
+
+model:
+  family: pretrained_transformer      # one of: pretrained_transformer | pretrained_transformer_lnf |
+                                       #         standard_transformer | sert | sert_lnf | encoder_only_transformer
+  d_model: 420                        # = number of stocks; pretrain module projects 182 -> 420 (Sec 4.2)
+  input_factor_dim: 182               # sorted-portfolio factors (Zimmermann 2020), Section 3
+  num_heads: 3                        # paper's best model across periods is 3-head (Table 3)
+  num_blocks: 1                       # N* = 1, explicitly stated in Section 4 ("N is configured to 1")
+  ffn_hidden_ratio: 0.7               # main-body FFN latent dim = 70% of input dim (Section 3)
+  ffn_hidden_ratio_lnf: 0.2           # LNF variant FFN latent dim = 20% of input dim (Section 5.1)
+  layer_norm_first: false             # true only for *_LNF variants
+  use_pretrain_module: true           # false for standard_transformer / encoder_only_transformer benchmarks
+  pretrain_hidden_layers: 1           # ASSUMED: single hidden layer, confidence 0.4 (SIR ambiguities[0])
+  activation: relu                    # ASSUMED: not explicitly named, confidence 0.6 (SIR implementation_assumptions[1])
+  dropout: 0.1                        # ASSUMED: standard Transformer default, confidence 0.4
+
+training:
+  optimizer: adam
+  learning_rate: 0.001                # Appendix A, Algorithm 1
+  beta1: 0.9                          # Appendix A
+  beta2: 0.999                        # Appendix A
+  epsilon: 1.0e-8                     # Appendix A
+  l1_lambda: 1.0e-5                   # ASSUMED: L1 coefficient not given, confidence 0.35 (SIR ambiguities[1])
+  max_epochs: 200                     # ASSUMED: not specified, confidence 0.4
+  early_stopping_patience: 10         # ASSUMED: Appendix Algorithm 2 defines mechanism, not value; confidence 0.4
+  train_window: 102                   # explicit, Section 3 (training window months)
+  val_window: 30                      # explicit, Section 3 (30% of training window)
+  step_size: 12                       # explicit, Section 3 (re-estimate every 12 months)
+  seed: 42
+  batch_size: full_cross_section      # ASSUMED: not specified, confidence 0.5 (SIR implementation_assumptions[2])
+  gradient_clipping: null             # not mentioned in paper
+  deterministic: true                 # may slow training; reproducibility requirement
+
+data:
+  factors_path: data/raw/factors_182.csv
+  returns_path: data/raw/excess_returns_420stocks.csv
+  missing_value_threshold: 0.4        # explicit, Section 3: exclude factors with >40% missing
+  num_stocks: 420                     # explicit, Section 3
+  start_date: "1957-01-01"
+  end_date: "2022-12-31"
+  oos_periods:
+    "1911": ["2013-01-01", "2019-11-30"]   # pre-COVID
+    "2112": ["2013-01-01", "2021-12-31"]   # COVID-inclusive
+    "2212": ["2013-01-01", "2022-12-31"]   # COVID + 1 year after
+
+evaluation:
+  transaction_cost_static_bps: 50     # explicit, Section 5.3
+  transaction_cost_dynamic_bps: 20    # explicit, Section 5.3 (turnover-adjusted, large-cap rate)
+  softmax_filter_pct: 0.5             # explicit: filters out worst 50% of monthly signals
+  weighting_schemes: [equal, value]
+  dm_test_lags_hac: 12                # ASSUMED: monthly data, 1-year HAC lag, confidence 0.5
+
+hardware:
+  device: cuda_if_available_else_cpu
+  precision: float32
+  num_workers: 2

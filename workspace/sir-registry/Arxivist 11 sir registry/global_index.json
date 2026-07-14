@@ -1,0 +1,17 @@
+{
+  "index_version": 1,
+  "total_papers": 1,
+  "papers": [
+    {
+      "paper_id": "arxiv_2505_01575",
+      "title": "Asset Pricing in Pre-trained Transformers",
+      "domain": "Tabular",
+      "sir_version": 1,
+      "sir_confidence": 0.75,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": false,
+      "last_updated": "2026-07-12T00:00:00Z"
+    }
+  ]
+}
