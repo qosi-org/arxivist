@@ -1,0 +1,88 @@
+# Configuration for reproducing arXiv:2607.12990
+# "A Noise-Aware Quantum Algorithm for Credit Valuation Adjustments on Real Quantum Hardware"
+#
+# Comments marked "# ASSUMED" flag values not explicitly stated in the paper
+# (SIR confidence < 0.7 for the relevant section). See sir-registry/arxiv_2607_12990/sir.json
+# and README.md "Reproducibility Notes" for full detail.
+
+model:
+  num_time_qubits_m: 2          # m: monitoring dates M = 2^m = 4
+  num_asset_qubits_per_underlying: 2   # n_k per underlying, N_k = 2^n_k = 4 price bins
+  num_underlyings_d: 2           # d: EURO STOXX 50, SMI
+  num_ancillas: 3                 # a_v, a_p, a_q
+
+  qcbm_layers_L: 6                 # Table 5. Selection criterion was qualitative (SIR ambiguity #3)
+  crca_rp_layers_L: 1               # Table 5
+  crca_rq_layers_L: 1               # Table 5
+  crca_rv_layers_L: 2               # Table 5
+
+  numerical_floor_eps_num: 1.0e-8   # ASSUMED: paper states eps_num > 0 "small" but no exact value
+
+training:
+  optimizer: adam                   # ASSUMED confidence 0.4: optimizer not named in paper
+  learning_rate: 0.05                # ASSUMED: not stated
+  qcbm_iterations: 1100               # ASSUMED: read off Figure 8/9 x-axis, not stated numerically
+  crca_rp_rq_iterations: 110           # ASSUMED: read off Figure 9
+  crca_rv_iterations: 4200              # ASSUMED: read off Figure 9
+  seed: 100000                          # matches disclosed classical-MC seed; quantum-training seed unstated (confidence 0.5)
+  train_under_noise: false               # Section 4.3: statevector-trained circuits outperformed noisy-trained ones (Figure 8) -- use statevector training
+  log_every_n_steps: 50
+  checkpoint_every_n_steps: 200
+
+data:
+  market_data_source: "lseg_workspace"     # proprietary -- see data/README_data.md; synthetic fallback available
+  use_synthetic_fallback: true              # set false once real LSEG data is available in data/raw/
+  netting_set:
+    - instrument_id: 1
+      underlying: "EURO STOXX 50"
+      option_type: "call"
+      position: "long"
+      multiplier: 4
+      strike: 4500
+      maturity_years: 0.25
+    - instrument_id: 2
+      underlying: "SMI"
+      option_type: "put"
+      position: "short"
+      multiplier: 2
+      strike: 12500
+      maturity_years: 0.50
+  spots:
+    "EURO STOXX 50": 5716.61
+    "SMI": 14214.72
+  dividend_yields:
+    "EURO STOXX 50": 0.0288
+    "SMI": 0.0316
+  correlation_SX5E_SMI: 0.6872
+  recovery_cva: 0.415
+  recovery_cds: 0.40
+  monitoring_dates_M: 4
+  n_mc_paths: 200000
+  valuation_date: "2026-03-13"
+  cva_maturity_years: 0.5
+
+evaluation:
+  num_trajectories_R: 300
+  cabiqae_target_half_width_validation: 1.0e-3
+  cabiqae_target_half_width_cva: 1.0e-2
+  biqae_target_half_width_cva: 1.0e-3     # deliberately tighter than CABIQAE -- see Table 10 footnote
+  failure_probability_alpha: 0.10
+  shots_per_batch_validation: 256
+  shots_per_batch_cva: 128
+  rho_min: 2                                # minimum Grover-stage growth ratio
+  prior_transport_samples: 2000
+  contrast_baseline_b_validation: 0.5
+  contrast_baseline_b_cva: 0.15
+  contrast_prefactor_c0_validation_noiseless: 1.0
+  contrast_prefactor_c0_validation_hardware: 1.16
+  contrast_scale_tau_c_validation: 33.96
+  contrast_scale_tau_c_cva: 2.20
+
+hardware:
+  device: "cpu"
+  backend_name: "ibm_basquecountry"     # requires IBM Quantum + Basque Quantum (BasQ) access
+  simulator_fallback: "aer_statevector"   # used when no hardware credentials configured
+  use_qctrl_performance_management: true    # requires separate Q-CTRL / IBM Quantum Function credentials
+  precision: "float64"
+  num_workers: 1
+  deterministic: true                        # note: may slow down simulation
