@@ -1,0 +1,462 @@
+{
+  "paper_id": "arxiv_2607_12990",
+  "plan_version": 1,
+  "created_at": "2026-07-16T08:10:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "This is a quantum-computing paper, not a classical deep-learning paper, so the SIR's architecture graph is a set of parametrised quantum circuits (Qiskit QuantumCircuit objects), not a neural network. Qiskit is the mandatory quantum-circuit / hardware-execution backend (the paper cites Qiskit Statevector/Aer and IBM Quantum backends explicitly). PyTorch is selected as the SIR schema's 'primary framework' field to host the classical optimisation loop that trains the QCBM and CRCA variational parameters (gradient-based minimisation of the cross-entropy and MSE losses in the SIR's mathematical_spec), using Qiskit's TorchConnector / parameter-shift or SPSA gradients as the bridge. No CUDA is required since all circuits are small (<=9 qubits) and run on CPU simulators or the IBM Quantum cloud API. YAML is used for configuration (no need for Hydra/OmegaConf given the flat, well-bounded hyperparameter space)."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/quantum_cva/circuits/state_preparation.py",
+      "description": "QCBM (Quantum Circuit Born Machine) state-preparation ansatz G_theta that encodes the joint time-market probability tensor P_{i,j}",
+      "sir_modules_mapped": ["G_P / G_theta (QCBM state-preparation unitary)"],
+      "classes": [
+        {
+          "name": "QCBMStatePreparation",
+          "base_class": "qiskit.circuit.QuantumCircuit (composed, not subclassed)",
+          "public_methods": [
+            {"name": "build_circuit", "signature": "build_circuit(self, num_time_qubits: int, num_asset_qubits: int, num_layers: int) -> QuantumCircuit", "returns": "parametrised QuantumCircuit with RX/RZ/RZZ layers"},
+            {"name": "born_distribution", "signature": "born_distribution(self, params: np.ndarray, backend: str = 'statevector') -> np.ndarray", "returns": "probability array P_theta(x) over 2^(m+n) basis states"},
+            {"name": "cross_entropy_loss", "signature": "cross_entropy_loss(self, params: np.ndarray, target_dist: np.ndarray, eps_num: float = 1e-8) -> float", "returns": "scalar cross-entropy loss L_QCBM(theta)"},
+            {"name": "kl_divergence", "signature": "kl_divergence(self, params: np.ndarray, target_dist: np.ndarray, eps_num: float = 1e-8) -> float", "returns": "scalar KL_epsilon diagnostic (not used for training)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/circuits/controlled_rotations.py",
+      "description": "Controlled Rotation Circuit Ansatz (CRCA) blocks for exposure (R_v), discount (R_p) and default-probability (R_q) encoding",
+      "sir_modules_mapped": ["R_v (exposure controlled-rotation ansatz, CRCA)", "R_p (discount-factor CRCA)", "R_q (default-probability CRCA)"],
+      "classes": [
+        {
+          "name": "NativeTreeCRCA",
+          "base_class": "qiskit.circuit.QuantumCircuit (composed)",
+          "public_methods": [
+            {"name": "build_circuit", "signature": "build_circuit(self, num_time_qubits: int, num_layers: int) -> QuantumCircuit", "returns": "3-node-path CRCA circuit for R_p or R_q"},
+            {"name": "conditional_probability", "signature": "conditional_probability(self, params: np.ndarray, index: int) -> float", "returns": "F_phi(i), the ancilla |1> probability conditioned on time index i"},
+            {"name": "mse_loss", "signature": "mse_loss(self, params: np.ndarray, target_fn: np.ndarray) -> float", "returns": "scalar MSE loss L_f(phi)"}
+          ]
+        },
+        {
+          "name": "SnakeCRCA",
+          "base_class": "qiskit.circuit.QuantumCircuit (composed)",
+          "public_methods": [
+            {"name": "build_circuit", "signature": "build_circuit(self, num_time_qubits: int, num_asset_qubits: int, num_layers: int) -> QuantumCircuit", "returns": "outward/inward snake-layer CRCA circuit for R_v"},
+            {"name": "conditional_probability", "signature": "conditional_probability(self, params: np.ndarray, index_i: int, index_j: tuple) -> float", "returns": "F_phi(i,j), the exposure-ancilla |1> probability"},
+            {"name": "mse_loss", "signature": "mse_loss(self, params: np.ndarray, target_fn: np.ndarray) -> float", "returns": "scalar MSE loss L_v(phi)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/circuits/cva_oracle.py",
+      "description": "Assembles G_theta, R_v, R_p, R_q into the full CVA encoding unitary A_Theta and its Grover iterate Q, and exposes the marked-subspace projector",
+      "sir_modules_mapped": ["A_Theta (full CVA encoding unitary)", "Pi_111 (marked-subspace projector / readout)", "Q (Grover iterate / amplitude amplification operator)"],
+      "classes": [
+        {
+          "name": "CVAOracle",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "assemble", "signature": "assemble(self, g_theta: QuantumCircuit, r_v: QuantumCircuit, r_p: QuantumCircuit, r_q: QuantumCircuit) -> QuantumCircuit", "returns": "composed A_Theta = R_q R_p R_v G_theta circuit"},
+            {"name": "marked_amplitude_statevector", "signature": "marked_amplitude_statevector(self, circuit: QuantumCircuit) -> float", "returns": "exact a_CVA via statevector simulation, projecting onto |111> on ancillas"},
+            {"name": "grover_iterate", "signature": "grover_iterate(self, circuit: QuantumCircuit) -> QuantumCircuit", "returns": "Q = -A S0 A^dagger Sf circuit"},
+            {"name": "amplified_circuit", "signature": "amplified_circuit(self, circuit: QuantumCircuit, k: int) -> QuantumCircuit", "returns": "Q^k A circuit for Grover power k"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/estimation/cabiqae.py",
+      "description": "Contrast-aware Bayesian Iterative Quantum Amplitude Estimation (CABIQAE) — the paper's core algorithmic contribution",
+      "sir_modules_mapped": ["CABIQAE classical estimator (Bayesian post-processing loop)"],
+      "classes": [
+        {
+          "name": "CABIQAE",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "estimate", "signature": "estimate(self, circuit_executor: Callable[[int, int], int], epsilon: float, alpha: float = 0.1, n_batch: int = 256) -> Tuple[float, float, float]", "returns": "(a_hat, a_lower, a_upper) point estimate and credible interval"},
+            {"name": "bayesian_update", "signature": "bayesian_update(self, alpha0: float, beta0: float, n_shots: int, n_success: int) -> Tuple[float, float]", "returns": "(alpha_post, beta_post) Beta posterior parameters"},
+            {"name": "compute_cri", "signature": "compute_cri(self, interval: Tuple[float, float], k: int, alpha_post: float, beta_post: float, alpha: float) -> Tuple[Tuple[float,float], Tuple[float,float], np.ndarray]", "returns": "(new_angle_interval, amplitude_interval, posterior_grid)"},
+            {"name": "find_next_k", "signature": "find_next_k(self, interval: Tuple[float,float], current_k: int, tau_c: float, rho_min: float, posterior: np.ndarray) -> int", "returns": "next Grover power k maximising posterior-averaged Fisher information per query"},
+            {"name": "prepare_prior", "signature": "prepare_prior(self, posterior: np.ndarray, next_k: int, n_prior_samples: int = 2000) -> Tuple[float, float]", "returns": "(alpha0, beta0) transported Beta prior for the new Grover power"},
+            {"name": "contrast_model", "signature": "contrast_model(self, k: int, c0: float, tau_c: float) -> float", "returns": "c(k) = c0 * exp(-(2k+1)/tau_c)"}
+          ]
+        },
+        {
+          "name": "BIQAE",
+          "base_class": "CABIQAE",
+          "public_methods": [
+            {"name": "estimate", "signature": "estimate(self, circuit_executor: Callable[[int, int], int], epsilon: float, alpha: float = 0.1, n_batch: int = 256) -> Tuple[float, float, float]", "returns": "noise-naive Beta-BIQAE estimate (ideal sin^2(K*theta) likelihood, no contrast decay)"}
+          ]
+        },
+        {
+          "name": "BAE",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "estimate", "signature": "estimate(self, circuit_executor: Callable[[int, int], int], epsilon: float, n_particles: int = 300) -> Tuple[float, float, float]", "returns": "Bayesian Amplitude Estimation (Ramôa & Santos 2025) estimate via sequential Monte Carlo posterior"}
+          ]
+        },
+        {
+          "name": "DirectCircuitSampling",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "estimate", "signature": "estimate(self, circuit_executor: Callable[[int, int], int], n_shots: int) -> Tuple[float, float, float]", "returns": "unamplified Bernoulli-sampling estimate (k=0 baseline)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/estimation/contrast_calibration.py",
+      "description": "Hardware calibration of the exponential contrast-decay model (c0, tau_c, b) and readout-error mitigation, used to build the hardware-replay model",
+      "sir_modules_mapped": ["CABIQAE noise-aware observation model (contrast-decay likelihood)"],
+      "classes": [
+        {
+          "name": "ContrastCalibrator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "fit_contrast_model", "signature": "fit_contrast_model(self, k_values: np.ndarray, observed_probs: np.ndarray, ideal_theta: float, b: float) -> Tuple[float, float, float]", "returns": "(c0, tau_c, r_squared) fitted from log(c_k) = beta0 + beta1*K"},
+            {"name": "readout_mitigate", "signature": "readout_mitigate(self, raw_prob: float, r0: float, r1: float) -> float", "returns": "affine-corrected probability p_mit"},
+            {"name": "build_hardware_replay_model", "signature": "build_hardware_replay_model(self, hardware_probs: Dict[int, float]) -> Callable[[int, int], int]", "returns": "a circuit_executor callable that replays Binomial(n_shots, p_hw[k]) draws for CABIQAE/BIQAE/BAE"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/finance/classical_cva.py",
+      "description": "Classical risk-neutral multi-asset Monte Carlo CVA benchmark, finite-grid projection, CDS bootstrap and Black-Scholes-Merton pricing",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "MultiAssetGBMSimulator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "simulate_paths", "signature": "simulate_paths(self, n_paths: int, monitoring_dates: np.ndarray, seed: int = 100000) -> np.ndarray", "returns": "simulated correlated log-normal price paths [n_paths, n_dates, n_assets]"}
+          ]
+        },
+        {
+          "name": "BlackScholesPricer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "call_price", "signature": "call_price(self, S: float, K: float, T: float, r: float, q: float, sigma: float) -> float", "returns": "European call price c(t,T,K)"},
+            {"name": "put_price", "signature": "put_price(self, S: float, K: float, T: float, r: float, q: float, sigma: float) -> float", "returns": "European put price p(t,T,K)"}
+          ]
+        },
+        {
+          "name": "CDSBootstrapper",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "bootstrap_survival_curve", "signature": "bootstrap_survival_curve(self, cds_tenors: np.ndarray, cds_spreads: np.ndarray, recovery_cds: float, discount_curve: Callable) -> Callable", "returns": "piecewise-constant survival probability function P(0,u)"}
+          ]
+        },
+        {
+          "name": "CVAEstimator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "monte_carlo_cva", "signature": "monte_carlo_cva(self, paths: np.ndarray, netting_set: List[dict], survival_fn: Callable, discount_fn: Callable, recovery_cva: float) -> Tuple[float, float]", "returns": "(CVA_cont_MC estimate, standard error)"},
+            {"name": "finite_grid_cva", "signature": "finite_grid_cva(self, prob_tensor: np.ndarray, exposure_tensor: np.ndarray, discount_vec: np.ndarray, default_incr_vec: np.ndarray, recovery_cva: float) -> float", "returns": "CVA_tab_Delta tabulated finite-grid benchmark"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/finance/grid_encoding.py",
+      "description": "Constructs the finite time-market grid (bin edges, joint probability tensor P_{i,j}, positive exposure tensor V+_{i,j}) that both the classical benchmark and the quantum circuit consume",
+      "sir_modules_mapped": ["joint probability tensor P_{i,j}", "positive exposure tensor V+_{i,j}"],
+      "classes": [
+        {
+          "name": "FiniteGridBuilder",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "truncate_domain", "signature": "truncate_domain(self, mu: float, sigma: float, n_std: float = 3.0) -> Tuple[float, float]", "returns": "truncated price domain D_k = [max(mu-n_std*sigma,0), mu+n_std*sigma]"},
+            {"name": "build_probability_tensor", "signature": "build_probability_tensor(self, paths: np.ndarray, bin_edges: List[np.ndarray], monitoring_dates: np.ndarray) -> np.ndarray", "returns": "joint probability tensor P_{i,j}, shape [M, N1, ..., Nd]"},
+            {"name": "build_exposure_tensor", "signature": "build_exposure_tensor(self, netting_set: List[dict], bin_edges: List[np.ndarray], monitoring_dates: np.ndarray) -> np.ndarray", "returns": "positive exposure tensor V+_{i,j}"},
+            {"name": "rescale_constants", "signature": "rescale_constants(self, exposure_tensor: np.ndarray, discount_vec: np.ndarray, default_incr_vec: np.ndarray) -> Tuple[float, float, float]", "returns": "(C_v, C_p, C_q) rescaling constants so all encoded quantities lie in [0,1]"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/hardware/backend_manager.py",
+      "description": "IBM Quantum hardware execution wrapper (transpilation, Q-CTRL Performance Management submission, statevector/Aer simulation fallback)",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "BackendManager",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "get_backend", "signature": "get_backend(self, name: str = 'ibm_basquecountry') -> Any", "returns": "Qiskit backend object (or AerSimulator/Statevector for local runs)"},
+            {"name": "transpile_fixed_layout", "signature": "transpile_fixed_layout(self, circuit: QuantumCircuit, optimization_level: int = 3) -> QuantumCircuit", "returns": "transpiled ISA circuit with zero SWAP insertions on heavy-hex layout"},
+            {"name": "run_with_qctrl", "signature": "run_with_qctrl(self, circuit: QuantumCircuit, shots: int) -> Dict[str, int]", "returns": "measurement counts from Q-CTRL Performance Management Qiskit Function (or a documented stub if credentials unavailable)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/training/trainer.py",
+      "description": "Classical variational-parameter training loop for QCBM and CRCA blocks (gradient-based minimisation of cross-entropy / MSE losses)",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "VariationalTrainer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "train_qcbm", "signature": "train_qcbm(self, qcbm: QCBMStatePreparation, target_dist: np.ndarray, num_iterations: int, lr: float) -> Tuple[np.ndarray, List[float]]", "returns": "(trained_params, loss_history)"},
+            {"name": "train_crca", "signature": "train_crca(self, crca: object, target_fn: np.ndarray, num_iterations: int, lr: float) -> Tuple[np.ndarray, List[float]]", "returns": "(trained_params, loss_history)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/training/losses.py",
+      "description": "Standalone loss functions matching the SIR mathematical_spec (cross-entropy, MSE, KL diagnostic)",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/quantum_cva/evaluation/error_decomposition.py",
+      "description": "Formal end-to-end error-budget decomposition (finite-grid, encoding, amplitude-estimation contributions) reproducing Section 4.5",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ErrorBudget",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "compute_budget", "signature": "compute_budget(self, cva_cont_mc: float, cva_tab: float, cva_sv: float, cva_ae: float) -> Dict[str, float]", "returns": "dict with eps_grid, eps_enc, eps_ae, alpha_n, beta_theta, and total propagated bound"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/evaluation/metrics.py",
+      "description": "Trajectory-level metrics: median relative error, query-cost accounting (N_q), coverage, log-log scaling exponent fits",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "TrajectoryMetrics",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "query_cost", "signature": "query_cost(self, stages: List[Tuple[int,int]]) -> int", "returns": "N_q = sum(n_s * (2*k_s+1)) accumulated oracle queries"},
+            {"name": "fit_scaling_exponent", "signature": "fit_scaling_exponent(self, n_q_values: np.ndarray, errors: np.ndarray) -> Tuple[float, float, float]", "returns": "(beta, alpha, r_squared) from log(error) = alpha + beta*log(N_q)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_cva/utils/config.py",
+      "description": "YAML config loading and global random-seed management",
+      "sir_modules_mapped": [],
+      "classes": []
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "CVA oracle forward construction (state prep -> encoding -> readout)",
+      "input": {"name": "|0>^{⊗9}", "shape": "[512] complex amplitudes (9 qubits: 2 time + 4 asset + 3 ancilla)", "dtype": "complex128"},
+      "output": {"name": "a_CVA", "shape": "scalar in [0,1]", "dtype": "float64"},
+      "steps": [
+        "x = |0>^{⊗(m+n)}  → [2 time qubits, 4 asset qubits] all-zero register",
+        "x = G_theta(x)  → entangled joint time-market superposition sum_ij sqrt(P_ij)|i,j>, shape unchanged (64 basis states over 6 qubits)",
+        "x = R_v(x)  → entangles exposure ancilla a_v: sqrt(1-v~_ij)|0>+sqrt(v~_ij)|1>, conditioned on full (i,j)",
+        "x = R_p(x)  → entangles discount ancilla a_p, conditioned on time register i only",
+        "x = R_q(x)  → entangles default ancilla a_q, conditioned on time register i only",
+        "xi = x  → full 9-qubit state |xi>, 512 complex amplitudes",
+        "a_CVA = <xi| Pi_111 |xi> = ||Pi_111|xi>||^2  → project onto (a_v,a_p,a_q)=|111>, sum probability mass",
+        "CVA_Delta = M(1-R_CVA) * C_v * C_p * C_q * a_CVA  → rescale to monetary units"
+      ]
+    },
+    {
+      "name": "CABIQAE adaptive estimation loop",
+      "input": {"name": "circuit_executor(k, n_shots)", "shape": "callable returning (n_success: int, n_shots: int)", "dtype": "int"},
+      "output": {"name": "(a_hat, a_lower, a_upper)", "shape": "3 scalars in [0,1]", "dtype": "float64"},
+      "steps": [
+        "initialise k_0=0, I_0=[0, pi/2], Beta(alpha_0=0.5, beta_0=0.5), (N_0,Y_0)=(0,0)",
+        "loop: run Q^{k_t}A for n_batch shots via circuit_executor  → (N_t, Y_t) cumulative counts",
+        "posterior = bayesian_update(alpha_0,t, beta_0,t, N_t, Y_t)  → Beta(alpha_post, beta_post) over observed probability p_t",
+        "(new_interval, [a_l,a_u], pi_t) = compute_cri(I_t, k_t, posterior, alpha)  → pull posterior back through p_k(theta)=b+c(k)(sin^2(K theta)-b) to latent angle, take equal-tailed credible interval",
+        "if a_u - a_l <= 2*epsilon: return (a_l+a_u)/2, a_l, a_u  → STOP",
+        "k_next = find_next_k(new_interval, k_t, tau_c, rho_min, pi_t)  → maximise posterior-Fisher-information score per query subject to identifiability + contrast-scale constraints",
+        "if k_next > k_t: (alpha_0, beta_0) = prepare_prior(pi_t, k_next, N_prior)  → transport posterior samples through new likelihood, moment-match to Beta, reset (N,Y)=(0,0)",
+        "else: continue sampling at same k_t with updated interval",
+        "repeat until convergence"
+      ]
+    },
+    {
+      "name": "Finite-grid classical benchmark pipeline",
+      "input": {"name": "market_data (equity closes, vol surfaces, OIS curve, CDS spreads)", "shape": "N/A (tabular market data)", "dtype": "float64"},
+      "output": {"name": "(CVA_cont_MC, CVA_tab_Delta, P_ij, V+_ij, discount_vec, default_incr_vec, C_v, C_p, C_q)", "shape": "mixed scalars and [4,4,4]/[4] tensors", "dtype": "float64"},
+      "steps": [
+        "calibrate piecewise-constant volatility buckets from ATM implied-vol surface  → sigma_k,j per underlying/bucket",
+        "bootstrap survival curve from CDS par spreads (Eq. 26)  → P(0,u) deterministic curve",
+        "simulate N_MC=2e5 correlated log-normal paths (Eq. 9/11) with Cholesky-factorised correlation  → paths[N_MC, M, d]",
+        "price netting-set instruments at each monitoring date via Black-Scholes-Merton (Eq. 13-15)  → V(t) per path/date",
+        "compute CVA_cont_MC via Eq. 30 (continuous-underlying Monte Carlo estimator)",
+        "truncate price domains D_k (mu +/- 3 sigma) and bin into N_k=4 bins per asset  → bin_edges",
+        "project simulated paths onto finite grid  → empirical conditional bin probabilities Q_D(S_ti in B_j)",
+        "build joint probability tensor P_ij (Eq. 32) and positive exposure tensor V+_ij",
+        "compute CVA_tab_Delta via Eq. 31 (finite-grid tabulated benchmark) for comparison against the quantum circuit"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "num_time_qubits_m": 2,
+      "num_asset_qubits_per_underlying": 2,
+      "num_underlyings_d": 2,
+      "num_ancillas": 3,
+      "qcbm_layers_L": "6  # ASSUMED confidence 0.95 from Table 5, but final selection criterion for L was qualitative (see SIR ambiguity #3)",
+      "crca_rp_layers_L": 1,
+      "crca_rq_layers_L": 1,
+      "crca_rv_layers_L": 2,
+      "numerical_floor_eps_num": "1e-8  # ASSUMED: paper states epsilon_num > 0 small constant but does not give exact value; standard log-floor default used"
+    },
+    "training": {
+      "optimizer": "adam  # ASSUMED confidence 0.4 (SIR training_pipeline confidence=0.5): paper does not name the optimizer; Adam is the common default for QCBM/VQE gradient training",
+      "learning_rate": "0.05  # ASSUMED: not stated in paper, common QCBM starting LR",
+      "qcbm_iterations": "1100  # ASSUMED, read off Figure 8/9 training-curve x-axis, not stated numerically",
+      "crca_rp_rq_iterations": "110  # ASSUMED, read off Figure 9",
+      "crca_rv_iterations": "4200  # ASSUMED, read off Figure 9",
+      "seed": "100000  # matches the one disclosed seed (classical MC benchmark, NMC draws); quantum-training seed not stated, reused for consistency, confidence 0.5"
+    },
+    "data": {
+      "market_data_source": "LSEG Workspace (proprietary) -- not redistributable; download.sh documents manual retrieval steps and provides a synthetic fallback",
+      "netting_set": [
+        {"instrument": 1, "underlying": "EURO STOXX 50", "type": "european_call", "position": "long", "multiplier": 4, "strike": 4500, "maturity_years": 0.25},
+        {"instrument": 2, "underlying": "SMI", "type": "european_put", "position": "short", "multiplier": 2, "strike": 12500, "maturity_years": 0.50}
+      ],
+      "recovery_cva": 0.415,
+      "recovery_cds": 0.40,
+      "monitoring_dates_M": 4,
+      "n_mc_paths": 200000
+    },
+    "evaluation": {
+      "num_trajectories_R": 300,
+      "cabiqae_target_half_width_validation": 1e-3,
+      "cabiqae_target_half_width_cva": 1e-2,
+      "biqae_target_half_width_cva": "1e-3  # deliberately tighter than CABIQAE per paper's stated rationale (Table 10 footnote)",
+      "failure_probability_alpha": 0.10,
+      "shots_per_batch_validation": 256,
+      "shots_per_batch_cva": 128,
+      "rho_min": 2
+    },
+    "hardware": {
+      "device": "cpu",
+      "backend_name": "ibm_basquecountry  # requires IBM Quantum + Basque Quantum (BasQ) access; falls back to AerSimulator/Statevector when no credentials are configured",
+      "use_qctrl_performance_management": "true  # requires separate Q-CTRL / IBM Quantum Function credentials; ASSUMED optional flag since internal workflow is a documented black box (SIR confidence 0.3)",
+      "precision": "float64",
+      "num_workers": 1
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "qiskit", "version": "1.2.0", "reason": "Core quantum-circuit construction, statevector/Aer simulation, transpilation"},
+      {"package": "qiskit-aer", "version": "0.15.0", "reason": "Noisy and noiseless local simulation backend"},
+      {"package": "qiskit-ibm-runtime", "version": "0.29.0", "reason": "Submitting circuits / Qiskit Functions to IBM Quantum cloud backends (ibm_basquecountry)"},
+      {"package": "numpy", "version": "1.26.4", "reason": "Numerical arrays, tensor construction, linear algebra (Cholesky factorisation)"},
+      {"package": "scipy", "version": "1.13.1", "reason": "Optimisation routines (classical parameter training), Beta-distribution utilities, statistical fits"},
+      {"package": "torch", "version": "2.3.1", "reason": "Autograd-based gradient optimisation for QCBM/CRCA variational training (parameter-shift gradients wrapped as PyTorch tensors)"},
+      {"package": "pandas", "version": "2.2.2", "reason": "Market-data tabular handling (equity closes, vol surfaces, CDS curves)"},
+      {"package": "matplotlib", "version": "3.9.0", "reason": "Reproducing paper figures (KL trajectories, error-vs-query curves, contrast calibration plots)"},
+      {"package": "pyyaml", "version": "6.0.1", "reason": "Config file loading"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": "8.2.0"},
+      {"package": "pytest-cov", "version": "5.0.0"},
+      {"package": "black", "version": "24.4.2"},
+      {"package": "ruff", "version": "0.4.4"},
+      {"package": "mypy", "version": "1.10.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Train QCBM (G_theta) and CRCA (R_v, R_p, R_q) variational parameters against the finite-grid classical benchmark",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--block", "type": "str", "required": false, "default": "all", "help": "Which block to train: qcbm | crca_rp | crca_rq | crca_rv | all"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "checkpoints/", "help": "Directory to save trained parameters"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 100000, "help": "Random seed"}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Run the amplitude-estimation comparison (CABIQAE vs BIQAE vs BAE vs DCS) in noiseless or hardware-replay regime and reproduce the error-budget decomposition",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--regime", "type": "str", "required": false, "default": "noiseless", "help": "noiseless | hardware-replay | validation-circuit | full-cva"},
+        {"flag": "--num-trajectories", "type": "int", "required": false, "default": 300, "help": "Number of independent estimation trajectories R"},
+        {"flag": "--checkpoint-dir", "type": "str", "required": false, "default": "checkpoints/", "help": "Directory with trained circuit parameters"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write result CSV/JSON and figures"}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Single-run: build the trained CVA oracle, run one CABIQAE estimation trajectory, and print the recovered monetary CVA value",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--checkpoint-dir", "type": "str", "required": true, "default": null, "help": "Directory with trained circuit parameters"},
+        {"flag": "--epsilon", "type": "float", "required": false, "default": 0.01, "help": "Target credible-interval half-width"},
+        {"flag": "--backend", "type": "str", "required": false, "default": "statevector", "help": "statevector | aer_noisy | ibm_basquecountry"}
+      ]
+    },
+    {
+      "filename": "run_hardware_calibration.py",
+      "purpose": "Paper-specific script: execute the Grover-power calibration sweep on real IBM Quantum hardware (or a saved calibration file) and fit the exponential contrast-decay model (c0, tau_c, b)",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--circuit", "type": "str", "required": false, "default": "validation", "help": "validation | cva -- which circuit family to calibrate"},
+        {"flag": "--k-max", "type": "int", "required": false, "default": 40, "help": "Maximum Grover power to sweep"},
+        {"flag": "--output", "type": "str", "required": false, "default": "results/contrast_calibration.json", "help": "Where to save fitted contrast parameters"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.11-slim",
+    "system_deps": ["build-essential", "gcc", "libopenblas-dev"],
+    "workdir": "/workspace",
+    "default_cmd": "python evaluate.py --config configs/config.yaml --regime noiseless"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "The internal transpilation, layout, routing and error-suppression logic of Q-CTRL's Performance Management Qiskit Function is proprietary and not disclosed, so the hardware-replay execution path (BackendManager.run_with_qctrl) cannot be reproduced exactly -- only its documented external interface (submit abstract circuit, receive mitigated counts) can be implemented.",
+      "source": "SIR implementation_assumptions[3], confidence 0.3; Appendix A.2",
+      "mitigation": "Implement BackendManager.run_with_qctrl as a thin wrapper around the real Q-CTRL Qiskit Function when credentials are available, with a clearly-labelled fallback that replays the calibration data reported in Table 17/18 of the paper (contrast-decay parameters c0, tau_c, b) via ContrastCalibrator.build_hardware_replay_model, so the estimator comparison remains reproducible without live hardware access."
+    },
+    {
+      "severity": "High",
+      "description": "Optimizer, learning rate, and exact iteration counts for QCBM/CRCA training are not stated in the paper (SIR training_pipeline confidence = 0.5); a wrong choice could change trained-circuit fidelity and downstream CVA_SV(Theta) value materially.",
+      "source": "SIR implementation_assumptions[0], [1]; confidence 0.4-0.5",
+      "mitigation": "Expose optimizer/lr/iterations as config.yaml fields with ASSUMED comments (done above); design VariationalTrainer.train_qcbm/train_crca to accept any scipy.optimize- or torch.optim-compatible optimizer via a config string, so a user can swap in the exact optimizer once/if the authors' code repository (Borràs, 2026, github.com/gborras10/Quantum-CVA) is consulted."
+    },
+    {
+      "severity": "Medium",
+      "description": "Market data (LSEG Workspace) is proprietary and not redistributable, so the classical CVA benchmark and finite-grid construction cannot be run out-of-the-box without the user's own LSEG access.",
+      "source": "SIR evaluation_protocol.datasets[0], publicly_available=false",
+      "mitigation": "data/download.sh documents the required LSEG pulls (equity closes, ATM vol surfaces, EUR OIS curve, Iberdrola CDS spreads) and provides a small synthetic market-data generator (matching Table 4's calibrated bin edges/discount factors/default increments) so the pipeline is runnable end-to-end without live LSEG credentials."
+    },
+    {
+      "severity": "Medium",
+      "description": "The exposure rotation R_v ansatz ('outward/inward snake' topology, Figure 5) is described precisely only via circuit diagrams for a single variational layer (L=1); generalising to L=2 (the value actually used) requires inferring the layer-repetition convention.",
+      "source": "SIR architecture.modules R_v, confidence 0.9, but layer-composition rule only stated qualitatively ('composing several repetitions... with independent parameters in each repetition')",
+      "mitigation": "SnakeCRCA.build_circuit takes num_layers explicitly and repeats the depicted L=1 block with fresh parameters each repetition, matching the paper's stated (if not fully diagrammed) composition rule; unit-test against the reported logical resource counts in Table 5 (98 single-qubit gates, 86 CNOT-equivalent two-qubit gates for L=2) to validate the inferred repetition scheme."
+    },
+    {
+      "severity": "Low",
+      "description": "Random seeds for quantum-circuit statevector/finite-shot sampling and for CABIQAE/BIQAE/BAE trajectory generation are not documented (only the classical Monte Carlo benchmark seed, 1e5, is given).",
+      "source": "SIR implementation_assumptions[2], confidence 0.5",
+      "mitigation": "utils/config.py centralises a single global seed (default reused from the classical benchmark, 100000) applied consistently to numpy, torch and Qiskit's simulator RNGs, so results are at least internally reproducible run-to-run even if they cannot be guaranteed bit-identical to the paper's own runs."
+    },
+    {
+      "severity": "Low",
+      "description": "Numerical instability risk in CABIQAE's ComputeCRI/FindNextK when the posterior places mass near a branch boundary of sin^2(K*theta), or when c(k) decays enough that pk(theta) approaches the baseline b (Fisher information -> 0), potentially causing division-by-zero in Eq. 64/70.",
+      "source": "SIR mathematical_spec 'Posterior-averaged Fisher-information scheduling score', Appendix A.3 numerical-implementation notes",
+      "mitigation": "Implement the paper's own stabilisation: clip probabilities to [delta, 1-delta] before computing Fisher information (Eq. 70), and fall back to a uniform density / weakly-informative Beta prior when the posterior grid normalisation Z_t is degenerate, exactly as specified in the SIR's Appendix A.3 numerical-implementation notes."
+    }
+  ]
+}
