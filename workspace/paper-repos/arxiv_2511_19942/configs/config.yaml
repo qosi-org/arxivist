@@ -1,0 +1,46 @@
+# Config for reproducing the Countdown-task experiment from
+# "Differential Smoothing Mitigates Sharpening and Improves LLM Reasoning" (arXiv 2511.19942)
+#
+# Scope note: paper used Qwen2.5-3B-Instruct for this experiment; scaled down to 0.5B here
+# to fit a free-tier Colab/Kaggle GPU (see architecture_plan.json risk_assessment).
+
+model:
+  base_checkpoint: "Qwen2.5-0.5B-Instruct"   # ASSUMED (scope-down): paper used Qwen2.5-3B-Instruct
+  use_lora: true
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  load_in_4bit: true
+
+training:
+  gamma_p: 0.03          # given explicitly in paper for Countdown/Qwen2.5-3B-Instruct
+  gamma_n: 0.01          # given explicitly in paper for Countdown/Qwen2.5-3B-Instruct
+  group_size: 8          # ASSUMED: GRPO rollout group size G, not stated in paper
+  batch_size: 8          # ASSUMED (scope-down from paper's larger effective batch)
+  learning_rate: 1.0e-6  # ASSUMED: not stated in paper (SIR ambiguity, confidence 0.5)
+  optimizer: adamw       # ASSUMED: not stated in paper
+  num_train_steps: 300   # ASSUMED: paper trains "until reward saturates", no fixed count given
+  clip_epsilon_high: 0.25   # stated in paper for math tasks; assumed to also apply to Countdown
+  clip_epsilon_low: 0.20    # stated in paper for math tasks; assumed to also apply to Countdown
+  temperature: 0.7
+  kl_beta: 0.01          # ASSUMED: paper studies a range, no single default given (confidence 0.4)
+  max_new_tokens: 256
+  use_differential_smoothing: true   # false = vanilla GRPO baseline; true = paper's DS-GRPO
+
+data:
+  task: countdown
+  num_range: [1, 99]
+  num_operands: [3, 4]
+  train_size: 2000       # ASSUMED: paper does not state Countdown dataset size
+  eval_size: 200          # matches paper's "200 problems sampled per task" for multiplicity analysis
+  seed: 42
+
+evaluation:
+  metrics: [pass_at_1, pass_at_k, solution_multiplicity]
+  k_values: [1, 4, 8, 16]
+
+hardware:
+  device: cuda
+  precision: bf16
+  num_workers: 2
+  deterministic: false   # true is more reproducible but slower; flip on if exact repeatability needed
