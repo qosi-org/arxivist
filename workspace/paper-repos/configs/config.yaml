@@ -1,23 +1,9 @@
-model:
-  input_dim: 784
-  hidden_units: 100          # explicit — Section 4.1
-  hidden_layers: 3           # explicit — Section 4.1
-  num_classes: 10
-  activation: sigmoid        # explicit — Section 4.1
-  epsilon: 1.0e-5            # ASSUMED — not stated in paper (confidence: 0.7)
-  bn_momentum: 0.9           # ASSUMED — moving average decay (confidence: 0.65)
-
-training:
-  optimizer: sgd
-  learning_rate: 0.01        # ASSUMED for MNIST (confidence: 0.6); paper states 0.0015 for Inception
-  momentum: 0.9              # ASSUMED (confidence: 0.75)
-  batch_size: 60             # explicit — Section 4.1
-  training_steps: 50000      # explicit — Section 4.1
-
-evaluation:
-  metric: accuracy
-  dataset: MNIST
-
-hardware:
-  device: cpu
-  seed: 42
+in_channels: 1
+num_classes: 2
+base_channels: 64
+optimizer: sgd
+momentum: 0.99
+batch_size: 1
+w0: 10
+sigma: 5
+input_tile: 572
