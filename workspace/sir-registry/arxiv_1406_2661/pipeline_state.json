@@ -1,0 +1,13 @@
+{
+  "paper_id": "arxiv_1406_2661",
+  "current_stage": 2,
+  "stage_timestamps": {
+    "stage_1": "2026-07-09T20:10:00Z",
+    "stage_2": "2026-07-09T20:15:00Z"
+  },
+  "stage_confidence": {
+    "stage_1": 0.65
+  },
+  "loop_count": 0,
+  "human_review_required": false
+}

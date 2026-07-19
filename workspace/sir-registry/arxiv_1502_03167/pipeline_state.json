@@ -1,0 +1,18 @@
+{
+  "paper_id": "arxiv_1502_03167",
+  "paper_title": "Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift",
+  "current_stage": 6,
+  "stages_completed": [1, 2, 3, 4, 5],
+  "stage_timestamps": {
+    "stage_1": "2026-07-10T01:30:00Z",
+    "stage_2": "2026-07-10T01:35:00Z",
+    "stage_3": "2026-07-10T01:40:00Z",
+    "stage_4": "2026-07-10T01:50:00Z",
+    "stage_5": "2026-07-10T02:00:00Z"
+  },
+  "stage_confidence": {
+    "stage_1": 0.91
+  },
+  "loop_count": 0,
+  "human_review_required": false
+}

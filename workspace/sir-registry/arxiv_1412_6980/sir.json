@@ -1,0 +1,60 @@
+{
+  "paper_id": "arxiv_1412_6980",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Adam: A Method for Stochastic Optimization",
+    "authors": ["Diederik P. Kingma", "Jimmy Lei Ba"],
+    "arxiv_id": "1412.6980",
+    "year": 2015,
+    "venue": "ICLR 2015"
+  },
+  "summary": "Adam is a first-order gradient-based optimizer using adaptive estimates of first and second moments of the gradient, with bias-corrected moment estimates. AdaMax is an infinity-norm variant.",
+  "modules": [
+    {
+      "name": "Adam",
+      "type": "optimizer",
+      "description": "Adaptive moment estimation optimizer",
+      "confidence": 0.98
+    },
+    {
+      "name": "AdaMax",
+      "type": "optimizer",
+      "description": "Infinity-norm variant of Adam",
+      "confidence": 0.95
+    }
+  ],
+  "equations": [
+    {"id": "eq_m", "latex": "m_t = \\beta_1 m_{t-1} + (1-\\beta_1) g_t", "desc": "Biased first moment estimate", "confidence": 1.0},
+    {"id": "eq_v", "latex": "v_t = \\beta_2 v_{t-1} + (1-\\beta_2) g_t^2", "desc": "Biased second raw moment estimate", "confidence": 1.0},
+    {"id": "eq_mhat", "latex": "\\hat{m}_t = m_t / (1-\\beta_1^t)", "desc": "Bias-corrected first moment", "confidence": 1.0},
+    {"id": "eq_vhat", "latex": "\\hat{v}_t = v_t / (1-\\beta_2^t)", "desc": "Bias-corrected second moment", "confidence": 1.0},
+    {"id": "eq_update", "latex": "\\theta_t = \\theta_{t-1} - \\alpha \\hat{m}_t / (\\sqrt{\\hat{v}_t} + \\epsilon)", "desc": "Parameter update", "confidence": 1.0},
+    {"id": "eq_adamax_u", "latex": "u_t = \\max(\\beta_2 u_{t-1}, |g_t|)", "desc": "AdaMax infinity norm", "confidence": 0.95},
+    {"id": "eq_adamax_update", "latex": "\\theta_t = \\theta_{t-1} - (\\alpha/(1-\\beta_1^t)) m_t / u_t", "desc": "AdaMax update", "confidence": 0.95}
+  ],
+  "training": {
+    "hyperparameters": {
+      "alpha": {"value": 0.001, "confidence": 1.0},
+      "beta1": {"value": 0.9, "confidence": 1.0},
+      "beta2": {"value": 0.999, "confidence": 1.0},
+      "epsilon": {"value": 1e-8, "confidence": 1.0}
+    },
+    "confidence": 0.98
+  },
+  "evaluation": {
+    "tasks": ["logistic regression (MNIST, IMDB BoW)", "multilayer NN (MNIST)", "CNN (CIFAR-10)", "VAE"],
+    "confidence": 0.9
+  },
+  "confidence_annotations": {
+    "overall": 0.96,
+    "modules": 0.97,
+    "equations": 0.99,
+    "training": 0.98,
+    "evaluation": 0.9
+  },
+  "assumptions": [
+    "Element-wise operations on parameter vectors",
+    "Default epsilon added inside the sqrt denominator per Algorithm 1"
+  ],
+  "ambiguities": []
+}

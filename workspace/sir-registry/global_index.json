@@ -1,6 +1,6 @@
 {
   "index_version": 1,
-  "total_papers": 3,
+  "total_papers": 5,
   "papers": [
     {
       "paper_id": "arxiv_2511_19942",
@@ -34,9 +34,38 @@
       "sir_confidence": 0.78,
       "has_repo": true,
       "has_notebook": true,
-      "has_comparison": true,
-      "pipeline_complete": true,
-      "last_updated": "2026-07-16T00:10:00Z"
+      "has_comparison": false,
+      "pipeline_complete": false,
+      "last_updated": "2026-05-24T12:20:00Z"
+    },
+    {
+      "paper_id": "arxiv_1406_2661",
+      "title": "Generative Adversarial Nets",
+      "sir_version": 1,
+      "sir_confidence": 0.65,
+      "pipeline_complete": true
+    },
+    {
+      "paper_id": "arxiv_1502_03167",
+      "title": "Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift",
+      "sir_version": 1,
+      "sir_confidence": 0.91,
+      "pipeline_complete": true
+    },
+    {
+      "paper_id": "arxiv_1412_6980",
+      "title": "Adam: A Method for Stochastic Optimization",
+      "sir_version": 1,
+      "sir_confidence": 0.96,
+      "pipeline_complete": true
+    },
+    {
+      "paper_id": "arxiv_1505_04597",
+      "title": "U-Net: Convolutional Networks for Biomedical Image Segmentation",
+      "sir_version": 1,
+      "sir_confidence": 0.93,
+      "pipeline_complete": true
     }
   ]
 }
+

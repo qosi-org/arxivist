@@ -1,0 +1,172 @@
+{
+  "paper_id": "arxiv_1406_2661",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Generative Adversarial Nets",
+    "authors": ["Ian J. Goodfellow", "Jean Pouget-Abadie", "Mehdi Mirza", "Bing Xu", "David Warde-Farley", "Sherjil Ozair", "Aaron Courville", "Yoshua Bengio"],
+    "affiliations": ["Universite de Montreal"],
+    "arxiv_id": "1406.2661",
+    "doi": null,
+    "submission_date": "2014-06-10",
+    "abstract": "We propose a new framework for estimating generative models via an adversarial process, in which we simultaneously train two models: a generative model G and a discriminative model D.",
+    "domain": "Other",
+    "key_claims": [
+      "Adversarial training recovers pdata as the unique global optimum, with D=1/2 everywhere",
+      "No Markov chains or approximate inference needed — trained entirely via backprop",
+      "Achieves competitive Parzen-window log-likelihood on MNIST (225) and TFD (2057) vs DBN/CAE/GSN baselines"
+    ],
+    "parsed_at": "2026-07-09T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "MNIST-MLP",
+    "modules": [
+      {
+        "name": "Generator",
+        "operation_type": "mlp_noise_to_data",
+        "input_shape": "[B, Z]",
+        "output_shape": "[B, X]",
+        "parameters": { "hidden_layers": 2, "hidden_units": 240, "activation": "relu_and_sigmoid" },
+        "paper_section": "Section 5",
+        "confidence": 0.45,
+        "notes": "ASSUMED: layer sizes not stated in paper; 240/1200 units taken from original GitHub code, not paper text"
+      },
+      {
+        "name": "Discriminator",
+        "operation_type": "mlp_binary_classifier",
+        "input_shape": "[B, X]",
+        "output_shape": "[B, 1]",
+        "parameters": { "hidden_layers": 2, "hidden_units": 1200, "activation": "maxout" },
+        "paper_section": "Section 5",
+        "confidence": 0.45,
+        "notes": "ASSUMED: maxout units and layer sizes not specified numerically in paper"
+      },
+      {
+        "name": "NoisePrior",
+        "operation_type": "sampling",
+        "input_shape": null,
+        "output_shape": "[B, Z]",
+        "parameters": { "distribution": "uniform" },
+        "paper_section": "Section 3",
+        "confidence": 0.7,
+        "notes": "pz(z) referenced but exact dimensionality of z not given"
+      },
+      {
+        "name": "Dropout",
+        "operation_type": "regularization",
+        "input_shape": "[B, X]",
+        "output_shape": "[B, X]",
+        "parameters": {},
+        "paper_section": "Section 5",
+        "confidence": 0.85,
+        "notes": "Applied to discriminator training only, per paper text"
+      }
+    ],
+    "connections": [
+      { "from": "NoisePrior", "to": "Generator", "tensor_name": "z" },
+      { "from": "Generator", "to": "Discriminator", "tensor_name": "fake_sample" }
+    ],
+    "variants": []
+  },
+  "mathematical_spec": [
+    {
+      "name": "minimax_value_function",
+      "latex": "\\min_G \\max_D V(D,G) = \\mathbb{E}_{x\\sim p_{data}}[\\log D(x)] + \\mathbb{E}_{z\\sim p_z}[\\log(1-D(G(z)))]",
+      "role": "objective", "used_in": "both", "hyperparameters": [], "undefined_symbols": [],
+      "paper_section": "Equation 1", "confidence": 0.99
+    },
+    {
+      "name": "optimal_discriminator",
+      "latex": "D^*_G(x) = \\frac{p_{data}(x)}{p_{data}(x)+p_g(x)}",
+      "role": "other", "used_in": "training", "hyperparameters": [], "undefined_symbols": [],
+      "paper_section": "Equation 2, Proposition 1", "confidence": 0.98
+    },
+    {
+      "name": "non_saturating_generator_loss",
+      "latex": "\\max_G \\log D(G(z))",
+      "role": "loss", "used_in": "training", "hyperparameters": [], "undefined_symbols": [],
+      "paper_section": "Section 3", "confidence": 0.95
+    },
+    {
+      "name": "jensen_shannon_reformulation",
+      "latex": "C(G) = -\\log(4) + 2\\cdot JSD(p_{data}\\|p_g)",
+      "role": "other", "used_in": "training", "hyperparameters": [], "undefined_symbols": [],
+      "paper_section": "Equation 6, Theorem 1", "confidence": 0.97
+    }
+  ],
+  "tensor_semantics": [
+    { "name": "z", "shape_notation": "[B, Z]", "dtype": "float32", "tensor_type": "input", "module": "Generator", "confidence": 0.6 },
+    { "name": "fake_sample", "shape_notation": "[B, X]", "dtype": "float32", "tensor_type": "intermediate", "module": "Generator", "confidence": 0.8 },
+    { "name": "d_score", "shape_notation": "[B, 1]", "dtype": "float32", "tensor_type": "output", "module": "Discriminator", "confidence": 0.85 }
+  ],
+  "training_pipeline": {
+    "optimizer": { "name": "SGD_with_momentum", "learning_rate": 0.001, "beta1": null, "beta2": null, "weight_decay": 0.0, "confidence": 0.4 },
+    "lr_schedule": { "type": null, "warmup_steps": null, "total_steps": null, "confidence": 0.3 },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.42
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      { "name": "MNIST", "split": "test", "size": 10000, "publicly_available": true },
+      { "name": "Toronto Face Database", "split": "test", "size": null, "publicly_available": false },
+      { "name": "CIFAR-10", "split": "test", "size": 10000, "publicly_available": true }
+    ],
+    "metrics": ["Parzen window log-likelihood"],
+    "reported_results": [
+      { "metric": "Parzen log-likelihood", "dataset": "MNIST", "split": "test", "value": 225, "is_primary": true },
+      { "metric": "Parzen log-likelihood", "dataset": "TFD", "split": "test", "value": 2057, "is_primary": true }
+    ],
+    "baselines": ["DBN", "Stacked CAE", "Deep GSN"],
+    "compute": null,
+    "special_conditions": ["k=1 discriminator step per generator step", "Gaussian Parzen window sigma cross-validated"],
+    "confidence": 0.75
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "G/D are 2-layer MLPs with 240/1200 hidden units (MNIST config)",
+      "basis": "Not in paper text; pulled from original GitHub repo convention",
+      "confidence": 0.45,
+      "alternatives": ["Single hidden layer", "Different unit counts per dataset"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Learning rate ~0.001 with momentum",
+      "basis": "Paper says 'momentum' but gives no value; standard era default assumed",
+      "confidence": 0.4,
+      "alternatives": ["0.01", "Adaptive schedule"],
+      "affects_section": "training_pipeline"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 5 — Experiments",
+      "description": "No explicit layer sizes, depths, or z-dimensionality given for G or D",
+      "primary_assumption": "2 hidden layers each, z_dim=100",
+      "alternatives": ["Deeper/shallower variants per dataset"],
+      "confidence": 0.45
+    },
+    {
+      "location": "Section 5 — Experiments",
+      "description": "No batch size, total training steps, or exact momentum coefficient stated",
+      "primary_assumption": "Standard 2014-era defaults (batch~100, momentum~0.5-0.9)",
+      "alternatives": ["Values only recoverable from original code repo"],
+      "confidence": 0.4
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.6,
+    "mathematical_spec": 0.97,
+    "tensor_semantics": 0.75,
+    "training_pipeline": 0.42,
+    "evaluation_protocol": 0.75,
+    "implementation_assumptions": 0.43,
+    "overall_sir_confidence": 0.65
+  }
+}
