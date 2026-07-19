@@ -1,9 +1,0 @@
-in_channels: 1
-num_classes: 2
-base_channels: 64
-optimizer: sgd
-momentum: 0.99
-batch_size: 1
-w0: 10
-sigma: 5
-input_tile: 572
