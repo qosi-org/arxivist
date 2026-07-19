@@ -1,0 +1,29 @@
+# Fast smoke-test config (no real accuracy expected).
+model:
+  model_name: "zhihan1996/DNABERT-2-117M"
+  num_classes: 2
+  pool: "mean"
+  attention_dropout: 0.1   # >0 -> DNABERT-2's PyTorch attention branch (avoids Triton kernel)
+training:
+  optimizer: "adamw"
+  lr: 3.0e-5
+  weight_decay: 0.01
+  beta1: 0.9
+  beta2: 0.98
+  batch_size: 8
+  warmup_steps: 5
+  epochs: 1
+  eval_every: 1000000
+data:
+  task: "promoter_detection"
+  subset: "all"
+  data_dir: "data/"
+  max_len: 64
+evaluation:
+  metric: "mcc"
+  split: "test"
+hardware:
+  device: "auto"
+  num_workers: 0
+  seed: 42
+  deterministic: true

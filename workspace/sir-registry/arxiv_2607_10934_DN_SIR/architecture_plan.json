@@ -1,0 +1,455 @@
+{
+  "paper_id": "arxiv_2607_10934",
+  "plan_version": 1,
+  "created_at": "2026-07-15T18:31:22Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.11",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "This paper is a stochastic-control/probability-theory paper, not a neural-network paper, so there is no model to 'train' in the conventional sense. The bulk of the repo is NumPy/SciPy scientific computing (matrix ODEs/Riccati paths, closed-form martingale depth formulas, Kalman-Bucy filtering, Monte Carlo path simulation). PyTorch is selected as the nominal 'primary' framework (schema requires one of pytorch/jax/tensorflow) solely because it is used, optionally, for the exploratory deep-BSDE-style numerical solver referenced in implementation_assumptions for Section 5.5/5.7 (autodiff is convenient there); torch.Tensor is not required anywhere else and every core module is pure NumPy so it also runs with zero GPU/deep-learning dependencies installed."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/kyle_liquidity/__init__.py",
+      "description": "Package init, version string.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/kyle_liquidity/utils/config.py",
+      "description": "YAML config loading + global seeding (numpy, python random, torch if available).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ExperimentConfig",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "from_yaml",
+              "signature": "(path: str) -> 'ExperimentConfig'",
+              "returns": "ExperimentConfig"
+            },
+            {
+              "name": "seed_everything",
+              "signature": "(seed: int) -> None",
+              "returns": "None"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/kyle_liquidity/doob_meyer.py",
+      "description": "Numerical illustration of the matrix-valued Doob-Meyer decomposition (Appendix B, Theorem B.3): decomposes a simulated matrix submartingale path into local-martingale + nondecreasing parts via the e_i+e_j coordinate trick.",
+      "sir_modules_mapped": [
+        "MatrixDoobMeyerDecomposition"
+      ],
+      "classes": [
+        {
+          "name": "MatrixDoobMeyer",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "decompose",
+              "signature": "(X_paths: np.ndarray) -> tuple[np.ndarray, np.ndarray]",
+              "returns": "(M_paths, A_paths): local-martingale and nondecreasing parts, same shape as X_paths [T, n, n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/kyle_liquidity/depth.py",
+      "description": "Primal covariance-liquidation solver and dual martingale-depth solver for all benchmark cases in Section 5: constant sigma (Kyle 1985), deterministic sigma(t) (Back-Pedersen 1998), deterministic-growth stochastic sigma (Collin-Dufresne-Fos 2016), and the common-eigenbasis multi-asset case (Back-Cocquemas-Ekren-Lioui 2020).",
+      "sir_modules_mapped": [
+        "PrimalCovarianceLiquidationSolver",
+        "DualMartingaleDepthSolver",
+        "MDCVerification_ScalarCase",
+        "MDCVerification_CommonEigenbasis"
+      ],
+      "classes": [
+        {
+          "name": "KyleConstantVolDepth",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "M_star",
+              "signature": "(t: np.ndarray) -> np.ndarray",
+              "returns": "M*_t, eq. (5.4)"
+            },
+            {
+              "name": "Sigma_star",
+              "signature": "(t: np.ndarray) -> np.ndarray",
+              "returns": "Sigma*_t, eq. (5.3)"
+            }
+          ]
+        },
+        {
+          "name": "BackPedersenDepth",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "M_star",
+              "signature": "(t: np.ndarray) -> np.ndarray",
+              "returns": "M* (constant), eq. (5.11)"
+            },
+            {
+              "name": "Sigma_star",
+              "signature": "(t: np.ndarray) -> np.ndarray",
+              "returns": "Sigma*(t), eq. (5.9)"
+            }
+          ]
+        },
+        {
+          "name": "CollinDufresneFosDepth",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "M_star",
+              "signature": "(t: np.ndarray, sigma_path: np.ndarray) -> np.ndarray",
+              "returns": "M*_t along a simulated sigma path, eq. (5.22)/(5.27)"
+            }
+          ]
+        },
+        {
+          "name": "CommonEigenbasisDepth",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "M_star",
+              "signature": "(t: np.ndarray, V: np.ndarray, scalar_solvers: list) -> np.ndarray",
+              "returns": "M*_t = V diag(M_i*_t) V^T, eq. (5.49)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/kyle_liquidity/filtering.py",
+      "description": "Kalman-Bucy price filter: simulates order flow Y_t, price P_t = E[v|F^M_t], and posterior covariance Sigma_t given a depth process M_t.",
+      "sir_modules_mapped": [
+        "KalmanBucyPriceFilter"
+      ],
+      "classes": [
+        {
+          "name": "EquilibriumSimulator",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "simulate",
+              "signature": "(depth_model, v_true: np.ndarray, C: np.ndarray, T: float, n_steps: int, seed: int) -> dict",
+              "returns": "dict with keys P (price path), Sigma (covariance path), Y (order flow), X (insider position), t (time grid)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/kyle_liquidity/strategy.py",
+      "description": "Insider's equilibrium optimal trading strategy dX*_t (eq. 3.8) and inconspicuousness check (eq. 3.12).",
+      "sir_modules_mapped": [
+        "InsiderOptimalStrategy"
+      ],
+      "classes": [
+        {
+          "name": "InsiderStrategy",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "drift",
+              "signature": "(v_true, p_t, M_t, Sigma_t) -> np.ndarray",
+              "returns": "dX*_t/dt, eq. (3.8)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/kyle_liquidity/verification.py",
+      "description": "Runs all Section 5 benchmark verifications and checks the terminal covariance identity (eq. 4.6), MDC's interior-martingale property (numerically: M_t stays uniformly positive-definite), and inconspicuousness (eq. 3.12). Produces the numbers consumed by Stage 6's comparator.",
+      "sir_modules_mapped": [
+        "MDCVerification_ScalarCase",
+        "MDCVerification_CommonEigenbasis"
+      ],
+      "classes": [
+        {
+          "name": "VerificationSuite",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "run_all",
+              "signature": "(config: 'ExperimentConfig') -> dict",
+              "returns": "dict of per-case verification records (closed_form_value, simulated_value, abs_error)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/kyle_liquidity/fbsde_stub.py",
+      "description": "STUB for the general matrix-valued case (Section 5.7). The paper leaves wellposedness of the coupled matrix FBSDE (5.50)-(5.51) as an open problem, so this module only exposes a clearly-labeled, unverified heuristic fixed-point iteration and must never be treated as a validated result.",
+      "sir_modules_mapped": [
+        "GeneralMatrixFBSDE_OpenProblem"
+      ],
+      "classes": [
+        {
+          "name": "GeneralMatrixFBSDEHeuristic",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "solve_heuristic",
+              "signature": "(C: np.ndarray, sigma_path_fn, T: float, n_steps: int, n_iter: int) -> dict",
+              "returns": "STUB: unverified Picard-iteration approximation; raises a UserWarning on every call"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/kyle_liquidity/evaluation/metrics.py",
+      "description": "Numerical comparison helpers: absolute/relative error between simulated depth process and paper's closed-form target, terminal-covariance-identity residual.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ClosedFormComparator",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "compare",
+              "signature": "(simulated: np.ndarray, closed_form: np.ndarray) -> dict",
+              "returns": "{abs_error, rel_error, max_abs_error}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "Scalar Kyle (1985) equilibrium path",
+      "input": {
+        "name": "Sigma_0, sigma (scalars), T",
+        "shape": "scalar",
+        "dtype": "float64"
+      },
+      "output": {
+        "name": "P*_t, M*_t, Sigma*_t, X*_t",
+        "shape": "[n_steps]",
+        "dtype": "float64"
+      },
+      "steps": [
+        "M*_t = sigma / sqrt(Sigma_0)  (constant, eq. 5.4)",
+        "Sigma*_t = Sigma_0 * (1 - t)  (eq. 5.3)",
+        "simulate dY_t = dX*_t dt + sigma dB_t via Euler-Maruyama",
+        "P*_t = p0 + (sqrt(Sigma_0)/sigma) * Y_t  (eq. from D.1 specialization)",
+        "dX*_t = (sigma/sqrt(Sigma_0)) * (v_true - P*_t)/(1-t) dt  (eq. 3.8 specialized)",
+        "assert Sigma*_T ~ 0 and P*_T ~ v_true (terminal revelation, eq. 3.11)"
+      ]
+    },
+    {
+      "name": "Common-eigenbasis multi-asset equilibrium path",
+      "input": {
+        "name": "C, sigma (n x n SPD, sharing eigenbasis V), T",
+        "shape": "[n, n]",
+        "dtype": "float64"
+      },
+      "output": {
+        "name": "M*_t, Sigma*_t (n x n paths), P*_t, X*_t (n-vectors)",
+        "shape": "[n_steps, n, n] / [n_steps, n]",
+        "dtype": "float64"
+      },
+      "steps": [
+        "eigendecompose C and sigma jointly: C = V diag(Sigma0_i) V^T, sigma = V diag(sigma_i) V^T",
+        "solve n independent scalar Kyle problems, one per eigen-direction i",
+        "reassemble M*_t = V diag(M_i*_t) V^T  (eq. 5.49)",
+        "simulate n-dimensional order flow Y_t and verify M*_t matches the constant-volatility closed form (Section 5.3) when sigma is constant"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "n_assets": "1  # scalar benchmark by default; set 2 or 3 for common-eigenbasis demo",
+      "C": "1.0  # prior covariance (scalar) or SPD matrix",
+      "sigma_mode": "constant  # one of: constant, deterministic_time, cdf_stochastic, common_eigenbasis",
+      "T": 1.0
+    },
+    "training": {
+      "note": "No training loop exists in this repo (no neural network is being fit). This section is kept only for schema compatibility with the ArXivist pipeline.",
+      "n_steps": "1000  # ASSUMED: time-discretization resolution for Euler-Maruyama SDE simulation, not specified in the paper",
+      "seed": 0
+    },
+    "data": {
+      "synthetic_only": true,
+      "note": "No dataset exists for this paper; all inputs (C, sigma) are synthetic parameters chosen by the user/config."
+    },
+    "evaluation": {
+      "closed_form_tolerance": "1e-6  # ASSUMED: numerical tolerance for asserting simulated depth matches closed-form target"
+    },
+    "hardware": {
+      "device": "cpu",
+      "num_workers": 0
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {
+        "package": "numpy",
+        "version": "1.26.4",
+        "reason": "matrix/vector arithmetic, Euler-Maruyama SDE simulation"
+      },
+      {
+        "package": "scipy",
+        "version": "1.13.0",
+        "reason": "matrix square roots (scipy.linalg.sqrtm) for eq. (5.4),(5.11),(5.22),(C.3); eigendecomposition"
+      },
+      {
+        "package": "matplotlib",
+        "version": "3.8.4",
+        "reason": "plotting simulated vs closed-form paths in the notebook"
+      },
+      {
+        "package": "pyyaml",
+        "version": "6.0.1",
+        "reason": "config.yaml loading"
+      },
+      {
+        "package": "torch",
+        "version": "2.3.0",
+        "reason": "OPTIONAL: only used by the explicitly-labeled fbsde_stub.py exploratory heuristic (Section 5.7); no other module imports torch"
+      }
+    ],
+    "dev": [
+      {
+        "package": "pytest",
+        "version": "8.2.0"
+      },
+      {
+        "package": "black",
+        "version": "24.4.0"
+      },
+      {
+        "package": "mypy",
+        "version": "1.10.0"
+      }
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "run_verification.py",
+      "purpose": "Replaces the conventional 'train.py' \u2014 this paper has no model to train. Runs the full Section-5 verification suite (simulate depth/price/covariance paths for every benchmark case and compare to closed-form formulas) and writes results to outputs/.",
+      "cli_args": [
+        {
+          "flag": "--config",
+          "type": "str",
+          "required": false,
+          "default": "configs/config.yaml",
+          "help": "Path to config YAML"
+        },
+        {
+          "flag": "--case",
+          "type": "str",
+          "required": false,
+          "default": "all",
+          "help": "Which benchmark case to run: kyle1985 | back_pedersen1998 | cdf2016 | common_eigenbasis | all"
+        },
+        {
+          "flag": "--seed",
+          "type": "int",
+          "required": false,
+          "default": 0,
+          "help": "Random seed override"
+        },
+        {
+          "flag": "--debug",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "help": "Reduce n_steps for a fast smoke test"
+        },
+        {
+          "flag": "--dry-run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "help": "Build all components, print shapes, but skip full simulation"
+        }
+      ]
+    },
+    {
+      "filename": "compare_to_paper.py",
+      "purpose": "Replaces 'evaluate.py'. Loads outputs/ from run_verification.py and produces the Stage-6-style comparison against the paper's closed-form targets.",
+      "cli_args": [
+        {
+          "flag": "--results",
+          "type": "str",
+          "required": false,
+          "default": "outputs/verification_results.json",
+          "help": "Path to run_verification.py output"
+        }
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Given a single (C, sigma, v_true) input, compute the equilibrium price/depth/strategy for one path (single-sample analog of 'inference').",
+      "cli_args": [
+        {
+          "flag": "--config",
+          "type": "str",
+          "required": false,
+          "default": "configs/config.yaml",
+          "help": "Path to config YAML"
+        },
+        {
+          "flag": "--seed",
+          "type": "int",
+          "required": false,
+          "default": 0,
+          "help": "Random seed"
+        }
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.11-slim",
+    "system_deps": [
+      "git"
+    ],
+    "workdir": "/workspace",
+    "default_cmd": "python run_verification.py --help"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "Section 5.7's fully general (non-commuting) matrix case has no known wellposedness result for its FBSDE; any code here is an unverified heuristic, not a reproduction.",
+      "source": "SIR ambiguities[0], SIR module GeneralMatrixFBSDE_OpenProblem (confidence 0.3)",
+      "mitigation": "Implemented as fbsde_stub.py, clearly labeled STUB, raises UserWarning on every call, excluded from the default verification suite (only runs with an explicit --case flag)."
+    },
+    {
+      "severity": "Medium",
+      "description": "MDC (Definition 3.1) has no general numerical certificate; we can only confirm it empirically (M_t stays bounded away from the boundary of S^n_++ along a simulated path), which is not a proof.",
+      "source": "SIR ambiguities[1]",
+      "mitigation": "verification.py reports the minimum eigenvalue of M_t along each simulated path as an empirical MDC health-check, explicitly labeled as non-rigorous."
+    },
+    {
+      "severity": "Medium",
+      "description": "No numerical BSDE solver is specified in the paper for the scalar stochastic-liquidity case (Section 5.5); a full deep-BSDE or LSMC implementation would be substantial extra scope.",
+      "source": "SIR implementation_assumptions[1]",
+      "mitigation": "The default verification suite covers only the closed-form cases (5.1, 5.2, 5.4, 5.6) where M*_t is known in closed form; Section 5.5's general scalar stochastic-liquidity case is documented but not implemented, with a README note pointing to future work."
+    },
+    {
+      "severity": "Low",
+      "description": "Euler-Maruyama time discretization near t=T can make Sigma*_t numerically singular (it is exactly 0 at T by construction).",
+      "source": "SIR implementation_assumptions[4]",
+      "mitigation": "Simulation grid stops at T - dt/2 and clips any eigenvalue below 1e-10 before inversion, with a printed warning."
+    },
+    {
+      "severity": "Low",
+      "description": "No reported numerical results table exists in the paper (evaluation_protocol.reported_results is empty), so Stage 6's usual 'user results vs paper table' comparison does not apply.",
+      "source": "SIR evaluation_protocol",
+      "mitigation": "Stage 6 is adapted to compare the repo's own simulated outputs against the paper's closed-form formulas (self-verification), which is the only meaningful notion of 'reproducibility' for a theory paper."
+    }
+  ]
+}

@@ -1,0 +1,233 @@
+{
+  "paper_id": "arxiv_2607_06340",
+  "plan_version": 1,
+  "created_at": "2026-07-12T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": "11.8 (optional, for GPU signature computation and XGBoost)",
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "The classifier itself is XGBoost, not a neural network -- but path simulation and signature computation benefit from vectorized tensor ops, and the paper's own pipeline is GPU-accelerated (RTX 3080 Ti). We use PyTorch tensors for simulating batches of paths and computing signatures (via a simple iterated-integral recursion), then hand off the resulting feature matrix to XGBoost (CPU or GPU histogram method) for classification. A small optional PyTorch MLP reproduces the paper's Section 6.7 neural-network baseline."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/sig_vol_id/simulators/heston.py",
+      "description": "Heston variance-process path simulator (full-truncation Euler scheme).",
+      "sir_modules_mapped": ["HestonPathSimulator"],
+      "classes": [{"name": "HestonSimulator", "base_class": "object", "public_methods": [
+        {"name": "simulate", "signature": "(self, n_paths: int, params: dict, rng) -> np.ndarray", "returns": "[n_paths, n_steps+1] variance paths"}
+      ]}]
+    },
+    {
+      "path": "src/sig_vol_id/simulators/ou.py",
+      "description": "Ornstein-Uhlenbeck exact-simulation path generator.",
+      "sir_modules_mapped": ["OrnsteinUhlenbeckPathSimulator"],
+      "classes": [{"name": "OUSimulator", "base_class": "object", "public_methods": [
+        {"name": "simulate", "signature": "(self, n_paths: int, params: dict, rng) -> np.ndarray", "returns": "[n_paths, n_steps+1] OU paths"}
+      ]}]
+    },
+    {
+      "path": "src/sig_vol_id/simulators/rbergomi.py",
+      "description": "Rough Bergomi variance process via Cholesky-based fractional Brownian motion (hybrid-scheme substitute, documented as a simplification).",
+      "sir_modules_mapped": ["RoughBergomiPathSimulator"],
+      "classes": [{"name": "RoughBergomiSimulator", "base_class": "object", "public_methods": [
+        {"name": "simulate", "signature": "(self, n_paths: int, H: float, params: dict, rng) -> np.ndarray", "returns": "[n_paths, n_steps+1] rBergomi variance paths"},
+        {"name": "simulate_shared_noise", "signature": "(self, n_paths: int, H_list: list[float], params: dict, rng) -> dict[float, np.ndarray]", "returns": "paths per H value, sharing the same underlying fBM/eta draws per path index (paper Sec 6.1 control)"}
+      ]}]
+    },
+    {
+      "path": "src/sig_vol_id/features/signatures.py",
+      "description": "Time-augmented truncated path signature computation.",
+      "sir_modules_mapped": ["TruncatedSignatureComputer"],
+      "classes": [{"name": "SignatureComputer", "base_class": "object", "public_methods": [
+        {"name": "compute", "signature": "(self, paths: np.ndarray, order: int = 4, T: float = 0.1) -> np.ndarray", "returns": "[n_paths, d_N] flattened truncated signatures"}
+      ]}]
+    },
+    {
+      "path": "src/sig_vol_id/models/xgb_classifier.py",
+      "description": "XGBoost multi-class classifier wrapper with the paper's exact hyperparameters.",
+      "sir_modules_mapped": ["XGBoostClassifier"],
+      "classes": [{"name": "SignatureXGBClassifier", "base_class": "object", "public_methods": [
+        {"name": "fit", "signature": "(self, X_train, y_train) -> None", "returns": "None"},
+        {"name": "predict", "signature": "(self, X_test) -> np.ndarray", "returns": "predicted class labels"},
+        {"name": "confusion_matrix", "signature": "(self, X_test, y_test, class_names) -> pd.DataFrame", "returns": "confusion matrix (counts or percentages)"}
+      ]}]
+    },
+    {
+      "path": "src/sig_vol_id/models/nn_baseline.py",
+      "description": "PyTorch MLP robustness-check baseline (Section 6.7): 128-64-32 hidden layers, batch norm, dropout.",
+      "sir_modules_mapped": ["NeuralNetworkBaseline"],
+      "classes": [{"name": "SignatureMLP", "base_class": "torch.nn.Module", "public_methods": [
+        {"name": "forward", "signature": "(self, x: torch.Tensor) -> torch.Tensor", "returns": "class logits"}
+      ]}]
+    },
+    {
+      "path": "src/sig_vol_id/evaluation/importance.py",
+      "description": "Built-in XGBoost gain importance + permutation importance side by side.",
+      "sir_modules_mapped": ["FeatureImportanceAnalyzer"],
+      "classes": [{"name": "ImportanceAnalyzer", "base_class": "object", "public_methods": [
+        {"name": "builtin_importance", "signature": "(self, model) -> pd.Series", "returns": "gain-based importances per signature feature"},
+        {"name": "permutation_importance", "signature": "(self, model, X_test, y_test) -> pd.Series", "returns": "accuracy-drop importances per signature feature"}
+      ]}]
+    },
+    {
+      "path": "src/sig_vol_id/data/experiment_builder.py",
+      "description": "Builds the labelled (signature, class) dataset for each of the paper's 9 named experiments (5.1-5.3, 6.1-6.3, 6.5-6.6, 6.8-6.9).",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "ExperimentBuilder", "base_class": "object", "public_methods": [
+        {"name": "build", "signature": "(self, experiment_name: str, n_paths_per_class: int, seed: int) -> tuple", "returns": "(X_train, y_train, X_test, y_test, class_names)"}
+      ]}]
+    },
+    {
+      "path": "src/sig_vol_id/utils/config.py",
+      "description": "YAML config loading + global seeding.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "Config", "base_class": "object", "public_methods": [
+        {"name": "load", "signature": "(cls, path: str) -> 'Config'", "returns": "validated Config"},
+        {"name": "set_global_seed", "signature": "(seed: int) -> None", "returns": "None"}
+      ]}]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "End-to-end experiment pipeline",
+      "input": {"name": "experiment_name + config", "shape": "str + dict", "dtype": "python object"},
+      "output": {"name": "confusion_matrix + accuracy", "shape": "[n_classes, n_classes] + scalar", "dtype": "float64"},
+      "steps": [
+        "ExperimentBuilder resolves which simulators/classes/params the named experiment needs",
+        "Each simulator generates n_paths_per_class raw paths (Heston variance, OU, or rBergomi variance)",
+        "SignatureComputer.compute(paths, order, T) -> [n_paths, d_N] feature matrix per class",
+        "Concatenate + label -> (X, y); split into train/test (test=50,000/class as in the paper)",
+        "SignatureXGBClassifier.fit(X_train, y_train)",
+        "confusion_matrix(X_test, y_test) + accuracy computed and saved"
+      ]
+    }
+  ],
+  "config_schema": {
+    "simulation": {
+      "n_steps": "100  # explicit",
+      "T_default": "0.1  # explicit; 0.2/0.4 for robustness (Sec 6.6)",
+      "n_paths_per_class_default": "250000  # explicit; 50000 for Sec 6.9 robustness",
+      "n_test_per_class": "50000  # explicit"
+    },
+    "heston": {
+      "fixed_X0": 0.1, "fixed_kappa": 2, "fixed_theta": 0.1, "fixed_nu": 0.2,
+      "random_kappa_range": [1.0, 3.0], "random_theta_range": [0.05, 0.15],
+      "random_nu_range": [0.15, 0.35], "feller_safety_margin": 0.95,
+      "correlation_rho": "-0.7  # ASSUMED: not given in paper, irrelevant since only v_t is used (confidence 0.3)",
+      "discretization_scheme": "full_truncation_euler  # ASSUMED (confidence 0.45)"
+    },
+    "ou": {
+      "fixed_X0": 0.15, "fixed_kappa": 3, "fixed_theta": 0.15, "fixed_sigma": 0.1,
+      "random_kappa_range": [1.5, 3.5], "random_theta_range": [0.10, 0.20], "random_sigma_range": [0.05, 0.30]
+    },
+    "rbergomi": {
+      "fixed_xi": 0.08, "fixed_eta": 1.8,
+      "random_xi": 0.10, "random_eta_range": [0.8, 2.0],
+      "simulation_scheme": "cholesky_fbm  # ASSUMED substitute for paper's GPU hybrid scheme (confidence 0.6); see docs/reproducibility_notes.md"
+    },
+    "signature": {
+      "truncation_order_default": 4,
+      "truncation_orders_tested": [3, 4, 5]
+    },
+    "xgboost": {
+      "learning_rate": 0.05, "max_depth": 6, "n_estimators": 500,
+      "objective": "multi:softprob", "tree_method": "hist  # gpu_hist if CUDA available"
+    },
+    "nn_baseline": {
+      "hidden_layers": [128, 64, 32], "dropout": "0.2  # ASSUMED (confidence 0.4)",
+      "batch_size": "256  # ASSUMED", "learning_rate": "1e-3  # ASSUMED", "epochs": 40
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "numpy", "version": "1.26.4", "reason": "path simulation, array math"},
+      {"package": "torch", "version": "2.2.2", "reason": "batched tensor ops for simulation + optional GPU signature/NN baseline"},
+      {"package": "iisignature", "version": "0.24", "reason": "CPU-reference truncated path signature computation"},
+      {"package": "xgboost", "version": "2.0.3", "reason": "primary classifier, as specified in the paper"},
+      {"package": "scikit-learn", "version": "1.4.1", "reason": "train/test split, permutation_importance, confusion_matrix"},
+      {"package": "pandas", "version": "2.2.1", "reason": "confusion matrix / results tables"},
+      {"package": "matplotlib", "version": "3.8.3", "reason": "confusion matrix heatmaps, feature-importance bar charts"},
+      {"package": "pyyaml", "version": "6.0.1", "reason": "config loading"},
+      {"package": "tqdm", "version": "4.66.2", "reason": "progress bars over path simulation"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": "8.1.1"},
+      {"package": "black", "version": "24.3.0"},
+      {"package": "ruff", "version": "0.3.4"},
+      {"package": "jupyter", "version": "1.0.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Run one named experiment end-to-end: simulate, extract signatures, train XGBoost, save model + results.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--experiment", "type": "str", "required": true, "default": null, "help": "One of: 5.1, 5.2, 5.3, 6.1, 6.2, 6.3, 6.5_order3, 6.5_order5, 6.6_T0.2, 6.6_T0.4, 6.8_shared_dist, 6.8_low_nu, 6.8_high_nu, 6.9_50k"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "Global random seed"},
+        {"flag": "--debug", "type": "flag", "required": false, "default": false, "help": "Reduce n_paths_per_class to 500 and n_steps to 20 for a fast smoke test"},
+        {"flag": "--dry-run", "type": "flag", "required": false, "default": false, "help": "Validate config and experiment resolution without simulating"}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Load a trained model + test set, print/save the confusion matrix and accuracy.",
+      "cli_args": [
+        {"flag": "--results-dir", "type": "str", "required": true, "default": null, "help": "Directory containing train.py outputs"},
+        {"flag": "--experiment", "type": "str", "required": true, "default": null, "help": "Which experiment's results to evaluate"}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Classify a small batch of new/held-out paths using a saved model.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--experiment", "type": "str", "required": true, "default": null, "help": "Which trained model to load"},
+        {"flag": "--n-paths", "type": "int", "required": false, "default": 100, "help": "Number of fresh paths per class to classify"}
+      ]
+    },
+    {
+      "filename": "run_feature_importance.py",
+      "purpose": "Paper-specific: reproduce Figure 6.4 (built-in vs permutation importance) for a trained experiment.",
+      "cli_args": [
+        {"flag": "--results-dir", "type": "str", "required": true, "default": null, "help": "Directory with a trained model + test set"},
+        {"flag": "--out", "type": "str", "required": false, "default": "results/importance/", "help": "Output directory for the comparison plot"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime",
+    "system_deps": ["git", "wget", "build-essential"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "The exact rough Bergomi simulation scheme (GPU-adapted hybrid scheme of Bennedsen et al. 2017) is not reproduced verbatim -- we substitute a Cholesky-based exact fBM simulation, which is mathematically equivalent in distribution but much slower (O(n^2)-O(n^3) vs. the hybrid scheme's near-linear cost) and may differ in fine discretization behavior at the 100-step resolution used.",
+      "source": "SIR ambiguities[2], implementation_assumptions[2]",
+      "mitigation": "Documented in README/reproducibility notes; for exact paper-scale reproduction (250k paths x multiple H values) a production system should swap in the actual hybrid-scheme implementation (e.g. adapting github.com/ryanmccrickerd/rough_bergomi as the paper itself did) rather than the Cholesky substitute shipped here, which is fine for the debug-scale smoke tests but too slow at full scale."
+    },
+    {
+      "severity": "Medium",
+      "description": "GPU-vectorized signature computation is not reproduced verbatim (paper references an adapted third-party implementation); this repo uses the CPU-only `iisignature` package instead, which is correct but far slower at 250k-path scale.",
+      "source": "SIR ambiguities[2], implementation_assumptions[3]",
+      "mitigation": "Swap in the `signatory` PyTorch-native package (GPU-capable) for full-scale runs; iisignature is kept as the default for correctness-verification and small-scale/debug runs since it's simpler to install and has no GPU dependency."
+    },
+    {
+      "severity": "Low",
+      "description": "Heston discretization scheme and correlation rho are unstated; rho is argued to be irrelevant (only v_t is used) but the discretization scheme choice could shift fine details of the simulated variance path distribution.",
+      "source": "SIR implementation_assumptions[0], [1]",
+      "mitigation": "Use a standard full-truncation Euler scheme (documented in code), consistent with the paper's Feller-condition-aware sampling of nu; flagged as tunable if results don't match."
+    },
+    {
+      "severity": "Low",
+      "description": "Neural-network baseline (Sec 6.7) hyperparameters (dropout, batch size, learning rate) are unstated.",
+      "source": "SIR ambiguities[3]",
+      "mitigation": "Use literature-standard defaults (dropout 0.2, batch 256, Adam lr 1e-3); this is a one-off robustness check in the paper, not a primary result, so lower priority to get exactly right."
+    }
+  ]
+}

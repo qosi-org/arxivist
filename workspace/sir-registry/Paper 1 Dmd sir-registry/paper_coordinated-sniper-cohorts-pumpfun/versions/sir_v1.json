@@ -1,0 +1,440 @@
+{
+  "paper_id": "paper_coordinated-sniper-cohorts-pumpfun",
+  "sir_version": 1,
+
+  "provenance": {
+    "title": "Coordinated Sniper Cohorts on Pump.fun: Detection of 1,012 Persistent Wallet Rings and the Limits of Naive Causal Inference for First-Hour Buyer Flow",
+    "authors": [
+      {
+        "name": "Arati Uday Kamat",
+        "affiliation": "Independent Researcher",
+        "orcid": "0009-0000-4781-312X"
+      }
+    ],
+    "arxiv_id": null,
+    "ssrn_id": null,
+    "doi": "10.5281/zenodo.20978741",
+    "version": "1.0",
+    "submission_date": "2026-06-27",
+    "last_revised": "2026-06-27",
+    "abstract_truncated": "We study coordinated buyer behavior on the Solana pump.fun bonding-curve marketplace using 1,578,333 buyer observations from 166,098 token launches between 2026-06-12 and 2026-06-26. A two-stage detection pipeline identifies 1,012 persistent wallet cohorts that systematically co-fire as early buyers across multiple launches.",
+    "primary_domain": "Other (On-Chain Market Microstructure / Blockchain Forensics)",
+    "key_claims": [
+      "A two-stage detection pipeline (intra-launch first-buyer-window + cross-launch union-find on co-occurrence graphs) identifies 1,012 persistent wallet cohorts from 166,098 pump.fun token launches.",
+      "153 cohorts qualify as high-tier (≥10 launches hit or score ≥100); 22 hit ≥20 launches each; the top cohort (9 wallets) appears in the first-10-buyer queue of 42 launches in 11 days.",
+      "Cohort-touched launches show a naive +132.3% lift in first-30-minute buyer count (95% CI [+127.0%, +137.4%]) and +136.5% lift in SOL inflow versus random-matched controls.",
+      "An activity-matched placebo yields a LARGER +216.3% lift (95% CI [+183.8%, +255.2%]), entirely above the real-cohort CI, refuting a cohort-specific causal interpretation.",
+      "The association reflects launch-quality selection bias; causal identification requires propensity-score matching on launch-quality covariates (left to future work)."
+    ],
+    "companion_dataset": "RED-COHORT-2026-v1 (CC-BY-4.0)",
+    "patent_note": "Detection methodology subject to pending US patent application No. 64/099,108 (filed 2026-06-25, Embodiment H)",
+    "parsed_at": "2026-07-14T00:00:00Z"
+  },
+
+  "architecture": {
+    "description": "This is an empirical data-analysis / detection pipeline, not a neural-network architecture. The 'architecture' maps to the two-stage algorithmic pipeline plus the scoring function.",
+    "system_type": "Algorithmic Detection Pipeline (graph-theoretic + statistical)",
+    "components": [
+      {
+        "name": "PassiveSolanaObserver",
+        "role": "Data collection layer — read-only listener on Solana chain",
+        "inputs": ["Solana blockchain events (real-time)"],
+        "outputs": ["pumpfun_buyers.jsonl", "pumpfun_launches.jsonl"],
+        "operation": "Stream ingestion, sorting buyer events by blockTime per mint",
+        "confidence": 0.85
+      },
+      {
+        "name": "Stage1_IntraLaunchExtractor",
+        "role": "For each launch, extract ordered list of first-N buyers",
+        "inputs": ["pumpfun_buyers.jsonl", "N=10 (first-buyer window size)"],
+        "outputs": ["per-launch index: {mint, wallet, rank, blockTime, sol_committed}"],
+        "operation": "Filter buyer events to rank ∈ [1,10] per mint; 166,098 qualifying mints",
+        "confidence": 0.97
+      },
+      {
+        "name": "CoOccurrenceGraphBuilder",
+        "role": "Build undirected weighted graph G=(V,E) of wallet co-occurrences",
+        "inputs": ["per-launch index from Stage1"],
+        "outputs": ["Graph G: V=wallet addresses, E=co-occurrence edges with integer weights"],
+        "operation": "Add edge (u,v) for each launch where both u and v appear in first-10 buyers; weight = count of co-occurrences across all launches",
+        "confidence": 0.97
+      },
+      {
+        "name": "EdgeWeightFilter",
+        "role": "Remove low-confidence accidental co-occurrence edges",
+        "inputs": ["Graph G (raw)"],
+        "outputs": ["Graph G_filtered (edges with weight ≥ 3 only)"],
+        "operation": "Threshold filter: retain only edges with co-occurrence count ≥ 3 (qualifying-pair threshold). Selected before reviewing buyer-flow effect to avoid threshold-hacking.",
+        "hyperparameter": "edge_weight_cutoff = 3",
+        "ablation_values": [2, 3, 5],
+        "confidence": 0.97
+      },
+      {
+        "name": "UnionFindCohortSurface",
+        "role": "Surface connected components (candidate cohorts) from filtered graph",
+        "inputs": ["Graph G_filtered"],
+        "outputs": ["Connected components (raw cohort candidates)"],
+        "operation": "Standard union-find / disjoint-set on G_filtered. Produces 1,161 raw components at cutoff=3.",
+        "confidence": 0.95
+      },
+      {
+        "name": "CohortSizeFilter",
+        "role": "Remove noise hubs with too many wallets",
+        "inputs": ["Raw connected components"],
+        "outputs": ["Filtered cohort set"],
+        "operation": "Remove components with size > MAX_COHORT_SIZE = 12. Reduces 1,161 → 1,012 cohorts.",
+        "hyperparameter": "MAX_COHORT_SIZE = 12",
+        "confidence": 0.97
+      },
+      {
+        "name": "CohortScorer",
+        "role": "Rank cohorts by a composite quality score",
+        "inputs": ["Filtered cohort set C", "per-launch buyer data"],
+        "outputs": ["score(C) for each cohort"],
+        "operation": "score(C) = 10 × Σ_L 1{C touches L}  +  5 / mean_first_rank(C)  +  √(Σ_L SOL_committed(C, L))",
+        "score_components": {
+          "launch_coverage_term": "10 × (number of distinct launches touched by C)",
+          "rank_quality_term": "5 / mean_first_rank(C)  [higher = better queue position]",
+          "volume_term": "√(total SOL committed across all touched launches)"
+        },
+        "score_threshold_tau": "set to surface 1,012 cohorts with desired tier distribution",
+        "confidence": 0.97
+      },
+      {
+        "name": "TierClassifier",
+        "role": "Assign qualitative tier labels to cohorts",
+        "inputs": ["Scored cohort set"],
+        "outputs": ["Tier label: Standard / High / Premium per cohort"],
+        "operation": "Premium: n_launches ≥ 20. High: n_launches ≥ 10 OR score ≥ 100. Standard: otherwise.",
+        "confidence": 0.97
+      }
+    ],
+    "pipeline_flow": [
+      "PassiveSolanaObserver → pumpfun_buyers.jsonl + pumpfun_launches.jsonl",
+      "pumpfun_buyers.jsonl → Stage1_IntraLaunchExtractor → per-launch first-10-buyer index",
+      "per-launch index → CoOccurrenceGraphBuilder → G=(V,E)",
+      "G → EdgeWeightFilter (cutoff=3) → G_filtered",
+      "G_filtered → UnionFindCohortSurface → raw components",
+      "raw components → CohortSizeFilter (max=12) → 1,012 cohorts",
+      "1,012 cohorts → CohortScorer → scored cohorts",
+      "scored cohorts → TierClassifier → {Standard, High, Premium} labels"
+    ],
+    "confidence": 0.95
+  },
+
+  "mathematical_spec": {
+    "equations": [
+      {
+        "id": "EQ1",
+        "name": "Cohort Score Function",
+        "latex": "\\text{score}(C) = 10 \\times \\left(\\sum_{L} \\mathbf{1}\\{C \\text{ touches } L\\}\\right) + \\frac{5}{\\overline{r}(C)} + \\sqrt{\\sum_{L} \\text{SOL\\_committed}(C, L)}",
+        "variables": {
+          "C": "A cohort (set of wallet addresses)",
+          "L": "A token launch (indexed over all launches in corpus)",
+          "1{C touches L}": "Indicator: at least 1 wallet in C appears among first-10 buyers of L",
+          "r_bar(C)": "mean_first_rank(C) — mean of the minimum rank attained by any cohort wallet in each touched launch",
+          "SOL_committed(C,L)": "Sum of SOL committed by all cohort wallets in launch L"
+        },
+        "role": "Composite ranking score weighting launch coverage, queue priority, and capital commitment",
+        "note": "Three additive sub-scores are intentionally dimensionally heterogeneous; the function is a ranking heuristic, not a probabilistic quantity",
+        "confidence": 0.98
+      },
+      {
+        "id": "EQ2",
+        "name": "Percentage Lift Estimator",
+        "latex": "\\text{Lift}(\\%) = \\frac{\\overline{Y}_{\\text{treated}} - \\overline{Y}_{\\text{control}}}{\\overline{Y}_{\\text{control}}} \\times 100",
+        "variables": {
+          "Y_treated": "Outcome (buyer count or SOL inflow) for cohort-touched launches",
+          "Y_control": "Outcome for randomly drawn untouched launches"
+        },
+        "role": "Primary causal estimand (naive, before placebo refutation)",
+        "confidence": 0.97
+      },
+      {
+        "id": "EQ3",
+        "name": "Co-occurrence Edge Weight",
+        "latex": "w(u, v) = \\left|\\{L : u \\in \\text{first10}(L) \\wedge v \\in \\text{first10}(L)\\}\\right|",
+        "variables": {
+          "u, v": "Two wallet addresses",
+          "first10(L)": "Set of first 10 buyer wallets for launch L"
+        },
+        "role": "Graph edge weight used for filtering (retain if w ≥ 3)",
+        "confidence": 0.98
+      }
+    ],
+    "key_thresholds": {
+      "first_buyer_window": 10,
+      "edge_weight_cutoff": 3,
+      "max_cohort_size": 12,
+      "cohort_touch_threshold_strict": 2,
+      "cohort_touch_threshold_loose": 1,
+      "rct_matching_ratio": "3:1 (control:treated)",
+      "bootstrap_iterations": 1000,
+      "bootstrap_method": "percentile",
+      "activity_match_tolerance": "±100 launches per wallet"
+    },
+    "confidence": 0.97
+  },
+
+  "tensor_semantics": {
+    "note": "This is a tabular / graph-theoretic pipeline. No neural tensors. Data structures described below.",
+    "primary_data_structures": [
+      {
+        "name": "buyer_event",
+        "schema": "{mint: str, wallet: str, slot: int, blockTime: int, sol_in: float, tx_sig: str, rank: int}",
+        "cardinality": "1,578,333 records"
+      },
+      {
+        "name": "launch_metadata",
+        "schema": "{mint: str, symbol: str, name: str, created_timestamp: int, initial_mcap_sol: float, has_twitter: bool, has_website: bool, has_telegram: bool, description_len: int}",
+        "cardinality": "1,315,257 launches"
+      },
+      {
+        "name": "cohort_record",
+        "schema": "{cohort_id: str, wallets: list[str], size: int, n_launches_hit: int, mean_first_rank: float, total_sol: float, score: float, first_seen: int, last_seen: int, tier: str, per_mint_hits: list[{mint, rank, blockTime, sol}]}",
+        "cardinality": "1,012 cohorts"
+      },
+      {
+        "name": "co_occurrence_graph",
+        "schema": "Adjacency representation: V = unique wallet addresses (from first-10 buyers), E = pairs with weight ≥ 3",
+        "cardinality": "9,788 qualifying pairs at cutoff=3"
+      }
+    ],
+    "confidence": 0.90
+  },
+
+  "training_pipeline": {
+    "note": "No ML training pipeline exists. This is a deterministic algorithmic method. Equivalent fields mapped to pipeline configuration.",
+    "pipeline_config": {
+      "data_window": "2026-06-12 to 2026-06-26 (15 days)",
+      "random_seed": 42,
+      "control_sample_method": "uniform random without replacement",
+      "treated_to_control_ratio": "1:3",
+      "bootstrap_n_iterations": 1000,
+      "bootstrap_ci_method": "percentile",
+      "confidence_interval_level": 0.95
+    },
+    "implementation_script": "analyze_sniper_cohorts.py (released)",
+    "causal_estimation_script": "gen_p7_artifacts.py (released)",
+    "confidence": 0.92
+  },
+
+  "evaluation_protocol": {
+    "corpus": {
+      "total_buyer_events": 1578333,
+      "qualifying_mints": 166098,
+      "observation_window_days": 15,
+      "avg_buyer_events_per_day": 105222
+    },
+    "detection_results": {
+      "total_cohorts": 1012,
+      "unique_cohort_wallets": 2965,
+      "cohorts_size_2": 571,
+      "cohorts_size_3": 229,
+      "cohorts_size_4": 102,
+      "cohorts_size_5_plus": 110,
+      "median_cohort_size": 2,
+      "mean_cohort_size": 2.93,
+      "max_cohort_size": 12,
+      "median_launches_hit": 5,
+      "mean_launches_hit": 6.23,
+      "max_launches_hit": 42,
+      "median_score": 52.8,
+      "max_score": 430.44,
+      "high_tier_cohorts": 153,
+      "premium_tier_cohorts": 22,
+      "mints_touched_strict": 5411,
+      "mints_touched_loose": 8375
+    },
+    "causal_estimation": {
+      "design": "3:1 random-matched (treated vs randomly drawn untouched mints)",
+      "n_treated": 5411,
+      "n_control": 16233,
+      "outcomes": [
+        {
+          "name": "first_30min_buyer_count",
+          "treated_mean": 21.00,
+          "control_mean": 9.10,
+          "lift_pct": 132.3,
+          "ci_95": [127.0, 137.4]
+        },
+        {
+          "name": "first_30min_sol_inflow",
+          "treated_mean": 5.58,
+          "control_mean": 2.35,
+          "lift_pct": 136.5,
+          "ci_95": [120.9, 152.2]
+        }
+      ]
+    },
+    "placebo_checks": [
+      {
+        "design": "uniform_random_placebo",
+        "description": "1,012 placebo cohorts sampled uniformly from buyer-event universe at same size distribution as real cohorts",
+        "touch_threshold": "≥1 placebo wallet",
+        "n_placebo_treated": 21190,
+        "n_placebo_control": 63570,
+        "first_30min_buyer_lift_pct": 152.0,
+        "verdict": "Placebo lift > real-cohort lift; causal interpretation weakened"
+      },
+      {
+        "design": "activity_matched_placebo",
+        "description": "For each real cohort of size k, sample k placebo wallets from non-cohort pool individually matched on per-wallet launch-count (±100)",
+        "touch_threshold": "≥2 placebo wallets (same as real-cohort strict threshold)",
+        "n_placebo_treated": 173,
+        "n_placebo_control": 519,
+        "first_30min_buyer_lift_pct": 216.3,
+        "ci_95": [183.8, 255.2],
+        "first_30min_sol_lift_pct": 157.7,
+        "sol_ci_95": [117.9, 207.7],
+        "verdict": "Real-cohort lift (132.3%) is entirely BELOW placebo CI lower bound (183.8%). Zero CI overlap. Strong refutation of cohort-specific causal effect."
+      }
+    ],
+    "robustness_checks": [
+      {
+        "name": "top3_exclusion",
+        "description": "Remove COH-0001, COH-0002, COH-0003",
+        "n_treated": 5869,
+        "n_control": 17607,
+        "first_30min_buyer_lift_pct": 128.8,
+        "sol_lift_pct": 128.8,
+        "interpretation": "Naive lift robust to outlier removal; consistent with selection effect operating across all cohort tiers"
+      },
+      {
+        "name": "tier_stratification",
+        "tiers": [
+          {"tier": "standard", "n_treated": 3747, "buyer_lift_pct": 122.8, "sol_lift_pct": 136.0},
+          {"tier": "high", "n_treated": 1688, "buyer_lift_pct": 131.4, "sol_lift_pct": 125.6},
+          {"tier": "premium", "n_treated": 540, "buyer_lift_pct": 79.5, "sol_lift_pct": 84.5}
+        ],
+        "verdict": "Non-monotone pattern (Premium < Standard) inconsistent with 'more coordination → more flow'; further supports selection interpretation"
+      }
+    ],
+    "concentration_analysis": {
+      "lorenz_curve": "Top 10 cohorts (≈1%) account for >9% of cohort-touch events; top 100 (≈10%) account for >35%",
+      "top_cohort": {
+        "id": "COH-0001",
+        "size": 9,
+        "launches_hit": 42,
+        "mean_first_rank": 2.29,
+        "total_sol": 68.12,
+        "score": 430.44
+      }
+    },
+    "confidence": 0.97
+  },
+
+  "implementation_assumptions": [
+    {
+      "assumption": "Score threshold tau is set post-hoc to yield exactly 1,012 cohorts; the exact numeric value of tau is not disclosed in the paper",
+      "basis": "Paper states tau surfaces cohorts satisfying conditions (a)+(b)+(c) but does not give a numeric threshold",
+      "confidence": 0.60,
+      "alternatives": ["Fixed tau = 50 (below median score of 52.8)", "Score-percentile cutoff", "Minimum launch count cutoff only"]
+    },
+    {
+      "assumption": "mean_first_rank(C) in the score formula is the mean over all launches touched by C of the minimum rank attained by any cohort member in that launch",
+      "basis": "Stated as 'average first-buyer rank' for cohort in descriptive context (COH-0001 has mean_first_rank = 2.29); the exact aggregation over multiple wallets per launch is inferred",
+      "confidence": 0.72,
+      "alternatives": ["Mean over all (wallet, launch) pairs regardless of which wallet is first", "Median instead of mean"]
+    },
+    {
+      "assumption": "1{C touches L} in the score formula uses the ≥1-cohort-wallet definition (loose), not ≥2 (strict used in causal analysis)",
+      "basis": "Paper uses ≥1 for the detection/scoring pipeline and ≥2 for the causal sample construction; the score equation predates the causal section",
+      "confidence": 0.68,
+      "alternatives": ["≥2 wallet touch threshold for score computation as well"]
+    },
+    {
+      "assumption": "Union-find is run with standard path-compression and union-by-rank (canonical implementation)",
+      "basis": "Paper says 'we run union-find on the filtered graph'; standard implementation assumed",
+      "confidence": 0.90,
+      "alternatives": ["Simple BFS/DFS connected-components"]
+    },
+    {
+      "assumption": "The 15-day observation window is treated as a single static batch; no time-series or rolling-window analysis is performed",
+      "basis": "Paper describes corpus as collected over 2026-06-12 to 2026-06-26 with no mention of rolling windows",
+      "confidence": 0.95,
+      "alternatives": ["Rolling 7-day windows", "Day-by-day incremental updates"]
+    },
+    {
+      "assumption": "Framework: Python with pandas/networkx for graph operations and scipy/numpy for bootstrap CI computation",
+      "basis": "Script names (analyze_sniper_cohorts.py, gen_p7_artifacts.py) and standard Python data-science toolchain for this type of work",
+      "confidence": 0.75,
+      "alternatives": ["Rust for graph processing", "PySpark for scale"]
+    },
+    {
+      "assumption": "Bootstrap CIs use numpy percentile method (2.5th and 97.5th percentiles of 1,000 resampled lift estimates) with replacement",
+      "basis": "Paper states 'percentile method' for bootstrap; standard interpretation is scipy/numpy percentile on resampled statistic",
+      "confidence": 0.88,
+      "alternatives": ["BCa bootstrap", "t-bootstrap"]
+    }
+  ],
+
+  "ambiguities": [
+    {
+      "location": "Section 4.2 / Equation for score(C)",
+      "description": "The exact numeric value of score threshold tau is not given. Only stated as 'set to surface cohorts satisfying (a), (b), (c)'.",
+      "primary_assumption": "tau is implicitly around 40-50 (just below the reported median score of 52.8), or may be a min-launches cutoff",
+      "alternatives": ["tau = 0 with separate min-launch-count filter", "tau chosen to yield 1,012 via binary search"],
+      "confidence": 0.55
+    },
+    {
+      "location": "Section 4.2 — cohort touch definition vs score formula",
+      "description": "The paper uses ≥2 cohort wallets for the causal analysis (Section 6) but the score formula uses 1{C touches L} — whether this indicator uses ≥1 or ≥2 wallets is ambiguous.",
+      "primary_assumption": "Score formula uses ≥1 (looser definition); causal section uses ≥2 (stricter)",
+      "alternatives": ["Both use ≥2"],
+      "confidence": 0.65
+    },
+    {
+      "location": "Section 6.4 — activity-matched placebo n_placebo_treated = 173",
+      "description": "Only 173 placebo-touched mints vs 5,411 real-cohort-touched mints. This is a very small placebo sample. The placebo CI is therefore much wider than the real-cohort CI. The statistical comparison may be power-asymmetric.",
+      "primary_assumption": "Small placebo sample is a natural consequence of ≥2-wallet strict touch definition combined with lower co-occurrence probability among individually-matched random wallets",
+      "alternatives": ["Use looser ≥1 touch threshold for placebo to increase sample size"],
+      "confidence": 0.70
+    },
+    {
+      "location": "Section 3.1 — buyer rank derivation",
+      "description": "Buyer rank is derived by sorting per-mint events by blockTime in the collection-time pipeline. Ties at the same blockTime are not discussed.",
+      "primary_assumption": "Ties broken by transaction slot order or tx order within slot",
+      "alternatives": ["Ties assigned same rank", "Random tie-breaking"],
+      "confidence": 0.65
+    }
+  ],
+
+  "confidence_annotations": {
+    "architecture": 0.95,
+    "mathematical_spec": 0.97,
+    "tensor_semantics": 0.90,
+    "training_pipeline": 0.92,
+    "evaluation_protocol": 0.97,
+    "implementation_assumptions": 0.72,
+    "overall_sir_confidence": 0.91
+  },
+
+  "data_release": {
+    "dataset_name": "RED-COHORT-2026-v1",
+    "license": "CC-BY-4.0",
+    "zenodo_concept_doi": "10.5281/zenodo.20978741",
+    "zenodo_version_doi": "10.5281/zenodo.20978742",
+    "released_files": [
+      "sniper_cohorts.jsonl",
+      "sniper_cohorts_intra.jsonl.gz",
+      "analyze_sniper_cohorts.py",
+      "gen_p7_artifacts.py",
+      "table1_top10_cohorts.csv",
+      "table2_size_distribution.csv",
+      "table3_descriptive_stats.csv",
+      "causal_buyer_flow.csv",
+      "causal_buyer_flow_summary.txt",
+      "appendix_a_ablations.csv",
+      "appendix_b_v2_placebo_cis.txt",
+      "fig1_size_distribution.svg",
+      "fig2_lorenz_curve.svg",
+      "fig3_score_vs_launches.svg"
+    ]
+  },
+
+  "related_work_by_author": [
+    {"ref": "Kamat 2026a", "ssrn": "6607301", "arxiv": "2606.08228", "topic": "Post-rejection follow-up sampling for counterfactual outcome measurement on Solana DEX"},
+    {"ref": "Kamat 2026b", "ssrn": "6702198", "arxiv": "2605.12151", "topic": "RED-2400 dataset of rejected memecoin trading events"}
+  ]
+}

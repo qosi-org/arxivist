@@ -1,0 +1,53 @@
+{
+  "paper_id": "arxiv_2606_11859",
+  "title": "Scenario Generation for Time Series and Curves: A Comparison of Nonparametric and Semiparametric Bootstrap",
+  "authors": ["Nicola Baldoni", "Michele Sparviero", "Lorenzo Viola"],
+  "domain": "Other",
+  "arxiv_id": "2606.11859v2",
+  "version": 1,
+  "created_at": "2026-07-14T00:00:00Z",
+  "last_updated": "2026-07-16T00:10:00Z",
+  "sir_confidence": 0.78,
+  "stages_with_data": ["sir", "architecture_plan", "repo", "notebooks", "comparison"],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2606_11859/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-14T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": ["all"]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-15T12:20:00Z",
+      "reason": "Stage 4 code generation + end-to-end validation completed (repo built, synthetic-data smoke test passed, 1 bug found and fixed in scripts/simulate.py)",
+      "changed_sections": ["stages_with_data", "repo_path validation"]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-16T00:00:00Z",
+      "reason": "Stage 5 notebook generation completed: primary reproduce notebook (20 cells) and exploratory notebook (15 cells) both generated and executed end-to-end via nbclient with zero errors",
+      "changed_sections": ["stages_with_data", "notebook artifacts"]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-16T00:10:00Z",
+      "reason": "Stage 6 results comparison completed. No user experimental results were submitted and the paper's data is proprietary, so no numeric reproducibility score could be honestly computed (requires_manual_review: true, score: null). Hallucination analysis was performed independently of user data: 1 Significant structural finding (non-functional model.engine='torch' option) and 5 pre-flagged parametric ambiguities catalogued; 0 omissions found.",
+      "changed_sections": ["has_comparison_report", "stages_with_data"]
+    }
+  ],
+  "extended_provenance": {
+    "affiliations": ["ARCA Fondi SGR"],
+    "arxiv_url": "https://arxiv.org/abs/2606.11859",
+    "submission_date": "2026-05",
+    "revised_date": "2026-06-20",
+    "jel_classification": ["C15", "C32", "C53", "E43", "G12", "G17"],
+    "keywords": [
+      "Stationary Bootstrap", "VAR-Bootstrap", "Nelson-Siegel", "Yield Curve",
+      "Scenario Generation", "Mean Reversion", "Financial Time Series",
+      "Term Structure of Interest Rates"
+    ],
+    "source_file": "2606_11859v2.pdf"
+  }
+}

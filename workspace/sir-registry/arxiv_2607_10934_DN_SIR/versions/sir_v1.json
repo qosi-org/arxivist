@@ -1,0 +1,557 @@
+{
+  "paper_id": "arxiv_2607_10934",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Multidimensional stochastic liquidity in Kyle's model of informed trading",
+    "authors": [
+      "Ibrahim Ekren",
+      "Evangelos A. Nikitopoulos",
+      "Lu Vy"
+    ],
+    "affiliations": [
+      "Department of Mathematics, University of Michigan",
+      "Department of Operations Research and Financial Engineering, Princeton University"
+    ],
+    "arxiv_id": "2607.10934",
+    "doi": null,
+    "submission_date": "2026-07-12",
+    "abstract": "We develop a variational formulation of Kyle's model of informed trading that accommodates stochastic liquidity and multiple traded assets. The main equilibrium result is stated first: under a martingale dual condition, a matrix-valued martingale depth process generates a linear-Gaussian equil",
+    "domain": "Other",
+    "key_claims": [
+      "Recasts multi-asset Kyle-Back equilibrium as a primal-dual variational problem over decreasing posterior-covariance paths, inspired by causal optimal transport.",
+      "Identifies informed trading as optimal liquidation of an information inventory, with a matrix-valued martingale M* (market depth) as the dual/shadow-price variable and Lambda* = (M*)^{-1} as price impact.",
+      "States the equilibrium as conditional on a 'martingale dual condition' (MDC): the dual variational optimizer, which exists unconditionally only as an F^W-local martingale, must in fact be a true, interior martingale.",
+      "Verifies MDC and recovers known closed-form equilibria in the scalar case (Kyle 1985, Back 1992, Back-Pedersen 1998, Collin-Dufresne-Fos 2016, Ekren-Mostowski-Zitkovic 2025) and in the multidimensional common-eigenbasis case (Back-Cocquemas-Ekren-Lioui 2020); the fully general matrix case is reduced to an open, fully-coupled matrix FBSDE.",
+      "Establishes an independently-interesting Doob-Meyer decomposition theorem for general (not necessarily symmetric) matrix-valued local submartingales."
+    ],
+    "parsed_at": "2026-07-15T13:02:20Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "General matrix-valued variational Kyle-Back equilibrium (Theorem 3.3, conditional on MDC)",
+    "modules": [
+      {
+        "name": "PrimalCovarianceLiquidationSolver",
+        "operation_type": "stochastic_optimal_control (calculus of variations over decreasing matrix-valued covariance paths)",
+        "input_shape": "Sigma_0 = C in S^n_++ (n x n SPD prior covariance), sigma_t in S^n_++ (n x n noise-volatility process)",
+        "output_shape": "Sigma_dot_t in S^n_- (n x n path, a.e. t in [0,T]); optimal Sigma*_t",
+        "parameters": {
+          "objective": "sup E[ int_0^T tr(sqrt(-sigma_t Sigma_dot_t sigma_t)) dt ]",
+          "constraints": "Sigma_0=C, Sigma_T>=0, Sigma_dot_t in S^n_-"
+        },
+        "paper_section": "4.1, eq. (4.1)-(4.3)",
+        "confidence": 0.9,
+        "notes": "This is the market-maker-side primal problem: state is posterior covariance of v-tilde, control is instantaneous information-release rate."
+      },
+      {
+        "name": "DualMartingaleDepthSolver",
+        "operation_type": "convex_duality / martingale_optimization",
+        "input_shape": "C in S^n_++, sigma_t in S^n_++",
+        "output_shape": "M*_t in S^n_++, an F^W-martingale (market depth); Lambda*_t = (M*_t)^{-1} (price impact)",
+        "parameters": {
+          "objective": "inf_{M in M} [ (1/2) tr(C M_0) + (1/2) E[int_0^T tr(sigma_t^2 M_t^{-1}) dt] ]"
+        },
+        "paper_section": "3, eq. (3.1)-(3.2); Theorem 4.5",
+        "confidence": 0.88,
+        "notes": "Existence of a local-martingale optimizer is unconditional (Theorem 4.5, via a Komlos/Delbaen-Schachermayer compactness argument over n(n+1)/2 scalar coordinates plus a matrix Doob-Meyer decomposition). Whether this optimizer is a TRUE, interior martingale is the martingale dual condition (MDC, Definition 3.1) and is the paper's central open structural hypothesis in the general case."
+      },
+      {
+        "name": "MatrixDoobMeyerDecomposition",
+        "operation_type": "theoretical_lemma (decomposition theorem, used inside DualMartingaleDepthSolver's existence proof)",
+        "input_shape": "X_t: n x n matrix-valued local submartingale",
+        "output_shape": "X_t = M_t + A_t, M local martingale, A nondecreasing predictable, A_0=0",
+        "parameters": {},
+        "paper_section": "Appendix B, Theorem B.3",
+        "confidence": 0.93,
+        "notes": "Generalizes scalar Doob-Meyer to general (not necessarily symmetric) matrix submartingales via the symmetric part Z=(X+X^T)/2 and antisymmetric part Y=(X-X^T)/2 (a martingale), decomposing Z coordinatewise along all e_i+e_j directions."
+      },
+      {
+        "name": "KalmanBucyPriceFilter",
+        "operation_type": "filtering / state_estimation",
+        "input_shape": "order flow Y*_t (n-dim), M*_t, sigma_t",
+        "output_shape": "P*_t = E[v-tilde | F^M_t] = p_0 + xi*_t; posterior covariance Sigma*_t = Var(v-tilde | F^M_t)",
+        "parameters": {
+          "xi_t": "int_0^t Lambda*_s dY_s",
+          "Sigma_t_backward_form": "int_t^T (M*_s)^{-1} sigma_s^2 (M*_s)^{-1} ds"
+        },
+        "paper_section": "Section 3 (Theorem 3.3), Appendix D.1 (Prop D.1-D.3)",
+        "confidence": 0.92,
+        "notes": "Standard Kalman-Bucy filter with the static hidden state v-tilde; equilibrium selects Sigma_t = Riccati solution matching Sigma_dot* from the primal problem."
+      },
+      {
+        "name": "InsiderOptimalStrategy",
+        "operation_type": "stochastic_control (verification via wealth decomposition)",
+        "input_shape": "v-tilde, P*_t, M*_t, Sigma*_t",
+        "output_shape": "dX*_t = sigma_t^2 (M*_t)^{-1} (Sigma*_t)^{-1} (v-tilde - p_0 - xi*_t) dt",
+        "parameters": {},
+        "paper_section": "eq. (3.8); Theorem D.8 (wealth decomposition), Theorem 3.3",
+        "confidence": 0.9,
+        "notes": "Inconspicuous (E[dX*_t/dt | F^M_t]=0) and drives xi*_T = v-tilde - p_0 a.s."
+      },
+      {
+        "name": "MDCVerification_ScalarCase",
+        "operation_type": "verification / closed_form_special_case",
+        "input_shape": "scalar sigma_t (possibly stochastic), scalar C",
+        "output_shape": "closed-form M*_t, recovers Kyle 1985 / Back 1992 / Back-Pedersen 1998 / Collin-Dufresne-Fos 2016",
+        "parameters": {},
+        "paper_section": "5.1-5.5",
+        "confidence": 0.9,
+        "notes": "Includes an explicit deterministic-growth case (5.4, CDF 2016) solved two ways (primal Euler-Lagrange under a measure change, and dual via a linear BSDE), and a general scalar stochastic-liquidity case (5.5) solved via Yong-Zhou's stochastic maximum principle, reducing to the quadratic BSDE of Ekren-Mostowski-Zitkovic (2025)."
+      },
+      {
+        "name": "MDCVerification_CommonEigenbasis",
+        "operation_type": "verification / closed_form_special_case",
+        "input_shape": "C and sigma_t simultaneously diagonalizable along a fixed orthogonal basis V for all t",
+        "output_shape": "M*_t block-diagonalizes into n independent scalar problems (Proposition 5.2), recovers Back-Cocquemas-Ekren-Lioui 2020 constant-volatility case",
+        "parameters": {},
+        "paper_section": "5.6, 5.3, Appendix E",
+        "confidence": 0.85,
+        "notes": "Reduces the multidimensional problem to n scalar problems solvable by MDCVerification_ScalarCase machinery."
+      },
+      {
+        "name": "GeneralMatrixFBSDE_OpenProblem",
+        "operation_type": "unsolved_stub (fully coupled matrix FBSDE)",
+        "input_shape": "n^2-dimensional vectorized system",
+        "output_shape": "not established; wellposedness left open",
+        "parameters": {
+          "forward_eq": "dM_t = M_t alpha~_t M_t dW_t",
+          "backward_eq": "dG~_t = M_t alpha~*_t G~_t alpha~*_t M_t dt + sigma_t^2 dt + U~_t dW_t"
+        },
+        "paper_section": "5.7, eq. (5.50)-(5.51)",
+        "confidence": 0.3,
+        "notes": "FLAGGED: this is explicitly an open problem in the paper (no known wellposedness theory for this class of fully coupled, quadratic-driver, singular-adjoint FBSDE). Any code reproduction can only implement this as a numerical experiment/heuristic solver, not a verified algorithm."
+      }
+    ],
+    "connections": [
+      {
+        "from": "PrimalCovarianceLiquidationSolver",
+        "to": "DualMartingaleDepthSolver",
+        "tensor_name": "Sigma_dot_t / M_t (Lagrangian duality, eq. 4.4-4.5)"
+      },
+      {
+        "from": "MatrixDoobMeyerDecomposition",
+        "to": "DualMartingaleDepthSolver",
+        "tensor_name": "used in existence proof, Theorem 4.5"
+      },
+      {
+        "from": "DualMartingaleDepthSolver",
+        "to": "KalmanBucyPriceFilter",
+        "tensor_name": "M*_t, Lambda*_t"
+      },
+      {
+        "from": "KalmanBucyPriceFilter",
+        "to": "InsiderOptimalStrategy",
+        "tensor_name": "P*_t, Sigma*_t"
+      },
+      {
+        "from": "DualMartingaleDepthSolver",
+        "to": "MDCVerification_ScalarCase",
+        "tensor_name": "specialization n=1"
+      },
+      {
+        "from": "DualMartingaleDepthSolver",
+        "to": "MDCVerification_CommonEigenbasis",
+        "tensor_name": "specialization: shared eigenbasis"
+      },
+      {
+        "from": "DualMartingaleDepthSolver",
+        "to": "GeneralMatrixFBSDE_OpenProblem",
+        "tensor_name": "specialization: general non-commuting case"
+      }
+    ],
+    "variants": [
+      {
+        "name": "Scalar (n=1)",
+        "differences": {
+          "solves_MDC": "yes, always (Section 5.1-5.5)",
+          "method": "closed form / linear BSDE / quadratic BSDE via stochastic maximum principle"
+        }
+      },
+      {
+        "name": "Common eigenbasis (n>1, C and sigma_t co-diagonalizable)",
+        "differences": {
+          "solves_MDC": "yes, reduces to n scalar problems (Section 5.6)"
+        }
+      },
+      {
+        "name": "General matrix-valued (n>1, non-commuting C, sigma_t)",
+        "differences": {
+          "solves_MDC": "open problem, reduces to unsolved coupled matrix FBSDE (Section 5.7)"
+        }
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Primal information-liquidation problem",
+      "latex": "\\sup_{\\Sigma} E\\left[\\int_0^T \\mathrm{tr}\\left(\\sqrt{-\\sigma_t \\dot\\Sigma_t \\sigma_t}\\right) dt\\right] \\ \\text{s.t.}\\ \\Sigma_0=C,\\ \\Sigma_T\\ge 0,\\ \\dot\\Sigma_t\\in S^n_-",
+      "role": "objective",
+      "used_in": "both",
+      "hyperparameters": [
+        "C (prior covariance)",
+        "T (horizon)",
+        "sigma_t (noise volatility process)"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "eq. (4.1)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Martingale dual condition (MDC) objective",
+      "latex": "\\inf_{M\\in\\mathcal M}\\left\\{\\tfrac12\\mathrm{tr}(CM_0) + \\tfrac12 E\\left[\\int_0^T \\mathrm{tr}(\\sigma_t^2 M_t^{-1})\\,dt\\right]\\right\\}",
+      "role": "objective",
+      "used_in": "both",
+      "hyperparameters": [
+        "C",
+        "sigma_t",
+        "T"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "eq. (3.2), Definition 3.1",
+      "confidence": 0.95
+    },
+    {
+      "name": "Lagrangian for primal-dual pair",
+      "latex": "L(\\dot\\Sigma_{[0,T]}, M_{[0,T]}) = \\tfrac12\\mathrm{tr}(CM_0) + E\\left[\\int_0^T \\mathrm{tr}\\left(\\sqrt{-\\sigma_t\\dot\\Sigma_t\\sigma_t} + \\tfrac12 M_t\\dot\\Sigma_t\\right) dt\\right]",
+      "role": "objective",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "eq. (4.4)",
+      "confidence": 0.93
+    },
+    {
+      "name": "Equilibrium price process",
+      "latex": "P^*_t = p_0 + \\xi^*_t = p_0 + \\int_0^t (M^*_s)^{-1}\\, dY^*_s = E[\\tilde v \\mid \\mathcal F^M_t]",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [
+        "p_0"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "eq. (3.9)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Equilibrium trading strategy",
+      "latex": "X^*_t = \\int_0^t \\sigma_s^2 (M^*_s)^{-1} (\\Sigma^*_s)^{-1} (\\tilde v - p_0 - \\xi^*_s)\\, ds",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "eq. (3.8)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Posterior covariance path",
+      "latex": "\\Sigma^*_t = C - \\int_0^t (M^*_s)^{-1}\\sigma_s^2(M^*_s)^{-1} ds = \\int_t^T (M^*_s)^{-1}\\sigma_s^2(M^*_s)^{-1} ds",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "eq. (3.6)-(3.7)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Wealth process",
+      "latex": "\\Pi_t(X,P) = \\int_0^t (\\tilde v - P_s)^\\top dX_s - \\langle X,P\\rangle_t",
+      "role": "objective",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Definition 2.4",
+      "confidence": 0.93
+    },
+    {
+      "name": "Insider value function / upper bound (verification potential)",
+      "latex": "\\varphi(t,\\xi) = \\tfrac12(\\xi+p_0)^\\top M^*_t(\\xi+p_0) + \\tfrac12 V(t,\\Sigma^*_t)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "eq. (D.14)-(D.15), Theorem D.8",
+      "confidence": 0.85
+    },
+    {
+      "name": "Kyle (1985) recovered price impact",
+      "latex": "\\lambda^*_t = \\frac{\\sqrt{\\Sigma_0}}{\\sigma}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [
+        "Sigma_0",
+        "sigma (constant)"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "5.1, eq. (5.5)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Collin-Dufresne-Fos (2016) recovered price impact",
+      "latex": "\\lambda_t = \\frac{1}{\\sigma_t}\\exp\\!\\left(\\int_0^t m(s)ds\\right)\\sqrt{\\frac{\\Sigma_0}{\\int_0^T \\exp(2\\int_0^t m(s)ds)\\,dt}}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [
+        "m(t) (deterministic drift of log sigma_t)",
+        "Sigma_0"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "5.4, eq. (5.27)",
+      "confidence": 0.9
+    },
+    {
+      "name": "Matrix-valued Doob-Meyer decomposition",
+      "latex": "X_t = M_t + A_t,\\quad M\\ \\text{local martingale},\\ A\\ \\text{nondecreasing predictable},\\ A_0=0",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Appendix B, Theorem B.3",
+      "confidence": 0.93
+    },
+    {
+      "name": "Stochastic maximum principle Hamiltonian (scalar stochastic liquidity)",
+      "latex": "H(t,s,\\alpha,G,U) = \\left(2m_t+\\nu_t^2+\\alpha^2-2\\alpha\\nu_t\\right)sG + (2\\nu_t-\\alpha)sU - s",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [
+        "m_t",
+        "nu_t"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "eq. (5.37), Section 5.5",
+      "confidence": 0.85
+    },
+    {
+      "name": "General matrix FBSDE (open problem)",
+      "latex": "d\\tilde G_t = M_t\\tilde\\alpha^*_t\\tilde G_t\\tilde\\alpha^*_t M_t\\,dt + \\sigma_t^2\\,dt + \\tilde U_t\\,dW_t,\\quad dM_t = M_t\\tilde\\alpha^*_t M_t\\,dW_t",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [
+        "\\tilde\\alpha^*_t (determined implicitly by a Lyapunov equation)"
+      ],
+      "paper_section": "eq. (5.50)-(5.51)",
+      "confidence": 0.6
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "v_tilde",
+      "shape_notation": "[n]",
+      "dtype": "float64",
+      "tensor_type": "input",
+      "module": "KalmanBucyPriceFilter",
+      "confidence": 0.9
+    },
+    {
+      "name": "sigma_t",
+      "shape_notation": "[n, n]",
+      "dtype": "float64",
+      "tensor_type": "input",
+      "module": "PrimalCovarianceLiquidationSolver",
+      "confidence": 0.85
+    },
+    {
+      "name": "C (prior covariance)",
+      "shape_notation": "[n, n]",
+      "dtype": "float64",
+      "tensor_type": "input",
+      "module": "PrimalCovarianceLiquidationSolver",
+      "confidence": 0.9
+    },
+    {
+      "name": "Sigma_t (posterior covariance)",
+      "shape_notation": "[n, n]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "PrimalCovarianceLiquidationSolver",
+      "confidence": 0.9
+    },
+    {
+      "name": "M_t (market depth martingale)",
+      "shape_notation": "[n, n]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "DualMartingaleDepthSolver",
+      "confidence": 0.9
+    },
+    {
+      "name": "Lambda_t (price impact)",
+      "shape_notation": "[n, n]",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "DualMartingaleDepthSolver",
+      "confidence": 0.9
+    },
+    {
+      "name": "Y_t (aggregate order flow)",
+      "shape_notation": "[n]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "KalmanBucyPriceFilter",
+      "confidence": 0.88
+    },
+    {
+      "name": "xi_t (state variable)",
+      "shape_notation": "[n]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "KalmanBucyPriceFilter",
+      "confidence": 0.88
+    },
+    {
+      "name": "X_t (insider cumulative demand)",
+      "shape_notation": "[n]",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "InsiderOptimalStrategy",
+      "confidence": 0.88
+    },
+    {
+      "name": "P_t (price process)",
+      "shape_notation": "[n]",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "KalmanBucyPriceFilter",
+      "confidence": 0.9
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": null,
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.15
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.1
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.15
+  },
+  "evaluation_protocol": {
+    "datasets": [],
+    "metrics": [
+      "Analytical/closed-form agreement with prior equilibria (exact recovery, not a numerical error metric)"
+    ],
+    "reported_results": [],
+    "baselines": [
+      "Kyle (1985)",
+      "Back (1992)",
+      "Back and Pedersen (1998)",
+      "Collin-Dufresne and Fos (2016)",
+      "Back, Cocquemas, Ekren, and Lioui (2020)",
+      "Ekren, Mostowski, and Zitkovic (2025)"
+    ],
+    "compute": null,
+    "special_conditions": [
+      "This is a purely theoretical paper: there are no numerical experiments, datasets, or empirical benchmark tables. 'Evaluation' consists entirely of analytically verifying that the general variational construction specializes to exactly recover five known closed-form Kyle-Back equilibria under successively more restrictive assumptions on C and sigma_t (Section 5). No compute/hardware is reported since nothing is trained or simulated numerically in the paper itself."
+    ],
+    "confidence": 0.55
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "A faithful 'reproduction' of this paper is a symbolic/numerical verification suite (e.g. in a CAS or via Monte Carlo simulation of the SDEs/BSDEs), not a trained ML model \u2014 there is no dataset, network, or optimizer to reproduce in the conventional ArXivist sense.",
+      "basis": "inferred from paper content (pure stochastic-control/probability theory paper, MSC-classified 91G15/91G80/60G44/60H30/49N90)",
+      "confidence": 0.9,
+      "alternatives": [
+        "Treat only the 5 closed-form benchmark cases (Section 5.1-5.4, 5.6) as reproducible unit tests, since Section 5.7's general case is an explicitly open problem"
+      ],
+      "affects_section": "architecture, training_pipeline, evaluation_protocol"
+    },
+    {
+      "assumption": "Numerical verification of the scalar stochastic-liquidity case (Section 5.5) requires a numerical BSDE solver (e.g. deep BSDE / Han-Jentzen-E method, or classical least-squares Monte Carlo) for the quadratic BSDE (5.44)-(5.45), since the paper only proves existence via citation to Ekren-Mostowski-Zitkovic (2025) without giving a numerical scheme.",
+      "basis": "common practice for quadratic BSDEs in the literature; not specified in this paper",
+      "confidence": 0.6,
+      "alternatives": [
+        "Restrict numerical verification to cases with closed-form M*_t (Sections 5.1-5.4, 5.6), which require no BSDE solver"
+      ],
+      "affects_section": "MDCVerification_ScalarCase"
+    },
+    {
+      "assumption": "For any numerical experiment, time is discretized on a uniform grid on [0,T] with a Euler-Maruyama scheme for the driving Brownian motions B and W; the paper works in continuous time throughout and specifies no discretization.",
+      "basis": "standard numerical practice for SDE/BSDE simulation",
+      "confidence": 0.7,
+      "alternatives": [
+        "Adaptive time-stepping",
+        "Exact simulation where closed-form transition densities are available (e.g. constant-sigma Kyle 1985 case)"
+      ],
+      "affects_section": "all verification modules"
+    },
+    {
+      "assumption": "The dimension n (number of traded assets) for any multi-asset numerical illustration should be small (e.g. n=2 or n=3) for tractable visualization/inspection of matrix-valued paths.",
+      "basis": "common practice; not specified",
+      "confidence": 0.65,
+      "alternatives": [
+        "n=1 (scalar, fully covered by paper's own benchmarks)"
+      ],
+      "affects_section": "MDCVerification_CommonEigenbasis, GeneralMatrixFBSDE_OpenProblem"
+    },
+    {
+      "assumption": "Matrix inversions of M_t/Sigma_t in any numerical scheme require a positive-definiteness safeguard (e.g. eigenvalue clipping or Cholesky-based solves) since the theory requires M_t, Sigma_t in S^n_++ but a naive discretization can produce numerically singular or indefinite matrices near t=T (where Sigma*_T=0).",
+      "basis": "standard numerical linear algebra practice for matrix Riccati/covariance paths",
+      "confidence": 0.7,
+      "alternatives": [
+        "Truncate the time horizon slightly before T to avoid the degenerate boundary"
+      ],
+      "affects_section": "PrimalCovarianceLiquidationSolver, KalmanBucyPriceFilter"
+    },
+    {
+      "assumption": "There is no reference implementation, code repository, or supplementary numerical artifact accompanying this paper (none is mentioned in the text).",
+      "basis": "no code/data availability statement found in the extracted text",
+      "confidence": 0.75,
+      "alternatives": [],
+      "affects_section": "provenance"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 5.7, eq. (5.50)-(5.51)",
+      "description": "The fully general matrix-valued case (non-commuting C, sigma_t) reduces to a fully coupled matrix FBSDE with a quadratic and singular driver. The paper explicitly states wellposedness of this FBSDE is open and does not provide a numerical or existence-theoretic resolution. Any 'implementation' of this stage can only be a heuristic/exploratory numerical experiment, not a verified reproduction.",
+      "primary_assumption": "Flag this stage as unimplementable-with-guarantees; restrict code reproduction to Sections 5.1-5.4 and 5.6 (scalar and common-eigenbasis cases) where MDC is proved to hold.",
+      "alternatives": [
+        "Attempt a deep-BSDE-style numerical solver for (5.50)-(5.51) purely as an exploratory heuristic, clearly labeled as unverified"
+      ],
+      "confidence": 0.3
+    },
+    {
+      "location": "Definition 3.1 (MDC) and Remark 3.2",
+      "description": "MDC is an abstract 'interior minimizer' condition on a matrix martingale; the paper proves it holds in specific benchmark cases but gives no general checkable numerical criterion for arbitrary (C, sigma_t) input data.",
+      "primary_assumption": "For arbitrary user-supplied (C, sigma_t) outside the benchmark cases, MDC verification cannot be automated; the code should only claim to verify equilibria for the cases explicitly covered in Section 5.",
+      "alternatives": [
+        "Numerically approximate the compactness argument of Theorem 4.5 (Komlos-type convex combinations) and empirically test whether the resulting limit stays uniformly bounded away from the boundary of S^n_++, as an empirical (non-rigorous) proxy for MDC"
+      ],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 5.4.1 / 5.4.2 and Section 5.5",
+      "description": "Several derivations invoke a Novikov-type condition on the volatility-of-volatility process nu(t, sigma_t) to justify a change of measure (Girsanov); the paper assumes but does not verify this condition holds for a generic choice of nu, m.",
+      "primary_assumption": "For numerical experiments, choose nu, m bounded and deterministic-in-sigma (e.g. constant or affine) so Novikov's condition trivially holds.",
+      "alternatives": [
+        "Use a truncated/localized version of nu for well-posedness, at the cost of an approximation error"
+      ],
+      "confidence": 0.55
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.62,
+    "mathematical_spec": 0.93,
+    "tensor_semantics": 0.55,
+    "training_pipeline": 0.15,
+    "evaluation_protocol": 0.55,
+    "implementation_assumptions": 0.55,
+    "overall_sir_confidence": 0.58
+  }
+}

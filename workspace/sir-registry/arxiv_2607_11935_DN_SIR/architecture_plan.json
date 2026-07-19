@@ -1,0 +1,313 @@
+{
+  "paper_id": "arxiv_2607_11935",
+  "plan_version": 1,
+  "created_at": "2026-07-17T18:20:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "This paper contains no trained neural network and no gradient-based optimisation of learned parameters -- it is a fixed-hyperparameter linear Kalman filter (R, Q set a priori) plus classical rolling-window time-series statistics (AR(1), variance, permutation entropy, mutual information) and cross-correlation lead-lag analysis. The real computational stack is numpy/scipy/pandas/statsmodels; no deep-learning framework is actually required. 'pytorch' is selected here only to satisfy this schema's required enum field (which assumes an ML paper) -- it is not imported or used anywhere in the generated code, and this is called out explicitly so nobody mistakes this for a neural-network reproduction. No GPU is needed: the entire pipeline operates on time series of length ~284 (observational) or a few hundred timesteps (simulations), trivially fast on CPU."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/ews_kalman/kalman/transition_matrix.py",
+      "description": "Builds the order-3 Taylor-expansion state-transition matrix F used by the TVP-Kalman filter",
+      "sir_modules_mapped": ["TVP-Kalman forward filter"],
+      "classes": []
+    },
+    {
+      "path": "src/ews_kalman/kalman/tvp_kalman.py",
+      "description": "TVP-Kalman forward filter and RTS backward smoother estimating the time-varying elasticity beta(t) and its first three derivatives",
+      "sir_modules_mapped": ["TVP-Kalman forward filter", "RTS backward smoother"],
+      "classes": [
+        {
+          "name": "TVPKalmanFilter",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "filter", "signature": "filter(self, log_x: np.ndarray, log_y: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]", "returns": "(x_filt [N,4], P_filt [N,4,4], x_pred [N,4], P_pred [N,4,4]) forward-filtered and one-step-predicted state/covariance sequences"},
+            {"name": "smooth", "signature": "smooth(self, x_filt: np.ndarray, P_filt: np.ndarray, x_pred: np.ndarray, P_pred: np.ndarray) -> Tuple[np.ndarray, np.ndarray]", "returns": "(x_smooth [N,4], P_smooth [N,4,4]) RTS-smoothed state/covariance sequences"},
+            {"name": "estimate_beta", "signature": "estimate_beta(self, x: np.ndarray, y: np.ndarray) -> Dict[str, np.ndarray]", "returns": "dict with 'beta', 'beta_prime', 'beta_double_prime', 'beta_triple_prime' arrays, each shape [N], from log(x), log(y) input series (runs filter+smooth internally)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/ews_kalman/ews/classical_ews.py",
+      "description": "Classical rolling-window eigenvalue-based EWS: AR(1), variance, permutation entropy, mutual information",
+      "sir_modules_mapped": ["Classical rolling-window EWS computation"],
+      "classes": [
+        {
+          "name": "ClassicalEWS",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "rolling_ar1", "signature": "rolling_ar1(self, x: np.ndarray, window: int = 24) -> np.ndarray", "returns": "array of lag-1 autocorrelation estimates per rolling window, length len(x)-window+1"},
+            {"name": "rolling_variance", "signature": "rolling_variance(self, x: np.ndarray, window: int = 24) -> np.ndarray", "returns": "array of rolling sample variances"},
+            {"name": "rolling_permutation_entropy", "signature": "rolling_permutation_entropy(self, x: np.ndarray, embedding_dim: int = 3, window: int = 36) -> np.ndarray", "returns": "array of Bandt-Pompe ordinal-pattern permutation entropy values per rolling window"},
+            {"name": "rolling_mutual_information", "signature": "rolling_mutual_information(self, x: np.ndarray, y: np.ndarray, window: int = 36, n_neighbors: int = 3) -> np.ndarray", "returns": "array of kNN-based (Kraskov-style) mutual information estimates between x and y per rolling window"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/ews_kalman/ews/lead_lag.py",
+      "description": "Cross-correlation lead-lag analysis between beta (and its derivatives) and classical EWS signals; simulation lead-time-to-tipping-point detection",
+      "sir_modules_mapped": ["Lead-lag cross-correlation analysis"],
+      "classes": [
+        {
+          "name": "LeadLagAnalyzer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "optimal_lag", "signature": "optimal_lag(self, signal_a: np.ndarray, signal_b: np.ndarray, max_lag: int = 24) -> Tuple[int, float]", "returns": "(lag_in_steps, correlation_at_optimal_lag); positive lag means signal_a leads signal_b"},
+            {"name": "pearson_orthogonality", "signature": "pearson_orthogonality(self, beta: np.ndarray, other_ews: np.ndarray) -> Tuple[float, float]", "returns": "(pearson_r, p_value) between two aligned signals"},
+            {"name": "first_significant_deviation", "signature": "first_significant_deviation(self, signal: np.ndarray, baseline_mean: float, baseline_std: float, z_threshold: float = 2.0) -> Optional[int]", "returns": "index of first timestep where |z-score| exceeds z_threshold relative to a baseline window, or None if never exceeded"},
+            {"name": "simulation_lead_time", "signature": "simulation_lead_time(self, ews_signal: np.ndarray, tipping_index: int, baseline_window: Tuple[int,int], z_threshold: float = 2.0) -> Optional[int]", "returns": "lead time in timesteps (tipping_index - first_significant_deviation_index), or None if the EWS never crosses threshold before the tipping point"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/ews_kalman/simulation/tipping_systems.py",
+      "description": "Generators for the six simulated dynamical systems with known tipping points (fold bifurcation, beta step change, beta linear decay, logistic map, Stommel AMOC, critical slowing down)",
+      "sir_modules_mapped": ["Simulated tipping-point system generators"],
+      "classes": [
+        {
+          "name": "TippingSystemSimulator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "fold_bifurcation", "signature": "fold_bifurcation(self, n_steps: int = 250, tipping_t: int = 200, noise_std: float = 0.05, dt: float = 1.0, seed: int = 0) -> Dict[str, np.ndarray]", "returns": "dict with 'x' (response series), 'r' (forcing series), 'tipping_index'"},
+            {"name": "beta_step_change", "signature": "beta_step_change(self, n_steps: int = 300, tipping_t: int = 200, beta_before: float = 0.8, beta_after: float = 0.2, noise_std: float = 0.1, seed: int = 0) -> Dict[str, np.ndarray]", "returns": "dict with 'x' (driver), 'y' (response), 'beta_true', 'tipping_index'"},
+            {"name": "beta_linear_decay", "signature": "beta_linear_decay(self, n_steps: int = 300, decay_start: int = 0, decay_end: int = 250, beta_start: float = 1.0, beta_end: float = 0.2, noise_std: float = 0.1, seed: int = 0) -> Dict[str, np.ndarray]", "returns": "dict with 'x', 'y', 'beta_true', 'tipping_index' (=decay_end)"},
+            {"name": "logistic_map", "signature": "logistic_map(self, n_steps: int = 400, tipping_t: int = 133, r_start: float = 2.5, r_end: float = 4.0, seed: int = 0) -> Dict[str, np.ndarray]", "returns": "dict with 'x' (logistic map series), 'r' (control-parameter series), 'tipping_index'"},
+            {"name": "stommel_amoc", "signature": "stommel_amoc(self, n_steps: int = 300, tipping_t: int = 200, freshwater_forcing_rate: float = 0.005, noise_std: float = 0.02, seed: int = 0) -> Dict[str, np.ndarray]", "returns": "dict with 'T' (temperature-difference box state), 'S' (salinity-difference box state), 'psi' (overturning strength), 'tipping_index'"},
+            {"name": "critical_slowing_down", "signature": "critical_slowing_down(self, n_steps: int = 300, tipping_t: int = 250, lambda_start: float = 1.0, lambda_end: float = 0.0, noise_std: float = 0.1, seed: int = 0) -> Dict[str, np.ndarray]", "returns": "dict with 'x' (relaxation-process series), 'lambda' (decay-rate series), 'tipping_index'"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/ews_kalman/data/airs_loader.py",
+      "description": "Loads NASA AIRS monthly regional time series (from local CSV export of a Giovanni-portal query, or a bundled/synthetic fallback), with region bounding-box metadata",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "AIRSDataLoader",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "load_region", "signature": "load_region(self, region_name: str, data_dir: str = 'data/raw') -> Dict[str, np.ndarray]", "returns": "dict with 'dates', 'T' (surface skin temperature), 'q' (surface water-vapor mixing ratio), for the named region ('arctic', 'tropics', 'monsoon')"},
+            {"name": "region_bounds", "signature": "region_bounds(self, region_name: str) -> Dict[str, float]", "returns": "dict with lat_min, lat_max, lon_min, lon_max for the named region"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/ews_kalman/evaluation/region_stats.py",
+      "description": "Computes the Table-1/Table-2-style region-level summary statistics (mean |beta|, sigma_beta, Pearson correlations, transition counts, lead-lag tables) from a region's beta and classical-EWS time series",
+      "sir_modules_mapped": ["Lead-lag cross-correlation analysis"],
+      "classes": [
+        {
+          "name": "RegionSummaryComputer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "compute_table1_row", "signature": "compute_table1_row(self, beta: np.ndarray, ar1_T: np.ndarray, mi: np.ndarray, beta_double_prime: np.ndarray) -> Dict[str, float]", "returns": "dict with N, abs_beta_mean, sigma_beta, r_beta_ar1, r_beta_ar1_pvalue, r_beta_mi, r_beta_mi_pvalue, n_transitions (beta''=0 sign changes)"},
+            {"name": "compute_table2_row", "signature": "compute_table2_row(self, beta_derivatives: Dict[str, np.ndarray], classical_signals: Dict[str, np.ndarray], max_lag: int = 24) -> Dict[str, Dict[str, Dict[str, float]]]", "returns": "nested dict mapping each beta-derivative name to each classical-signal name to {'lag', 'direction', 'correlation'}"},
+            {"name": "count_regime_transitions", "signature": "count_regime_transitions(self, beta_double_prime: np.ndarray) -> int", "returns": "number of beta''=0 zero-crossings"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/ews_kalman/evaluation/simulation_validation.py",
+      "description": "Runs all six simulated systems through both the beta and classical-AR(1) pipelines and reports lead-time-to-tipping-point, reproducing Table 3",
+      "sir_modules_mapped": ["Simulated tipping-point system generators", "Lead-lag cross-correlation analysis"],
+      "classes": [
+        {
+          "name": "SimulationValidator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "validate_one_system", "signature": "validate_one_system(self, system_name: str, x: np.ndarray, y: Optional[np.ndarray], tipping_index: int) -> Dict", "returns": "dict with simulation, tipping_t, beta_lead, ar1_lead, winner -- dispatches to linear-mode Kalman filtering for the two explicitly-linear systems (beta step change, beta linear decay) and loglog-mode for the rest"},
+            {"name": "validate_all_systems", "signature": "validate_all_systems(self, sim_config: Optional[Dict] = None, seed: int = 0) -> List[Dict]", "returns": "list of 6 dicts matching Table 3's columns"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/ews_kalman/utils/plotting.py",
+      "description": "Reproduces Figure 1 (beta vs classical EWS overlay per region), Figure 2 (lead-lag bar charts), Figure 3 (simulation validation grid)",
+      "sir_modules_mapped": [],
+      "classes": [],
+      "functions": [
+        {"name": "plot_figure1_overlay", "signature": "plot_figure1_overlay(region_results: Dict, save_path: Optional[str] = None) -> plt.Figure", "returns": "matplotlib figure with one stacked subplot per region"},
+        {"name": "plot_figure2_leadlag_bars", "signature": "plot_figure2_leadlag_bars(table2_results: Dict, save_path: Optional[str] = None) -> plt.Figure", "returns": "matplotlib figure with per-region lead-lag bar charts"},
+        {"name": "plot_figure3_simulation_grid", "signature": "plot_figure3_simulation_grid(simulation_raw: List[Dict], simulation_beta: List[np.ndarray], simulation_ar1: List[np.ndarray], save_path: Optional[str] = None) -> plt.Figure", "returns": "matplotlib figure with a 6x3 grid (raw series / beta / classical EWS per system)"}
+      ]
+    },
+    {
+      "path": "src/ews_kalman/utils/config.py",
+      "description": "YAML config loading and global random-seed management",
+      "sir_modules_mapped": [],
+      "classes": []
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "Observational beta estimation and lead-lag pipeline (per region)",
+      "input": {"name": "region T, q monthly series", "shape": "[284] each", "dtype": "float64"},
+      "output": {"name": "Table 1/2 style summary row", "shape": "scalars + per-signal lag table", "dtype": "float64/int"},
+      "steps": [
+        "AIRSDataLoader.load_region(region_name) -> raw T[284], q[284] series",
+        "log_T = log(T), log_q = log(q)",
+        "TVPKalmanFilter.estimate_beta(log_T, log_q) -> beta, beta', beta'', beta''' [284] each",
+        "ClassicalEWS.rolling_ar1(T, window=24), rolling_variance(T, window=24) -> AR1_T[261], Var_T[261]",
+        "ClassicalEWS.rolling_permutation_entropy(T, m=3, window=36), rolling_mutual_information(T, q, window=36) -> PermEnt_T[249], MI[249]",
+        "LeadLagAnalyzer.pearson_orthogonality(beta, AR1_T) -> (r, p) for Table 1",
+        "LeadLagAnalyzer.optimal_lag(beta_derivative, classical_signal) for each pair -> Table 2 lag entries",
+        "RegionSummaryComputer.compute_table1_row(...) / compute_table2_row(...) -> final summary dict"
+      ]
+    },
+    {
+      "name": "Simulated tipping-point validation pipeline (per system)",
+      "input": {"name": "simulated (x_t, y_t) or x_t series with known tipping_index", "shape": "[~250-400] timesteps", "dtype": "float64"},
+      "output": {"name": "lead time (timesteps) for beta vs AR(1)", "shape": "scalar per system", "dtype": "int or None"},
+      "steps": [
+        "TippingSystemSimulator.<system>(...) -> simulated series + tipping_index",
+        "TVPKalmanFilter.estimate_beta(log(x), log(y)) -> beta[N] (or apply directly to x if system is univariate, e.g. critical_slowing_down)",
+        "ClassicalEWS.rolling_ar1(x, window=<system-appropriate>) -> AR1[N']",
+        "LeadLagAnalyzer.first_significant_deviation(beta, baseline_mean, baseline_std, z_threshold=2.0) -> beta_detection_index",
+        "LeadLagAnalyzer.first_significant_deviation(AR1, baseline_mean, baseline_std, z_threshold=2.0) -> ar1_detection_index",
+        "lead_time = ar1_detection_index - beta_detection_index (positive => beta leads)",
+        "Compare against paper's Table 3 reported lead times (39-153 timesteps) as a qualitative, not exact, validation target"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "kalman_state_dim": 4,
+      "kalman_R": 0.001,
+      "kalman_Q_diag": [1.0e-6, 1.0e-7, 1.0e-8, 1.0e-9],
+      "kalman_dt_years": 0.0833333,
+      "transition_matrix_form": "taylor_order3  # ASSUMED confidence 0.55: paper names this matrix but does not give numeric entries (SIR ambiguity #1)"
+    },
+    "training": {
+      "note": "Not applicable -- no trained/learned parameters in this paper. R and Q above are fixed filter-design hyperparameters, not fit to data."
+    },
+    "data": {
+      "regions": ["arctic", "tropics", "monsoon"],
+      "region_bounds": {
+        "arctic": {"lat_min": 65, "lat_max": 90, "lon_min": -180, "lon_max": 180},
+        "tropics": {"lat_min": -10, "lat_max": 10, "lon_min": -180, "lon_max": 180},
+        "monsoon": {"lat_min": 5, "lat_max": 25, "lon_min": 60, "lon_max": 100}
+      },
+      "n_observations": 284,
+      "date_range": ["2002-09", "2026-04"],
+      "variables": {"T": "SurfSkinTemp_A", "q": "H2O_MMR_Surf_A"},
+      "use_synthetic_fallback": true,
+      "ar1_variance_window_months": 24,
+      "permutation_entropy_embedding_dim": 3,
+      "permutation_entropy_window_months": 36,
+      "mutual_information_window_months": 36
+    },
+    "evaluation": {
+      "significance_z_threshold": 2.0,
+      "max_cross_correlation_lag_months": 24,
+      "simulation_systems": ["fold_bifurcation", "beta_step_change", "beta_linear_decay", "logistic_map", "stommel_amoc", "critical_slowing_down"],
+      "simulation_noise_std": "0.02-0.1 per system  # ASSUMED confidence 0.4: not given numerically in paper (SIR ambiguity #2)"
+    },
+    "hardware": {
+      "device": "cpu",
+      "precision": "float64",
+      "num_workers": 1
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "numpy", "version": "1.26.4", "reason": "Core numerical arrays, Kalman filter linear algebra"},
+      {"package": "scipy", "version": "1.13.1", "reason": "Statistical tests (Pearson r + p-value), cross-correlation, optimisation utilities"},
+      {"package": "pandas", "version": "2.2.2", "reason": "Time-indexed series handling, rolling-window utilities, CSV I/O for AIRS data"},
+      {"package": "scikit-learn", "version": "1.5.0", "reason": "k-nearest-neighbor infrastructure for the mutual-information estimator (mutual_info_regression)"},
+      {"package": "matplotlib", "version": "3.9.0", "reason": "Reproducing paper Figures 1-3 (beta vs classical EWS time series, lead-lag bar charts, simulation validation panels)"},
+      {"package": "pyyaml", "version": "6.0.1", "reason": "Config file loading"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": "8.2.0"},
+      {"package": "pytest-cov", "version": "5.0.0"},
+      {"package": "black", "version": "24.4.2"},
+      {"package": "ruff", "version": "0.4.4"},
+      {"package": "jsonschema", "version": "4.22.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "run_observational_analysis.py",
+      "purpose": "Run the full TVP-Kalman beta estimation + classical EWS + lead-lag pipeline on the three NASA AIRS regions, reproducing Tables 1-2 and Figures 1-2",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--region", "type": "str", "required": false, "default": "all", "help": "arctic | tropics | monsoon | all"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write summary tables and figures"}
+      ]
+    },
+    {
+      "filename": "run_simulation_validation.py",
+      "purpose": "Run the six simulated tipping-point systems and measure beta-vs-AR(1) lead times, reproducing Table 3 and Figure 3",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--system", "type": "str", "required": false, "default": "all", "help": "One of the 6 named systems, or 'all'"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write results and figures"}
+      ]
+    },
+    {
+      "filename": "run_all.py",
+      "purpose": "Convenience wrapper running both the observational AIRS analysis and the six-system simulation validation in sequence, reproducing Tables 1-3 and Figures 1-3",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write all result tables and figures"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.11-slim",
+    "system_deps": ["build-essential", "gcc"],
+    "workdir": "/workspace",
+    "default_cmd": "python run_all.py --config configs/config.yaml"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "The order-3 Taylor-expansion state-transition matrix F is named but not given numerically in the paper (Section 2.2); an incorrect F would bias beta's smoothness/derivative estimates and hence the lead-lag timing results, which are the paper's central claim.",
+      "source": "SIR ambiguity #1, mathematical_spec 'TVP-Kalman state transition equation', confidence 0.55-0.8",
+      "mitigation": "Implement the standard factorial-scaled kinematic/Taylor chain matrix (position/velocity/acceleration/jerk analogue) as the default, expose it as a swappable function in transition_matrix.py, and unit-test the filter's behaviour on a synthetic series with a known analytic beta(t) trajectory to confirm the smoother recovers it to a specified tolerance regardless of the exact F convention chosen."
+    },
+    {
+      "severity": "High",
+      "description": "The six simulated systems' noise magnitudes, exact forcing schedules (especially the Stommel AMOC freshwater-forcing trajectory), and simulation lengths are not given numerically, so this repo's simulations will not reproduce Table 3's exact lead-time numbers (39-153 timesteps) -- only the qualitative pattern (beta leads AR(1) when coupling degrades, but not for the univariate fold bifurcation) is expected to hold.",
+      "source": "SIR ambiguity #2, implementation_assumptions[3], confidence 0.4-0.45",
+      "mitigation": "Document illustrative default parameters clearly as ASSUMED in configs/config.yaml, expose all simulation parameters (noise_std, forcing rates, tipping times) as function arguments so a user can tune them, and validate success by the qualitative pattern (sign and relative ordering of lead times across systems) rather than by asserting exact timestep matches to Table 3."
+    },
+    {
+      "severity": "Medium",
+      "description": "NASA AIRS data access requires either a Giovanni-portal download (interactive/manual) or an Earthdata-authenticated API call; the exact spatial-averaging procedure used to reduce gridded data to one series per region is also unspecified.",
+      "source": "SIR implementation_assumptions[4], evaluation_protocol.datasets",
+      "mitigation": "data/README_data.md documents the manual Giovanni pulls needed (variable names, date range, region boxes) and data/download.sh is a documentation-only script (no auto-download, matching the LSEG precedent from a prior ArXivist run); a synthetic-fallback data generator produces plausible T,q series per region (calibrated to roughly match Table 1's reported |beta| and sigma_beta magnitudes) so the pipeline runs end-to-end without live NASA Earthdata credentials."
+    },
+    {
+      "severity": "Medium",
+      "description": "Permutation entropy and mutual-information estimator implementations are named but not fully specified (exact algorithm/library, tie-breaking convention for ordinal patterns, kNN parameter k for MI).",
+      "source": "SIR implementation_assumptions[2], confidence 0.5",
+      "mitigation": "Implement permutation entropy via the standard Bandt-Pompe ordinal-pattern method and mutual information via a Kraskov-Stogbauer-Grassberger-style kNN estimator (both textbook-standard, parameterised so k and tie-breaking are configurable), and unit-test each against known closed-form values (e.g. permutation entropy of an i.i.d. uniform series should approach log(m!))."
+    },
+    {
+      "severity": "Medium",
+      "description": "Two of the six simulated systems (\"beta step change\", \"beta linear decay\") are explicitly defined in the paper via a linear relationship y=beta(t)*x+eps (Section 2.4), not a log-log power law. An initial implementation applied the log-log elasticity filter uniformly to all six systems, which caused a multi-hundred-timestep Kalman warm-up transient to be mistaken for a genuine regime-change detection on these two systems.",
+      "source": "Discovered empirically while testing SimulationValidator.validate_all_systems() -- beta_lead values were suspiciously equal to tipping_t itself, indicating detection at t=0",
+      "mitigation": "TVPKalmanFilter now supports two observation modes (mode='loglog' for the real T-q elasticity application, mode='linear' for a direct time-varying regression coefficient). SimulationValidator dispatches to mode='linear' specifically for the two explicitly-linear systems and mode='loglog' (after a positivity shift) for the remaining four, resolving the spurious-detection artifact and producing a Table-3 pattern that now qualitatively matches the paper (fold bifurcation won by AR1, logistic map tied, beta winning clearly on the two coupling-degradation systems)."
+    },
+    {
+      "severity": "Low",
+      "description": "This is a statistics/filtering paper with no trained model, so the SIR's training_pipeline section and this plan's config_schema.training are both marked not-applicable; there is a risk that this gets misread as a missing/incomplete reproduction rather than an accurate reflection of the paper's methodology.",
+      "source": "SIR training_pipeline confidence 0.9 (high confidence that it is genuinely N/A)",
+      "mitigation": "README.md states explicitly and prominently that there is no trained model here, only a fixed-hyperparameter Kalman filter plus classical time-series statistics, to avoid any confusion with the quantum-computing paper's very different (trained-circuit) reproduction pattern."
+    }
+  ]
+}

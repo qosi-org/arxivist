@@ -1,0 +1,15 @@
+torch>=2.1
+# DNABERT-2's 2023 remote code needs help on modern transformers; the loader
+# (models/classifier.py) handles it: injects the missing pad_token_id, disables
+# meta-device lazy init, and selects the PyTorch attention branch so the stale
+# Triton kernel is never compiled. No version pin required.
+transformers>=4.35
+einops>=0.7
+triton>=2.0 ; platform_system == "Linux"   # DNABERT-2 Flash-Attn remote code (Colab/Linux GPU)
+datasets>=2.14
+huggingface_hub>=0.19
+scikit-learn>=1.3
+pandas>=2.0
+pyyaml>=6.0
+tqdm>=4.66
+numpy>=1.24

@@ -1,0 +1,40 @@
+# RED-COHORT-2026 Configuration
+# Paper: Coordinated Sniper Cohorts on Pump.fun (Kamat, 2026)
+# DOI: 10.5281/zenodo.20978741
+# All SIR confidence scores annotated inline.
+
+detection:
+  first_buyer_window: 10         # SIR confidence: 0.97 — explicitly stated in paper
+  edge_weight_cutoff: 3          # SIR confidence: 0.97 — explicitly stated; ablation at [2,3,5]
+  max_cohort_size: 12            # SIR confidence: 0.97 — explicitly stated (MAX_COHORT_SIZE=12)
+  score_tau: 40.0                # ASSUMED: exact tau undisclosed (SIR confidence: 0.55)
+                                 # Default 40.0 is below reported median score of 52.8.
+                                 # Use detect.py --calibrate to binary-search for target count.
+  touch_threshold_score: 1       # ASSUMED: >=1 for score computation (SIR confidence: 0.68)
+                                 # TODO: verify with paper author — may be >=2 (matching causal)
+  touch_threshold_causal: 2      # SIR confidence: 0.97 — explicitly stated for causal analysis
+  ablation_cutoffs: [2, 3, 5]    # SIR confidence: 0.97 — Appendix A values
+
+causal:
+  window_minutes: 30             # SIR confidence: 0.97 — first-30-minute outcome window
+  control_ratio: 3               # SIR confidence: 0.97 — 3:1 design explicitly stated
+  random_seed: 42                # SIR confidence: 0.97 — seed=42 explicitly stated
+  bootstrap_iterations: 1000     # SIR confidence: 0.97 — 1,000 iterations stated
+  bootstrap_ci_level: 0.95       # SIR confidence: 0.97 — 95% CI stated
+  activity_match_tolerance: 100  # SIR confidence: 0.97 — ±100 launches stated
+  top_k_exclusion: 3             # SIR confidence: 0.97 — top-3 exclusion in Appendix B.2
+
+tier_thresholds:
+  premium_min_launches: 20       # SIR confidence: 0.97 — explicitly stated
+  high_min_launches: 10          # SIR confidence: 0.97 — explicitly stated
+  high_min_score: 100.0          # SIR confidence: 0.97 — explicitly stated
+
+data:
+  buyers_path: data/pumpfun_buyers.jsonl
+  launches_path: data/pumpfun_launches.jsonl
+  intra_path: data/sniper_cohorts_intra.jsonl.gz   # Stage-1 checkpoint (optional bypass)
+  output_dir: results/
+
+hardware:
+  n_workers: 4
+  chunk_size: 100000

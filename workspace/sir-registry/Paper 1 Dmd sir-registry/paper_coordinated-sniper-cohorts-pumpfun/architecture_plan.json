@@ -1,0 +1,591 @@
+{
+  "paper_id": "paper_coordinated-sniper-cohorts-pumpfun",
+  "architecture_plan_version": 1,
+  "generated_at": "2026-07-14T00:03:00Z",
+
+  "framework_selection": {
+    "primary_language": "Python 3.10+",
+    "primary_framework": "pandas + networkx + scipy + numpy",
+    "rationale": "Paper is an algorithmic detection pipeline, not a neural network. No deep learning framework needed. pandas covers JSONL ingestion and tabular manipulation; networkx provides graph primitives (union-find via connected_components); scipy provides bootstrap CI utilities; numpy provides vectorized math for score computation. Framework matches the released analyze_sniper_cohorts.py / gen_p7_artifacts.py naming convention.",
+    "cuda_required": false,
+    "huggingface_required": false,
+    "config_management": "YAML via PyYAML + dataclasses (no Hydra — pipeline is simple enough that a single config.yaml with a typed dataclass is sufficient)",
+    "project_name": "red_cohort",
+    "repo_root": "red-cohort-2026"
+  },
+
+  "module_hierarchy": {
+    "root": "red-cohort-2026/",
+    "files": [
+      {
+        "path": "src/red_cohort/__init__.py",
+        "role": "Package init; exports public API symbols",
+        "classes": [],
+        "public_api": ["detect_cohorts", "run_causal_analysis"],
+        "sir_components": []
+      },
+      {
+        "path": "src/red_cohort/io/loader.py",
+        "role": "Reads pumpfun_buyers.jsonl and pumpfun_launches.jsonl into typed DataFrames",
+        "classes": ["DataLoader"],
+        "public_methods": [
+          "load_buyers(path: str) -> pd.DataFrame",
+          "load_launches(path: str) -> pd.DataFrame",
+          "validate_schema(df: pd.DataFrame, schema: str) -> bool"
+        ],
+        "sir_components": ["PassiveSolanaObserver (output ingestion side)"],
+        "notes": "PassiveSolanaObserver itself (live Solana listener) is out of scope for reproducibility repo — we consume its outputs."
+      },
+      {
+        "path": "src/red_cohort/io/__init__.py",
+        "role": "IO subpackage init",
+        "classes": [],
+        "public_api": [],
+        "sir_components": []
+      },
+      {
+        "path": "src/red_cohort/detection/extractor.py",
+        "role": "Stage 1 — IntraLaunchExtractor. Filters buyer events to first-N buyers per mint.",
+        "classes": ["IntraLaunchExtractor"],
+        "public_methods": [
+          "extract(buyers_df: pd.DataFrame, window_size: int = 10) -> pd.DataFrame",
+          "get_qualifying_mints(buyers_df: pd.DataFrame) -> list[str]"
+        ],
+        "sir_components": ["Stage1_IntraLaunchExtractor"],
+        "output_schema": "{mint: str, wallet: str, rank: int, block_time: int, sol_committed: float}"
+      },
+      {
+        "path": "src/red_cohort/detection/graph.py",
+        "role": "Builds weighted co-occurrence graph G=(V,E) and applies edge-weight filter",
+        "classes": ["CoOccurrenceGraph"],
+        "public_methods": [
+          "build(intra_index: pd.DataFrame) -> nx.Graph",
+          "filter_edges(G: nx.Graph, min_weight: int = 3) -> nx.Graph",
+          "get_edge_weight_distribution(G: nx.Graph) -> pd.Series"
+        ],
+        "sir_components": ["CoOccurrenceGraphBuilder", "EdgeWeightFilter"]
+      },
+      {
+        "path": "src/red_cohort/detection/union_find.py",
+        "role": "Surfaces connected components via union-find; applies size filter",
+        "classes": ["CohortSurface"],
+        "public_methods": [
+          "surface(G_filtered: nx.Graph) -> list[frozenset[str]]",
+          "apply_size_filter(components: list[frozenset], max_size: int = 12) -> list[frozenset[str]]"
+        ],
+        "sir_components": ["UnionFindCohortSurface", "CohortSizeFilter"],
+        "implementation_note": "Use networkx.connected_components() which internally uses BFS/union-find. Equivalent to manual union-find with path-compression."
+      },
+      {
+        "path": "src/red_cohort/detection/scorer.py",
+        "role": "Computes EQ1 cohort score and assigns tier labels",
+        "classes": ["CohortScorer", "TierClassifier"],
+        "public_methods": [
+          "score(cohort_wallets: frozenset, intra_index: pd.DataFrame, touch_threshold: int = 1) -> dict",
+          "score_all(components: list[frozenset], intra_index: pd.DataFrame) -> pd.DataFrame",
+          "classify_tier(row: pd.Series, premium_min_launches: int = 20, high_min_launches: int = 10, high_min_score: float = 100.0) -> str",
+          "apply_score_threshold(cohorts_df: pd.DataFrame, tau: float) -> pd.DataFrame"
+        ],
+        "sir_components": ["CohortScorer", "TierClassifier"],
+        "sir_equation": "EQ1",
+        "confidence_notes": {
+          "tau": "ASSUMED: tau ~ 40-50 (confidence 0.55). Implemented as configurable param with default=40.0. TODO: verify against paper author.",
+          "touch_indicator": "ASSUMED: uses >=1 wallet for score, >=2 for causal analysis (confidence 0.68). Exposed as config param touch_threshold_score."
+        }
+      },
+      {
+        "path": "src/red_cohort/detection/__init__.py",
+        "role": "Detection subpackage init; exposes detect_cohorts() pipeline function",
+        "classes": [],
+        "public_api": ["detect_cohorts(buyers_path: str, config: DetectionConfig) -> pd.DataFrame"]
+      },
+      {
+        "path": "src/red_cohort/detection/pipeline.py",
+        "role": "Orchestrates the full Stage1→Stage2 detection pipeline as a single callable",
+        "classes": ["DetectionPipeline"],
+        "public_methods": [
+          "run(buyers_df: pd.DataFrame) -> pd.DataFrame",
+          "run_ablation(buyers_df: pd.DataFrame, cutoffs: list[int]) -> dict[int, pd.DataFrame]"
+        ],
+        "sir_components": ["all Stage 1 + 2 components in sequence"]
+      },
+      {
+        "path": "src/red_cohort/causal/sample.py",
+        "role": "Constructs treated and control samples for random-matched causal design",
+        "classes": ["CausalSampleBuilder"],
+        "public_methods": [
+          "build_treated(cohorts_df: pd.DataFrame, intra_index: pd.DataFrame, touch_threshold: int = 2) -> list[str]",
+          "build_control(all_mints: list[str], treated_mints: list[str], ratio: int = 3, seed: int = 42) -> list[str]",
+          "attach_outcomes(mints: list[str], buyers_df: pd.DataFrame, launches_df: pd.DataFrame, window_minutes: int = 30) -> pd.DataFrame"
+        ],
+        "sir_components": ["causal design from Section 6.1-6.2"]
+      },
+      {
+        "path": "src/red_cohort/causal/estimator.py",
+        "role": "Computes percentage lift (EQ2) and bootstrap CIs",
+        "classes": ["LiftEstimator"],
+        "public_methods": [
+          "compute_lift(treated_outcomes: pd.Series, control_outcomes: pd.Series) -> float",
+          "bootstrap_ci(treated_outcomes: pd.Series, control_outcomes: pd.Series, n_iter: int = 1000, ci_level: float = 0.95, seed: int = 42) -> tuple[float, float]",
+          "estimate(treated_df: pd.DataFrame, control_df: pd.DataFrame, outcome_col: str) -> dict"
+        ],
+        "sir_components": ["EQ2 lift estimator"],
+        "sir_equation": "EQ2"
+      },
+      {
+        "path": "src/red_cohort/causal/placebo.py",
+        "role": "Constructs both placebo designs (uniform-random and activity-matched)",
+        "classes": ["UniformRandomPlacebo", "ActivityMatchedPlacebo"],
+        "public_methods": [
+          "UniformRandomPlacebo.build(cohorts_df: pd.DataFrame, buyers_df: pd.DataFrame, seed: int = 42) -> pd.DataFrame",
+          "ActivityMatchedPlacebo.build(cohorts_df: pd.DataFrame, buyers_df: pd.DataFrame, match_tolerance: int = 100, seed: int = 42) -> pd.DataFrame",
+          "ActivityMatchedPlacebo.match_wallet(target_count: int, candidate_pool: pd.DataFrame, tolerance: int) -> str"
+        ],
+        "sir_components": ["Section 6.4 placebo designs — both Design 1 and Design 2"]
+      },
+      {
+        "path": "src/red_cohort/causal/robustness.py",
+        "role": "Runs the three robustness checks: top-3 exclusion, tier stratification",
+        "classes": ["RobustnessChecker"],
+        "public_methods": [
+          "top_k_exclusion(cohorts_df: pd.DataFrame, k: int = 3) -> pd.DataFrame",
+          "tier_stratification(cohorts_df: pd.DataFrame, treated_df: pd.DataFrame, control_df: pd.DataFrame, estimator: LiftEstimator) -> pd.DataFrame"
+        ],
+        "sir_components": ["Section 6.5 robustness checks"]
+      },
+      {
+        "path": "src/red_cohort/causal/__init__.py",
+        "role": "Causal subpackage init",
+        "classes": [],
+        "public_api": ["run_causal_analysis(cohorts_df: pd.DataFrame, buyers_df: pd.DataFrame, launches_df: pd.DataFrame, config: CausalConfig) -> dict"]
+      },
+      {
+        "path": "src/red_cohort/analysis/descriptive.py",
+        "role": "Produces all descriptive statistics from Section 5 (Table 1-3, Lorenz curve data)",
+        "classes": ["DescriptiveAnalyzer"],
+        "public_methods": [
+          "top_k_cohorts(cohorts_df: pd.DataFrame, k: int = 10) -> pd.DataFrame",
+          "size_distribution(cohorts_df: pd.DataFrame) -> pd.DataFrame",
+          "headline_stats(cohorts_df: pd.DataFrame) -> dict",
+          "lorenz_data(cohorts_df: pd.DataFrame) -> tuple[list, list]"
+        ],
+        "sir_components": ["Section 5 descriptive results"]
+      },
+      {
+        "path": "src/red_cohort/analysis/visualizer.py",
+        "role": "Produces figures matching Fig 1 (size distribution), Fig 2 (Lorenz), Fig 3 (score vs launches)",
+        "classes": ["Visualizer"],
+        "public_methods": [
+          "fig1_size_distribution(cohorts_df: pd.DataFrame, output_path: str) -> None",
+          "fig2_lorenz_curve(lorenz_data: tuple, output_path: str) -> None",
+          "fig3_score_vs_launches(cohorts_df: pd.DataFrame, output_path: str) -> None"
+        ],
+        "sir_components": ["Figures 1-3"]
+      },
+      {
+        "path": "src/red_cohort/analysis/__init__.py",
+        "role": "Analysis subpackage init",
+        "classes": [],
+        "public_api": []
+      },
+      {
+        "path": "src/red_cohort/utils/config.py",
+        "role": "Typed configuration dataclasses loaded from config.yaml",
+        "classes": ["DetectionConfig", "CausalConfig", "PipelineConfig"],
+        "public_methods": [
+          "load_config(path: str) -> PipelineConfig",
+          "PipelineConfig.from_yaml(path: str) -> PipelineConfig"
+        ],
+        "sir_components": []
+      },
+      {
+        "path": "src/red_cohort/utils/io_helpers.py",
+        "role": "JSONL streaming utilities, address anonymization (first4+last4), output serialization",
+        "classes": ["JsonlStreamer", "AddressAnonymizer"],
+        "public_methods": [
+          "JsonlStreamer.stream(path: str) -> Iterator[dict]",
+          "JsonlStreamer.write(records: list[dict], path: str) -> None",
+          "AddressAnonymizer.truncate(address: str) -> str"
+        ],
+        "sir_components": ["Section 3.2 anonymization"]
+      },
+      {
+        "path": "src/red_cohort/utils/__init__.py",
+        "role": "Utils subpackage init",
+        "classes": [],
+        "public_api": []
+      }
+    ]
+  },
+
+  "data_flow_specification": {
+    "pipeline_stages": [
+      {
+        "name": "INGEST",
+        "input": "pumpfun_buyers.jsonl (1,578,333 records), pumpfun_launches.jsonl (1,315,257 records)",
+        "input_schema": "buyers: {mint: str, wallet: str, slot: int, blockTime: int, sol_in: float, tx_sig: str, rank: int}",
+        "output": "buyers_df: DataFrame[N_buyers x 7 cols], launches_df: DataFrame[N_launches x 9 cols]",
+        "pseudocode": [
+          "stream pumpfun_buyers.jsonl line-by-line",
+          "parse each JSON record into dict",
+          "accumulate into DataFrame, cast dtypes (blockTime→int64, sol_in→float64, rank→int32)",
+          "repeat for pumpfun_launches.jsonl",
+          "return (buyers_df, launches_df)"
+        ]
+      },
+      {
+        "name": "STAGE1_EXTRACT",
+        "input": "buyers_df: DataFrame[1,578,333 x 7]",
+        "output": "intra_index: DataFrame[~1,660,980 x 5] (up to 10 rows per qualifying mint)",
+        "pseudocode": [
+          "filter buyers_df to rows where rank <= window_size (default 10)",
+          "group by mint, keep only mints with at least 1 buyer in [1, window_size]",
+          "result columns: {mint, wallet, rank, block_time, sol_committed}",
+          "qualifying_mints = unique mints in result (paper: 166,098)"
+        ]
+      },
+      {
+        "name": "GRAPH_BUILD",
+        "input": "intra_index: DataFrame[~1,660,980 x 5]",
+        "output": "G_raw: nx.Graph(V=wallets, E=weighted co-occurrence pairs)",
+        "pseudocode": [
+          "group intra_index by mint → get list of wallets per mint",
+          "for each mint, generate all (wallet_i, wallet_j) unordered pairs where i != j",
+          "for each pair (u, v): if edge exists increment weight by 1, else add edge with weight=1",
+          "result: G_raw with |V| = unique wallet addresses, |E| = all co-occurrence pairs"
+        ]
+      },
+      {
+        "name": "EDGE_FILTER",
+        "input": "G_raw: nx.Graph",
+        "output": "G_filtered: nx.Graph (only edges with weight >= min_weight=3)",
+        "pseudocode": [
+          "iterate over edges of G_raw",
+          "retain edge (u, v, w) if w >= min_weight",
+          "paper reports 9,788 qualifying pairs at cutoff=3"
+        ]
+      },
+      {
+        "name": "UNION_FIND",
+        "input": "G_filtered: nx.Graph",
+        "output": "components_raw: list[frozenset[str]] (1,161 at cutoff=3)",
+        "pseudocode": [
+          "call nx.connected_components(G_filtered)",
+          "collect each component as frozenset of wallet address strings",
+          "result: list of frozensets (each frozenset = one candidate cohort)"
+        ]
+      },
+      {
+        "name": "SIZE_FILTER",
+        "input": "components_raw: list[frozenset] (1,161)",
+        "output": "components_filtered: list[frozenset] (1,012)",
+        "pseudocode": [
+          "discard any component with len(component) > max_cohort_size (default 12)",
+          "paper: reduces 1,161 → 1,012"
+        ]
+      },
+      {
+        "name": "SCORE_AND_TIER",
+        "input": "components_filtered: list[frozenset], intra_index: DataFrame",
+        "output": "cohorts_df: DataFrame[1,012 x ~12 cols]",
+        "pseudocode": [
+          "for each component C in components_filtered:",
+          "  touched_launches = mints where any wallet in C appears in intra_index (using touch_threshold_score=1)",
+          "  n_launches = len(touched_launches)",
+          "  for each touched launch: record min rank attained by any C wallet",
+          "  mean_first_rank = mean of per-launch min ranks",
+          "  total_sol = sum of sol_committed for all C wallets across touched launches",
+          "  score = 10 * n_launches + 5 / mean_first_rank + sqrt(total_sol)",
+          "  tier = 'premium' if n_launches>=20 else 'high' if (n_launches>=10 or score>=100) else 'standard'",
+          "apply score threshold tau (default 40.0) to filter out very-low-quality components",
+          "assign cohort_id = 'COH-{NNNN}' sorted by descending score",
+          "return cohorts_df"
+        ],
+        "score_equation": "EQ1",
+        "configurable_params": ["touch_threshold_score (default 1, ambiguity-flagged)", "tau (default 40.0, undisclosed in paper)"]
+      },
+      {
+        "name": "CAUSAL_SAMPLE",
+        "input": "cohorts_df: DataFrame, buyers_df: DataFrame, launches_df: DataFrame",
+        "output": "treated_df: DataFrame[5,411 x outcome_cols], control_df: DataFrame[16,233 x outcome_cols]",
+        "pseudocode": [
+          "treated_mints = mints where >=2 cohort wallets appear in first-10 buyers (strict threshold)",
+          "untouched_mints = qualifying_mints - treated_mints",
+          "control_mints = random sample of untouched_mints, size=3*len(treated_mints), seed=42",
+          "for each mint in treated + control:",
+          "  compute first_30min_buyer_count (distinct buyers within 30min of launch created_timestamp)",
+          "  compute first_30min_sol_inflow (sum sol_in within 30min)",
+          "  compute total_buyer_count",
+          "return treated_df, control_df"
+        ]
+      },
+      {
+        "name": "LIFT_ESTIMATE",
+        "input": "treated_df: DataFrame, control_df: DataFrame, outcome_col: str",
+        "output": "result: {point_estimate: float, ci_lower: float, ci_upper: float, treated_mean: float, control_mean: float}",
+        "pseudocode": [
+          "treated_mean = mean(treated_df[outcome_col])",
+          "control_mean = mean(control_df[outcome_col])",
+          "point_lift = (treated_mean - control_mean) / control_mean * 100",
+          "bootstrap_lifts = []",
+          "for i in range(n_iter=1000):",
+          "  t_sample = treated_df[outcome_col].sample(frac=1.0, replace=True, random_state=seed+i)",
+          "  c_sample = control_df[outcome_col].sample(frac=1.0, replace=True, random_state=seed+i+10000)",
+          "  bootstrap_lifts.append((mean(t_sample) - mean(c_sample)) / mean(c_sample) * 100)",
+          "ci_lower = percentile(bootstrap_lifts, 2.5)",
+          "ci_upper = percentile(bootstrap_lifts, 97.5)",
+          "return {point_estimate, ci_lower, ci_upper, treated_mean, control_mean}"
+        ],
+        "equation": "EQ2"
+      },
+      {
+        "name": "PLACEBO_ACTIVITY_MATCHED",
+        "input": "cohorts_df: DataFrame, buyers_df: DataFrame",
+        "output": "placebo_cohorts_df: DataFrame (1,012 placebo cohorts, same schema as cohorts_df)",
+        "pseudocode": [
+          "non_cohort_wallets = all wallets in buyers_df NOT in any real cohort",
+          "compute per-wallet launch count for all non_cohort_wallets",
+          "for each real cohort C with wallets w1..wk:",
+          "  for each wi: get wi's launch_count",
+          "  for each wi: sample one non_cohort_wallet with launch_count within ±match_tolerance (default 100) of wi's count",
+          "  if match found: form placebo_cohort of size k from sampled wallets",
+          "collect 1,012 placebo cohorts",
+          "compute placebo-touched mints (>=2 placebo wallets in first-10 buyers of same mint)",
+          "return placebo_cohorts_df with same schema"
+        ]
+      }
+    ]
+  },
+
+  "configuration_schema": {
+    "file": "configs/config.yaml",
+    "template": {
+      "detection": {
+        "first_buyer_window": 10,
+        "edge_weight_cutoff": 3,
+        "max_cohort_size": 12,
+        "score_tau": "40.0  # ASSUMED: exact tau undisclosed (SIR confidence 0.55). Adjust to match target cohort count.",
+        "touch_threshold_score": "1  # ASSUMED: >=1 for score computation (SIR confidence 0.68). Set to 2 to match causal analysis threshold.",
+        "touch_threshold_causal": 2,
+        "ablation_cutoffs": [2, 3, 5]
+      },
+      "causal": {
+        "window_minutes": 30,
+        "control_ratio": 3,
+        "random_seed": 42,
+        "bootstrap_iterations": 1000,
+        "bootstrap_ci_level": 0.95,
+        "activity_match_tolerance": 100,
+        "top_k_exclusion": 3
+      },
+      "tier_thresholds": {
+        "premium_min_launches": 20,
+        "high_min_launches": 10,
+        "high_min_score": 100.0
+      },
+      "data": {
+        "buyers_path": "data/pumpfun_buyers.jsonl",
+        "launches_path": "data/pumpfun_launches.jsonl",
+        "output_dir": "results/"
+      },
+      "hardware": {
+        "n_workers": 4,
+        "chunk_size": 100000
+      }
+    }
+  },
+
+  "dependencies_manifest": {
+    "requirements_txt": [
+      "pandas==2.2.2",
+      "numpy==1.26.4",
+      "networkx==3.3",
+      "scipy==1.13.1",
+      "matplotlib==3.9.0",
+      "pyyaml==6.0.1",
+      "tqdm==4.66.4",
+      "orjson==3.10.3"
+    ],
+    "requirements_dev_txt": [
+      "pytest==8.2.2",
+      "pytest-cov==5.0.0",
+      "black==24.4.2",
+      "ruff==0.4.7",
+      "mypy==1.10.0",
+      "ipykernel==6.29.4",
+      "jupyter==1.0.0"
+    ],
+    "environment_yaml": {
+      "name": "red-cohort",
+      "channels": ["conda-forge", "defaults"],
+      "dependencies": [
+        "python=3.10",
+        "pandas=2.2.2",
+        "numpy=1.26.4",
+        "networkx=3.3",
+        "scipy=1.13.1",
+        "matplotlib=3.9.0",
+        "pyyaml=6.0.1",
+        "tqdm=4.66.4",
+        "pip",
+        {"pip": ["orjson==3.10.3"]}
+      ]
+    },
+    "dependency_rationale": {
+      "pandas": "Core tabular data structure for buyer_event and launch_metadata DataFrames",
+      "numpy": "Vectorized score computation and bootstrap percentile CI",
+      "networkx": "Graph construction, edge filtering, connected_components (union-find equivalent)",
+      "scipy": "Statistical utilities (not strictly required but useful for future PSM extension)",
+      "matplotlib": "Figures 1-3 reproduction (size distribution bar, Lorenz curve, score scatter)",
+      "pyyaml": "Config file loading",
+      "tqdm": "Progress bars for 1.5M-record JSONL streaming",
+      "orjson": "Fast JSONL parsing (10-30x faster than stdlib json for large files)"
+    }
+  },
+
+  "entrypoints": [
+    {
+      "file": "detect.py",
+      "purpose": "Run the full two-stage detection pipeline; outputs cohort catalogue JSONL",
+      "cli_args": [
+        {"arg": "--buyers", "type": "str", "required": true, "help": "Path to pumpfun_buyers.jsonl"},
+        {"arg": "--config", "type": "str", "default": "configs/config.yaml", "help": "Config YAML path"},
+        {"arg": "--output", "type": "str", "default": "results/sniper_cohorts.jsonl", "help": "Output cohort catalogue"},
+        {"arg": "--ablation", "type": "flag", "help": "Run edge-weight ablation across cutoffs [2,3,5]"},
+        {"arg": "--cutoff", "type": "int", "default": 3, "help": "Override edge_weight_cutoff for single run"}
+      ],
+      "outputs": ["results/sniper_cohorts.jsonl", "results/table2_size_distribution.csv", "results/table3_descriptive_stats.csv", "results/appendix_a_ablations.csv (if --ablation)"]
+    },
+    {
+      "file": "analyze.py",
+      "purpose": "Load cohort catalogue and produce descriptive statistics + all three figures",
+      "cli_args": [
+        {"arg": "--cohorts", "type": "str", "required": true, "help": "Path to sniper_cohorts.jsonl"},
+        {"arg": "--output-dir", "type": "str", "default": "results/", "help": "Output directory for figures and tables"},
+        {"arg": "--top-k", "type": "int", "default": 10, "help": "Number of top cohorts in Table 1"}
+      ],
+      "outputs": ["results/table1_top10_cohorts.csv", "results/fig1_size_distribution.svg", "results/fig2_lorenz_curve.svg", "results/fig3_score_vs_launches.svg"]
+    },
+    {
+      "file": "causal.py",
+      "purpose": "Run causal buyer-flow analysis: random-matched design + both placebo checks + robustness checks",
+      "cli_args": [
+        {"arg": "--buyers", "type": "str", "required": true, "help": "Path to pumpfun_buyers.jsonl"},
+        {"arg": "--launches", "type": "str", "required": true, "help": "Path to pumpfun_launches.jsonl"},
+        {"arg": "--cohorts", "type": "str", "required": true, "help": "Path to sniper_cohorts.jsonl"},
+        {"arg": "--config", "type": "str", "default": "configs/config.yaml"},
+        {"arg": "--output", "type": "str", "default": "results/causal_buyer_flow.csv"},
+        {"arg": "--skip-placebo", "type": "flag", "help": "Skip placebo checks (faster)"},
+        {"arg": "--seed", "type": "int", "default": 42}
+      ],
+      "outputs": ["results/causal_buyer_flow.csv", "results/causal_buyer_flow_summary.txt", "results/appendix_b_v2_placebo_cis.txt"]
+    },
+    {
+      "file": "run_all.py",
+      "purpose": "Master script: runs detect → analyze → causal in sequence, reproducing all paper artifacts",
+      "cli_args": [
+        {"arg": "--buyers", "type": "str", "required": true},
+        {"arg": "--launches", "type": "str", "required": true},
+        {"arg": "--config", "type": "str", "default": "configs/config.yaml"},
+        {"arg": "--output-dir", "type": "str", "default": "results/"}
+      ],
+      "outputs": ["All results/ artifacts from detect.py + analyze.py + causal.py"]
+    }
+  ],
+
+  "docker_spec": {
+    "base_image": "python:3.10-slim",
+    "rationale": "No GPU needed; slim base keeps image small (~150MB vs 3GB+ for CUDA variants)",
+    "system_deps": ["build-essential", "git"],
+    "python_setup": [
+      "COPY requirements.txt .",
+      "RUN pip install --no-cache-dir -r requirements.txt",
+      "COPY src/ ./src/",
+      "COPY configs/ ./configs/",
+      "COPY *.py ."
+    ],
+    "workdir": "/app",
+    "volume_mounts": ["/app/data (bind-mount for JSONL input files)", "/app/results (bind-mount for outputs)"],
+    "default_cmd": "python run_all.py --buyers data/pumpfun_buyers.jsonl --launches data/pumpfun_launches.jsonl",
+    "env_vars": ["PYTHONUNBUFFERED=1", "PYTHONPATH=/app/src"]
+  },
+
+  "risk_assessment": [
+    {
+      "id": "RISK-01",
+      "severity": "HIGH",
+      "component": "CohortScorer — score threshold tau",
+      "description": "The exact numeric value of tau is not disclosed in the paper. Our default of 40.0 is an assumption. Running with a different tau will yield a different cohort count (more or fewer than 1,012), making exact reproduction of Table 3 headline numbers impossible without calibration.",
+      "sir_confidence": 0.55,
+      "mitigation": "Expose tau as a CLI argument. Add a --calibrate flag to binary-search tau until cohort_count == target (default 1012). Document clearly in README. Use abstract base class pattern in CohortScorer so tau logic is easily swapped.",
+      "architecture_response": "CohortScorer.apply_score_threshold() is a single isolated method. The calibrate() classmethod will implement binary search."
+    },
+    {
+      "id": "RISK-02",
+      "severity": "MEDIUM",
+      "component": "CohortScorer — touch indicator definition (>=1 vs >=2)",
+      "description": "Whether the score formula's 1{C touches L} uses >=1 or >=2 cohort wallets is ambiguous (SIR confidence 0.68). The choice affects n_launches_hit per cohort and therefore tier classification.",
+      "sir_confidence": 0.68,
+      "mitigation": "Expose touch_threshold_score as a config parameter (default 1). Add TODO comment in scorer.py. Output both variants when --ablation is passed.",
+      "architecture_response": "touch_threshold_score is a required parameter in CohortScorer.score() method signature, not a hardcoded constant."
+    },
+    {
+      "id": "RISK-03",
+      "severity": "MEDIUM",
+      "component": "ActivityMatchedPlacebo — small placebo n=173",
+      "description": "The activity-matched placebo yields only 173 treated mints (vs 5,411 for real cohorts) when using the >=2 wallet strict touch threshold. This makes the placebo CI much wider, and the comparison is power-asymmetric. We cannot reproduce the exact 173 without the exact non-cohort wallet pool.",
+      "sir_confidence": 0.70,
+      "mitigation": "Implement placebo with the same >=2 strict threshold as paper. Report sample sizes in output summary. Add --placebo-touch-threshold param to allow >=1 variant for comparison. Note power asymmetry in causal_buyer_flow_summary.txt output.",
+      "architecture_response": "ActivityMatchedPlacebo.build() exposes touch_threshold as parameter."
+    },
+    {
+      "id": "RISK-04",
+      "severity": "MEDIUM",
+      "component": "DataLoader — blockTime tie-breaking",
+      "description": "Buyer rank is assigned by sorting blockTime. Ties within the same blockTime are not specified. Different tie-breaking strategies can shift ranks near position 10, affecting which wallets are included in the first-buyer window.",
+      "sir_confidence": 0.65,
+      "mitigation": "Default tie-breaking: sort by (blockTime ASC, tx_sig ASC) — lexicographic on transaction signature, which provides a deterministic canonical order matching typical Solana indexer behavior. Flag as TODO in loader.py.",
+      "architecture_response": "DataLoader.load_buyers() applies sort_values(['blockTime', 'tx_sig']) before assigning rank. Tie-breaking column is configurable."
+    },
+    {
+      "id": "RISK-05",
+      "severity": "LOW",
+      "component": "CoOccurrenceGraph — memory scaling",
+      "description": "With 166,098 mints and up to 10 buyers each, the maximum number of wallet pairs generated is C(10,2) × 166,098 ≈ 7.5M. This fits comfortably in RAM (< 1GB), but the raw graph before filtering may be large.",
+      "sir_confidence": 0.95,
+      "mitigation": "Stream pair generation using itertools.combinations per mint. Use a defaultdict(int) counter for edge weights rather than building the full networkx graph before filtering. Only pass filtered edges to networkx.",
+      "architecture_response": "CoOccurrenceGraph.build() uses streaming pair accumulation. networkx graph is constructed only from G_filtered edges."
+    },
+    {
+      "id": "RISK-06",
+      "severity": "LOW",
+      "component": "Data access — pumpfun_buyers.jsonl and pumpfun_launches.jsonl",
+      "description": "The raw input files are not in the Zenodo data release (too large). Users must either collect their own data via a Solana RPC listener or obtain from the author. Reproducibility therefore requires data access.",
+      "sir_confidence": 0.95,
+      "mitigation": "Include a data/README.md explaining how to collect data from Solana RPC. Provide a data/sample_buyers.jsonl (first 10,000 rows of anonymized structure) for pipeline smoke-testing. The released sniper_cohorts_intra.jsonl.gz can serve as a Stage-1 checkpoint to skip raw ingestion.",
+      "architecture_response": "loader.py supports reading from sniper_cohorts_intra.jsonl.gz directly to bypass Stage 1 (--from-intra flag in detect.py)."
+    }
+  ],
+
+  "test_strategy": {
+    "unit_tests": [
+      "test_extractor.py — verify first-10-buyer filtering on synthetic 20-buyer DataFrame",
+      "test_graph.py — verify edge weight computation on known co-occurrence fixtures",
+      "test_union_find.py — verify connected components on a 3-wallet triangle graph",
+      "test_scorer.py — verify EQ1 score computation against COH-0001 known values (9 wallets, 42 launches, score 430.44)",
+      "test_tier.py — verify Premium/High/Standard classification boundaries",
+      "test_estimator.py — verify EQ2 lift and bootstrap CI on synthetic treated/control arrays",
+      "test_placebo.py — verify activity-matched wallet sampling within tolerance"
+    ],
+    "integration_tests": [
+      "test_pipeline_smoke.py — run full detect pipeline on 1,000-row synthetic buyers fixture; verify output schema",
+      "test_causal_smoke.py — run causal pipeline on small synthetic cohort set"
+    ],
+    "regression_benchmarks": [
+      "With released sniper_cohorts_intra.jsonl.gz as input: assert cohort_count == 1012 (or within ±50 given tau ambiguity)",
+      "assert median_cohort_size == 2",
+      "assert max_launches_hit == 42",
+      "assert COH-0001 score == 430.44 (±0.1)"
+    ]
+  }
+}

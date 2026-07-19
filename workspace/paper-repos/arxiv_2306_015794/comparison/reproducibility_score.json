@@ -1,0 +1,38 @@
+{
+  "paper_id": "arxiv_2306_015794",
+  "comparison_date": "2026-07-12",
+  "reproducibility_score": 0.94,
+  "score_confidence": "medium",
+  "metrics_compared": 1,
+  "metrics_matched": 1,
+  "arxivist_sir_version": 1,
+  "metric_comparisons": [
+    {
+      "metric": "accuracy",
+      "dataset": "GenomicBenchmarks/human_nontata_promoters",
+      "split": "test",
+      "paper_value": 0.966,
+      "user_value": 0.9471,
+      "absolute_deviation": -0.0189,
+      "deviation_pct": -1.96,
+      "direction": "below",
+      "severity": "excellent",
+      "root_causes": []
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 1,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0,
+    "unmatched": 0
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 1,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": false
+}

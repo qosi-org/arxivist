@@ -1,0 +1,114 @@
+{
+  "paper_id": "arxiv_2306_015794",
+  "sir_version": 1,
+  "provenance": {
+    "title": "HyenaDNA: Long-Range Genomic Sequence Modeling at Single Nucleotide Resolution",
+    "authors": ["Eric Nguyen", "Michael Poli", "Marjan Faizi", "Armin Thomas", "Callum Birch-Sykes", "Michael Wornow", "Aman Patel", "Clayton Rabideau", "Stefano Massaroli", "Yoshua Bengio", "Stefano Ermon", "Stephen A. Baccus", "Chris Re"],
+    "affiliations": ["Stanford University", "Harvard University", "SynTensor", "Mila", "Universite de Montreal"],
+    "arxiv_id": "2306.15794",
+    "doi": null,
+    "submission_date": "2023-06-27",
+    "abstract": "HyenaDNA is a genomic foundation model pretrained on the human reference genome with context lengths of up to 1 million tokens at single-nucleotide resolution, using the Hyena operator (implicit long convolutions) for sub-quadratic scaling. It achieves ~500x longer context than dense attention models and state-of-the-art results on Nucleotide Transformer and GenomicBenchmarks tasks.",
+    "domain": "Multimodal",
+    "key_claims": [
+      "Genomic foundation model with context up to 1M tokens at single-nucleotide resolution",
+      "Sub-quadratic scaling via Hyena implicit convolutions; trains up to 160x faster than Transformer",
+      "SOTA on 12 of 18 Nucleotide Transformer benchmarks and 7 of 8 GenomicBenchmarks datasets",
+      "First demonstration of in-context learning in genomics",
+      "Uses far fewer parameters than baseline genomic Transformers (e.g. 1500x fewer than NT-2.5B)"
+    ],
+    "parsed_at": "2026-07-11T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "hyenadna-tiny-1k (d_model=128, n_layer=2)",
+    "modules": [
+      {"name": "CharTokenizer", "operation_type": "tokenization", "input_shape": "[B, L] chars", "output_shape": "[B, L] int64", "parameters": {"vocab": ["A","C","G","T","N","pad","unk","sep"], "vocab_size": 12}, "paper_section": "Sec 3 / Appendix", "confidence": 0.85, "notes": "Character-level single-nucleotide vocabulary. Exact special-token set inferred from repo (pad id 4)."},
+      {"name": "TokenEmbedding", "operation_type": "embedding", "input_shape": "[B, L]", "output_shape": "[B, L, D]", "parameters": {"D": 128}, "paper_section": "Sec 3", "confidence": 0.85, "notes": null},
+      {"name": "HyenaBlock", "operation_type": "hyena_operator", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"order": 2, "short_filter_len": 3, "long_conv": "FFT O(L log L)", "implicit_filter_mlp": true}, "paper_section": "Sec 3, Hyena (Poli et al. 2023)", "confidence": 0.7, "notes": "Order-2 Hyena recurrence; long conv parameterized by an implicit MLP over positions, applied via FFT. Filter MLP details inferred from Hyena paper."},
+      {"name": "FFN", "operation_type": "mlp", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"expansion": 4, "activation": "GELU"}, "paper_section": "Sec 3", "confidence": 0.75, "notes": "Reverse-bottleneck MLP, 4x expansion."},
+      {"name": "LayerNorm", "operation_type": "normalization", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"pre_norm": true}, "paper_section": "Sec 3", "confidence": 0.7, "notes": "Pre-norm residual assumed (standard for Hyena/decoder blocks)."},
+      {"name": "LMHead", "operation_type": "linear", "input_shape": "[B, L, D]", "output_shape": "[B, L, vocab]", "parameters": {"tied_weights": true}, "paper_section": "Sec 3", "confidence": 0.7, "notes": "Weight-tied next-token prediction head assumed."}
+    ],
+    "connections": [
+      {"from": "CharTokenizer", "to": "TokenEmbedding", "tensor_name": "token_ids"},
+      {"from": "TokenEmbedding", "to": "HyenaBlock", "tensor_name": "hidden"},
+      {"from": "HyenaBlock", "to": "FFN", "tensor_name": "hidden"},
+      {"from": "FFN", "to": "LMHead", "tensor_name": "hidden"}
+    ],
+    "variants": [
+      {"name": "tiny-1k", "differences": {"d_model": 128, "n_layer": 2, "max_len": 1024, "params_M": 0.44}},
+      {"name": "small-32k", "differences": {"d_model": 256, "n_layer": 2, "max_len": 32768, "params_M": 1.6}},
+      {"name": "medium-160k", "differences": {"d_model": 256, "n_layer": 8, "max_len": 160000}},
+      {"name": "medium-450k", "differences": {"d_model": 256, "n_layer": 8, "max_len": 450000}},
+      {"name": "large-1m", "differences": {"d_model": 256, "n_layer": 8, "max_len": 1000000, "params_M": 6.6}}
+    ]
+  },
+  "mathematical_spec": [
+    {"name": "Hyena operator", "latex": "y = x_2 \\odot \\mathrm{FFTConv}(h,\\; x_1 \\odot \\mathrm{FFTConv}(h_0, x_0))", "role": "other", "used_in": "both", "hyperparameters": ["order", "filter_len"], "undefined_symbols": [], "paper_section": "Sec 3", "confidence": 0.65},
+    {"name": "Implicit long filter", "latex": "h(t) = \\mathrm{MLP}(\\gamma(t)) \\cdot \\mathrm{Window}(t)", "role": "other", "used_in": "both", "hyperparameters": ["filter_order"], "undefined_symbols": ["\\gamma", "Window"], "paper_section": "Hyena (Poli et al. 2023)", "confidence": 0.55},
+    {"name": "Causal LM loss", "latex": "\\mathcal{L} = -\\sum_{t} \\log p_\\theta(x_t \\mid x_{<t})", "role": "loss", "used_in": "training", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 3 (pretraining)", "confidence": 0.9}
+  ],
+  "tensor_semantics": [
+    {"name": "token_ids", "shape_notation": "[B, L]", "dtype": "int64", "tensor_type": "input", "module": "TokenEmbedding", "confidence": 0.9},
+    {"name": "hidden", "shape_notation": "[B, L, D]", "dtype": "float32", "tensor_type": "intermediate", "module": "HyenaBlock", "confidence": 0.85},
+    {"name": "logits", "shape_notation": "[B, L, V]", "dtype": "float32", "tensor_type": "output", "module": "LMHead", "confidence": 0.85}
+  ],
+  "training_pipeline": {
+    "optimizer": {"name": "AdamW", "learning_rate": 6e-4, "beta1": 0.9, "beta2": 0.999, "weight_decay": 0.1, "confidence": 0.75},
+    "lr_schedule": {"type": "cosine", "warmup_steps": null, "total_steps": 20000, "confidence": 0.6},
+    "batch_size": 256,
+    "effective_batch_size": 256,
+    "training_steps": 20000,
+    "epochs": null,
+    "mixed_precision": "bf16 (gradient checkpointing for >160k)",
+    "gradient_clipping": null,
+    "data_augmentation": ["reverse-complement (optional)", "sequence-length warmup (L doubles per stage from 64)"],
+    "curriculum": "Sequence length warm-up: start L=64, double at each stage up to target context length",
+    "confidence": 0.62
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "GRCh38/hg38 human reference genome", "split": "train (Avsec 2021 intervals); test chr14, chrX", "size": null, "publicly_available": true},
+      {"name": "GenomicBenchmarks", "split": "provided train/test", "size": null, "publicly_available": true},
+      {"name": "Nucleotide Transformer benchmarks", "split": "provided", "size": null, "publicly_available": true}
+    ],
+    "metrics": ["top-1 accuracy", "MCC", "F1"],
+    "reported_results": [
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/mouse_enhancers", "split": "test", "value": 85.1, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_vs_worm", "split": "test", "value": 96.6, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_enhancers_ensembl", "split": "test", "value": 89.2, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_nontata_promoters", "split": "test", "value": 96.6, "is_primary": true},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_ocr_ensembl", "split": "test", "value": 80.9, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_regulatory", "split": "test", "value": 93.8, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/coding_vs_intergenomic", "split": "test", "value": 91.3, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_enhancers_cohn", "split": "test", "value": 74.2, "is_primary": false},
+      {"metric": "MCC", "dataset": "NucleotideTransformer/enhancer", "split": "test", "value": 62.6, "is_primary": false},
+      {"metric": "MCC", "dataset": "NucleotideTransformer/H3K4me3", "split": "test", "value": 61.2, "is_primary": false}
+    ],
+    "baselines": ["DNABERT", "CNN", "GPT (char)", "Nucleotide Transformer 500M", "Nucleotide Transformer 2.5B"],
+    "compute": "Single-node GPU (e.g. A100); pretraining on hg38",
+    "special_conditions": ["Downstream: linear probe / fine-tune head on frozen or fine-tuned backbone", "reverse-complement handling"],
+    "confidence": 0.85
+  },
+  "implementation_assumptions": [
+    {"assumption": "Pre-norm residual blocks", "basis": "standard practice for Hyena/decoder-only stacks", "confidence": 0.7, "alternatives": ["post-norm"], "affects_section": "architecture"},
+    {"assumption": "Weight-tied LM head", "basis": "common practice; reduces params on small models", "confidence": 0.65, "alternatives": ["untied head"], "affects_section": "architecture"},
+    {"assumption": "Short filter length 3 in Hyena projections", "basis": "Hyena default (Poli et al. 2023)", "confidence": 0.65, "alternatives": ["5", "7"], "affects_section": "architecture"},
+    {"assumption": "AdamW betas 0.9/0.999, wd 0.1 (0 on Hyena filters)", "basis": "reported ranges in paper/repo configs", "confidence": 0.7, "alternatives": ["beta2=0.98"], "affects_section": "training_pipeline"},
+    {"assumption": "bf16 mixed precision", "basis": "standard for A100 long-sequence training", "confidence": 0.6, "alternatives": ["fp16", "fp32"], "affects_section": "training_pipeline"}
+  ],
+  "ambiguities": [
+    {"location": "Sec 3, Hyena operator", "description": "Exact implicit-filter MLP parameterization (depth, width, window, positional encoding gamma) not fully specified in this paper; relies on Hyena reference.", "primary_assumption": "2-layer MLP over sinusoidal positional features with exponential decay window", "alternatives": ["deeper filter MLP", "no window"], "confidence": 0.55},
+    {"location": "Training", "description": "Warmup steps and exact per-variant LR/batch schedule not uniformly stated.", "primary_assumption": "cosine schedule, lr 6e-4, ~20k steps for small models", "alternatives": ["lr 1.5e-4 to 6e-4 depending on size"], "confidence": 0.6}
+  ],
+  "confidence_annotations": {
+    "architecture": 0.74,
+    "mathematical_spec": 0.7,
+    "tensor_semantics": 0.87,
+    "training_pipeline": 0.62,
+    "evaluation_protocol": 0.85,
+    "implementation_assumptions": 0.66,
+    "overall_sir_confidence": 0.78
+  }
+}

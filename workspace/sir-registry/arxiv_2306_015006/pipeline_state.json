@@ -1,0 +1,77 @@
+{
+  "paper_id": "arxiv_2306_015006",
+  "paper_title": "DNABERT-2: Efficient Foundation Model and Benchmark For Multi-Species Genomes",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "stage_timestamps": {
+    "1": "2026-07-12T00:00:00Z",
+    "2": "2026-07-12T00:00:00Z",
+    "3": "2026-07-12T00:00:00Z",
+    "4": "2026-07-12T00:00:00Z",
+    "5": "2026-07-12T00:00:00Z",
+    "6": "2026-07-16T00:00:00Z"
+  },
+  "stage_confidence": {
+    "1": 0.87,
+    "2": 1.0,
+    "3": 0.87,
+    "4": 0.95,
+    "5": 0.85,
+    "6": 0.966
+  },
+  "sir_path": "sir-registry/arxiv_2306_015006/sir.json",
+  "repo_path": "paper-repos/arxiv_2306_015006/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2306_015006/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2306_015006/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2306_015006/notebooks/reproduce_arxiv_2306_015006.ipynb",
+    "comparison_report": "paper-repos/arxiv_2306_015006/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": {},
+  "human_review_required": false,
+  "human_review_reasons": [],
+  "loop_count": 5,
+  "retry_history": [
+    {
+      "stage": 4,
+      "retry_at": "2026-07-16T00:00:00Z",
+      "reason": "wrong HF repo id zhihanzhou -> zhihan1996",
+      "outcome": "success"
+    },
+    {
+      "stage": 4,
+      "retry_at": "2026-07-16T00:00:00Z",
+      "reason": "GUE hub config names differ (promoter_detection_all -> prom_300_all)",
+      "outcome": "success"
+    },
+    {
+      "stage": 4,
+      "retry_at": "2026-07-16T00:00:00Z",
+      "reason": "config.json omits pad_token_id; injected 3 from tokenizer",
+      "outcome": "success"
+    },
+    {
+      "stage": 4,
+      "retry_at": "2026-07-16T00:00:00Z",
+      "reason": "meta-device init vs eager ALiBi build; low_cpu_mem_usage=False",
+      "outcome": "success"
+    },
+    {
+      "stage": 4,
+      "retry_at": "2026-07-16T00:00:00Z",
+      "reason": "Triton 3.x removed tl.dot(trans_b); set attention dropout to select PyTorch branch",
+      "outcome": "success"
+    }
+  ],
+  "created_at": "2026-07-12T00:00:00Z",
+  "last_updated": "2026-07-16T00:00:00Z",
+  "pipeline_complete": true
+}

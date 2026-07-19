@@ -1,0 +1,37 @@
+# Reduced config for a fast local/Colab smoke test (no real accuracy expected).
+model:
+  variant: "hyenadna-tiny-1k-seqlen"
+  d_model: 128
+  n_layer: 2
+  max_len: 256
+  num_classes: 2
+  pool: "mean"
+
+training:
+  optimizer: "adamw"
+  lr: 6.0e-5
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.999
+  batch_size: 8
+  epochs: 1
+  scheduler: "cosine"
+  warmup_ratio: 0.1
+  grad_clip: 1.0
+  mixed_precision: "fp32"
+
+data:
+  source: "genomic-benchmarks"
+  dataset: "human_nontata_promoters"
+  data_dir: "data/"
+  max_len: 256
+
+evaluation:
+  metrics: ["accuracy", "mcc", "f1"]
+  split: "test"
+
+hardware:
+  device: "auto"
+  num_workers: 0
+  seed: 42
+  deterministic: true

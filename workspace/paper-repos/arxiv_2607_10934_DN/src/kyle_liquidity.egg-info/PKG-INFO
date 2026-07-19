@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: kyle-liquidity
+Version: 0.1.0
+Summary: Numerical verification suite for arXiv:2607.10934 (Ekren, Nikitopoulos, Vy)
+Requires-Python: >=3.10
+Requires-Dist: numpy<2.1,>=1.26
+Requires-Dist: scipy<1.14,>=1.13
+Requires-Dist: pyyaml<7.0,>=6.0
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

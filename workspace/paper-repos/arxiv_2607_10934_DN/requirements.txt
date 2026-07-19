@@ -1,0 +1,7 @@
+numpy==1.26.4
+scipy==1.13.0
+matplotlib==3.8.4
+pyyaml==6.0.1
+# torch is OPTIONAL -- only imported by src/kyle_liquidity/fbsde_stub.py (Section 5.7 heuristic)
+# and by utils/config.py's best-effort seeding. Uncomment if you plan to touch that stub.
+# torch==2.3.0

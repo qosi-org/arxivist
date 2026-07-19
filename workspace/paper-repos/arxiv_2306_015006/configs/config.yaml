@@ -1,0 +1,37 @@
+# DNABERT-2 reproduction config
+# Source: SIR arxiv_2306_015006. Hyperparameters from paper Appendix A.3 (high confidence).
+
+model:
+  model_name: "zhihan1996/DNABERT-2-117M"   # official HF weights (BPE + ALiBi bundled)
+  num_classes: 2                             # set per task by the GUE registry
+  pool: "mean"                               # ASSUMED: masked mean-pool; alt 'cls' (SIR conf 0.75)
+  attention_dropout: 0.1                     # >0 selects DNABERT-2's PyTorch attention branch
+                                             # (its Triton Flash-Attn kernel uses a removed API).
+                                             # Same maths; the authors use dropout when fine-tuning.
+
+training:
+  optimizer: "adamw"                         # A.3
+  lr: 3.0e-5                                  # A.3 (DNABERT-2 standard fine-tuning)
+  weight_decay: 0.01                         # A.3
+  beta1: 0.9
+  beta2: 0.98                                 # A.2/A.3 (AdamW beta2=0.98)
+  batch_size: 32                             # A.3
+  warmup_steps: 50                           # A.3
+  epochs: 4                                   # Table 7: PD 'notata/all' = 4 epochs
+  eval_every: 200                            # Sec 5.2: validate every 200 steps, keep best-by-val-loss
+
+data:
+  task: "promoter_detection"                 # any of the 7 GUE tasks (see utils/config.GUE_TASKS)
+  subset: "all"                              # paper MCC 86.77 on promoter_detection/all
+  data_dir: "data/"
+  max_len: 128
+
+evaluation:
+  metric: "mcc"                              # set automatically from the task registry
+  split: "test"
+
+hardware:
+  device: "auto"                             # auto | cuda | cpu
+  num_workers: 2
+  seed: 42
+  deterministic: false

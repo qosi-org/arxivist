@@ -1,0 +1,39 @@
+# HyenaDNA reproduction config
+# Source: SIR arxiv_2306_015794. Confidence annotations from SIR training_pipeline (0.62).
+
+model:
+  variant: "hyenadna-tiny-1k-seqlen"   # HF repo: LongSafari/hyenadna-tiny-1k-seqlen
+  d_model: 128                         # SIR conf 0.85
+  n_layer: 2                           # SIR conf 0.85
+  max_len: 1024                        # matches tiny-1k context
+  num_classes: 2                       # set per dataset (download.py prints class count)
+  pool: "mean"                         # ASSUMED: mean-pool over sequence; alt: last-token (SIR conf 0.65)
+
+training:
+  optimizer: "adamw"                   # SIR conf 0.75
+  lr: 2.0e-4                           # raised from 6e-5 toward the official downstream range (repo uses up to 6e-4)
+  weight_decay: 0.1                    # SIR conf 0.75 (0 on Hyena filters in from-scratch path)
+  beta1: 0.9
+  beta2: 0.999
+  batch_size: 32                       # ASSUMED: fits Colab GPU at L=1024; paper varies 8-256 by length
+  epochs: 20                           # raised from 5 — val accuracy was still climbing at epoch 5
+  scheduler: "cosine"                  # SIR conf 0.6
+  warmup_ratio: 0.1                    # ASSUMED: 10% warmup (SIR conf 0.6)
+  grad_clip: 1.0                       # ASSUMED: not stated in paper (SIR gradient_clipping=null)
+  mixed_precision: "bf16"              # ASSUMED: bf16 on A100 (SIR conf 0.6); auto-falls back to fp32 on CPU
+
+data:
+  source: "genomic-benchmarks"         # genomic-benchmarks | nt-benchmarks
+  dataset: "human_nontata_promoters"   # primary result: 96.6% top-1 accuracy in paper
+  data_dir: "data/"
+  max_len: 1024
+
+evaluation:
+  metrics: ["accuracy", "mcc", "f1"]
+  split: "test"
+
+hardware:
+  device: "auto"                       # auto | cuda | cpu
+  num_workers: 2
+  seed: 42
+  deterministic: false                 # true -> reproducible but slower

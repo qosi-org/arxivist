@@ -1,0 +1,11 @@
+version: "3.8"
+services:
+  quantum_cva:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../checkpoints:/workspace/checkpoints
+      - ../results:/workspace/results
+      - ../data:/workspace/data
+    command: ["python", "evaluate.py", "--config", "configs/config.yaml", "--regime", "noiseless"]

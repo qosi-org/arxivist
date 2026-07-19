@@ -1,0 +1,36 @@
+{
+  "paper_id": "arxiv_2306_015006",
+  "title": "DNABERT-2: Efficient Foundation Model and Benchmark For Multi-Species Genomes",
+  "authors": [
+    "Zhihan Zhou",
+    "Yanrong Ji",
+    "Weijian Li",
+    "Pratik Dutta",
+    "Ramana V Davuluri",
+    "Han Liu"
+  ],
+  "domain": "Multimodal",
+  "arxiv_id": "2306.15006",
+  "version": 1,
+  "created_at": "2026-07-12T00:00:00Z",
+  "last_updated": "2026-07-16T00:00:00Z",
+  "sir_confidence": 0.87,
+  "stages_with_data": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2306_015006/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-12T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    }
+  ]
+}

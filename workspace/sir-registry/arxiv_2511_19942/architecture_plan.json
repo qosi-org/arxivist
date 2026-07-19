@@ -1,0 +1,252 @@
+{
+  "paper_id": "arxiv_2511_19942",
+  "plan_version": 1,
+  "created_at": "2026-07-18T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": true,
+    "cuda_min_version": "11.8",
+    "use_huggingface": true,
+    "config_library": "yaml",
+    "reasoning": "Paper's model family (Qwen2.5/Qwen3/Mistral) and the GRPO training lineage it builds on live entirely in the PyTorch/HuggingFace ecosystem. Using HuggingFace TRL's existing GRPOTrainer (rather than re-implementing GRPO's clipped policy-gradient loop from scratch) avoids re-deriving a well-established RL algorithm on top of an already-scoped-down Colab/Kaggle compute budget — the paper's actual novel contribution is the reward-shaping term (Eq. 4/6), not GRPO itself, so effort should concentrate there. LoRA (via PEFT) + 4-bit loading (via bitsandbytes) are included specifically to fit RL fine-tuning in a free-tier GPU's memory (per SIR ambiguity: paper's own experiments used full fine-tuning on non-free-tier hardware)."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/diffsmooth/models/policy.py",
+      "description": "Wraps a small HF causal LM (policy + frozen/reference copy) with optional LoRA adapters and 4-bit quantization.",
+      "sir_modules_mapped": ["policy_model", "reference_base_model"],
+      "classes": [
+        {
+          "name": "PolicyModel",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "generate", "signature": "(self, prompts: list[str], num_samples: int) -> list[list[str]]", "returns": "sampled completions per prompt" },
+            { "name": "logprob", "signature": "(self, prompt: str, completion: str) -> float", "returns": "log pi(completion|prompt)" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/diffsmooth/rewards/countdown_reward.py",
+      "description": "Verifier for the Countdown task: parses a generated equation, checks it uses each given number exactly once and evaluates to the target.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "CountdownVerifier",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "score", "signature": "(self, numbers: list[int], target: int, completion: str) -> float", "returns": "1.0 if correct else 0.0" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/diffsmooth/rewards/differential_smoothing.py",
+      "description": "Implements Eq. 4 / Eq. 6 — the paper's core contribution: shifts the raw reward/advantage using the reference model's own log-probability, asymmetrically for correct vs. incorrect trajectories.",
+      "sir_modules_mapped": ["differential_smoothing_reward_shaper"],
+      "classes": [
+        {
+          "name": "DifferentialSmoothingShaper",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "shape_advantage", "signature": "(self, advantages: torch.Tensor, is_correct: torch.Tensor, ref_logprobs: torch.Tensor, gamma_p: float, gamma_n: float) -> torch.Tensor", "returns": "A_i^DS per Eq. 6" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/diffsmooth/training/grpo_advantage.py",
+      "description": "Group-relative advantage normalization (Eq. 5), shared by both vanilla GRPO and DS-GRPO.",
+      "sir_modules_mapped": ["grpo_advantage_estimator"],
+      "classes": [
+        {
+          "name": "GRPOAdvantage",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "compute", "signature": "(self, group_rewards: torch.Tensor) -> torch.Tensor", "returns": "standardized advantage A_i per Eq. 5" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/diffsmooth/training/trainer.py",
+      "description": "Thin wrapper around TRL's GRPOTrainer that injects the DifferentialSmoothingShaper as a reward/advantage post-processing hook; toggled on/off via config so vanilla-GRPO and DS-GRPO share identical code paths otherwise.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "DSGRPOTrainer",
+          "base_class": "trl.GRPOTrainer",
+          "public_methods": [
+            { "name": "compute_loss", "signature": "(self, model, inputs) -> torch.Tensor", "returns": "policy-gradient loss with optional differential smoothing applied" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/diffsmooth/data/countdown_dataset.py",
+      "description": "Procedurally generates Countdown puzzles (3-4 integers in [1,99], target reachable via +-*/), no download required.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "CountdownDataset",
+          "base_class": "torch.utils.data.Dataset",
+          "public_methods": [
+            { "name": "__getitem__", "signature": "(self, idx: int) -> dict", "returns": "{numbers, target, prompt}" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/diffsmooth/evaluation/metrics.py",
+      "description": "Pass@1, Pass@K, and Solution Multiplicity (Eq. 2) computed over sampled completions.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ReasoningMetrics",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "pass_at_k", "signature": "(self, completions: list[list[str]], verifier: CountdownVerifier, k: int) -> float", "returns": "Pass@K" },
+            { "name": "solution_multiplicity", "signature": "(self, completions: list[list[str]], verifier: CountdownVerifier) -> float", "returns": "avg distinct correct solutions per problem (Eq. 2)" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/diffsmooth/utils/config.py",
+      "description": "YAML config loading + global seeding (Python/NumPy/PyTorch) for reproducibility.",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "Config", "base_class": "object", "public_methods": [ { "name": "load", "signature": "(path: str) -> Config", "returns": "parsed config object" } ] }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "DS-GRPO training step",
+      "input": { "name": "prompt_batch", "shape": "[B]", "dtype": "str" },
+      "output": { "name": "policy_loss", "shape": "[]", "dtype": "float32" },
+      "steps": [
+        "policy.generate() samples G completions per prompt -> [B, G] completions",
+        "CountdownVerifier.score() -> group_rewards [B, G]",
+        "GRPOAdvantage.compute(group_rewards) -> advantages [B, G] (Eq. 5)",
+        "policy.logprob() / reference.logprob() on sampled completions -> ref_logprobs [B, G]",
+        "DifferentialSmoothingShaper.shape_advantage(advantages, is_correct, ref_logprobs, gamma_p, gamma_n) -> A_i^DS [B, G] (Eq. 6) — SKIPPED if running vanilla-GRPO baseline config",
+        "DSGRPOTrainer.compute_loss() -> clipped policy-gradient loss + KL term (Eq. 1) -> policy_loss"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "base_checkpoint": "Qwen2.5-0.5B-Instruct  # ASSUMED: scoped down from paper's Qwen2.5-3B-Instruct (Countdown setup) to fit a free Kaggle/Colab GPU; confidence 0.3, override to Qwen2.5-3B-Instruct if a larger free GPU is available",
+      "use_lora": true,
+      "lora_r": 16,
+      "load_in_4bit": true
+    },
+    "training": {
+      "gamma_p": 0.03,
+      "gamma_n": 0.01,
+      "group_size": 8,
+      "batch_size": 8,
+      "learning_rate": "1e-6  # ASSUMED: not stated in paper (SIR ambiguity, confidence 0.5)",
+      "optimizer": "adamw  # ASSUMED: not stated in paper",
+      "num_train_steps": "300  # ASSUMED: paper trains 'until reward saturates' with no fixed count; scoped down for free-tier compute budget",
+      "clip_epsilon_high": 0.25,
+      "clip_epsilon_low": 0.20,
+      "temperature": 0.7,
+      "kl_beta": "0.01  # ASSUMED: paper studies a range but no single default given for main results (confidence 0.4)"
+    },
+    "data": {
+      "task": "countdown",
+      "num_range": [1, 99],
+      "num_operands": [3, 4]
+    },
+    "evaluation": {
+      "metrics": ["pass_at_1", "pass_at_k", "solution_multiplicity"],
+      "k_values": [1, 4, 8, 16]
+    },
+    "hardware": {
+      "device": "cuda",
+      "precision": "bf16",
+      "num_workers": 2
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      { "package": "torch", "version": ">=2.2", "reason": "core tensor/autograd framework" },
+      { "package": "transformers", "version": ">=4.44", "reason": "Qwen/Mistral model + tokenizer loading" },
+      { "package": "trl", "version": ">=0.9", "reason": "provides GRPOTrainer base implementation to extend, avoids re-deriving GRPO from scratch" },
+      { "package": "peft", "version": ">=0.11", "reason": "LoRA adapters to fit fine-tuning in limited GPU memory" },
+      { "package": "bitsandbytes", "version": ">=0.43", "reason": "4-bit model loading for memory savings" },
+      { "package": "accelerate", "version": ">=0.30", "reason": "device placement / mixed precision handling" },
+      { "package": "datasets", "version": ">=2.19", "reason": "HF Dataset wrapper convenience for the procedurally-generated Countdown set" }
+    ],
+    "dev": [
+      { "package": "pytest", "version": ">=8.0" },
+      { "package": "black", "version": ">=24.0" }
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Train either vanilla-GRPO or DS-GRPO on the Countdown task, controlled by a config flag, so both share identical code otherwise.",
+      "cli_args": [
+        { "flag": "--config", "type": "str", "required": true, "help": "path to config YAML" },
+        { "flag": "--use_differential_smoothing", "type": "bool", "required": false, "default": true, "help": "toggle DS-GRPO vs vanilla GRPO baseline" },
+        { "flag": "--resume", "type": "str", "required": false, "default": null, "help": "checkpoint to resume from" },
+        { "flag": "--seed", "type": "int", "required": false, "default": 42, "help": "random seed override" },
+        { "flag": "--debug", "type": "bool", "required": false, "default": false, "help": "tiny run for quick local testing" },
+        { "flag": "--dry-run", "type": "bool", "required": false, "default": false, "help": "build components without training" }
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Compute Pass@1, Pass@K, and Solution Multiplicity on a held-out set of Countdown puzzles for a trained checkpoint.",
+      "cli_args": [
+        { "flag": "--checkpoint", "type": "str", "required": true, "help": "path to trained model/adapter" },
+        { "flag": "--config", "type": "str", "required": true, "help": "path to config YAML" }
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Run the trained model on a single user-provided Countdown puzzle and print the generated solution(s).",
+      "cli_args": [
+        { "flag": "--checkpoint", "type": "str", "required": true, "help": "path to trained model/adapter" },
+        { "flag": "--numbers", "type": "str", "required": true, "help": "comma-separated integers" },
+        { "flag": "--target", "type": "int", "required": true, "help": "target value" }
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.3.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "Even with LoRA + 4-bit loading, RL fine-tuning requires holding the policy model, a reference/old-policy copy, and G sampled rollouts' activations simultaneously — could still exceed a free T4/P100's ~16GB VRAM depending on group_size and sequence length.",
+      "source": "training_pipeline confidence 0.35 in SIR; free-tier compute constraint",
+      "mitigation": "Start with the smallest model (0.5B), small group_size (8), short sequences; increase only if memory allows. Reduce group_size or switch to gradient checkpointing if OOM."
+    },
+    {
+      "severity": "Medium",
+      "description": "Training hyperparameters (LR, optimizer, step count) are assumed defaults, not paper-verified — if the assumed values are far off, neither vanilla-GRPO nor DS-GRPO may train stably.",
+      "source": "SIR implementation_assumptions",
+      "mitigation": "Run a short --dry-run and a tiny --debug pass first to confirm loss decreases sensibly before committing to a full run; be prepared to adjust learning_rate by 2-5x if training diverges or stalls."
+    },
+    {
+      "severity": "Medium",
+      "description": "The Countdown verifier (correctness checker) is a from-scratch reimplementation since the paper doesn't specify its exact parsing/validation logic — a bug here would silently corrupt every reward signal.",
+      "source": "SIR ambiguities (Countdown dataset construction)",
+      "mitigation": "Unit-test the verifier directly on hand-written example equations (known-correct and known-incorrect) before using it in training."
+    },
+    {
+      "severity": "Low",
+      "description": "A very small base model (0.5B) may already perform poorly or randomly on Countdown regardless of RL method, making it harder to cleanly observe the sharpening-vs-smoothing effect the paper describes.",
+      "source": "scope-down decision (model swapped from paper's 3B to 0.5B)",
+      "mitigation": "If the 0.5B model shows no learning signal at all, step up to Qwen2.5-1.5B-Instruct before concluding the method doesn't work."
+    }
+  ]
+}

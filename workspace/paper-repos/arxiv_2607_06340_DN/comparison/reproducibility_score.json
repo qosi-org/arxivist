@@ -1,0 +1,33 @@
+{
+  "paper_id": "arxiv_2607_06340",
+  "comparison_date": "2026-07-13T00:00:00Z",
+  "reproducibility_score": 0.38,
+  "score_confidence": "low",
+  "metrics_compared": 23,
+  "metrics_matched": 8,
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 3,
+    "significant": 3,
+    "critical": 2
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 1,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": true,
+  "matched_metrics_detail": [
+    {"metric": "test_accuracy_overall", "experiment": "6.1", "paper_value": 0.9863, "user_value": 0.7856, "percentage_deviation": 20.35, "severity": "significant"},
+    {"metric": "train_accuracy_overall", "experiment": "6.1", "paper_value": 1.0, "user_value": 0.9423, "percentage_deviation": 5.77, "severity": "moderate"},
+    {"metric": "Heston_per_class_accuracy", "experiment": "6.1", "paper_value": 96.6, "user_value": 88.75, "percentage_deviation": 8.13, "severity": "moderate"},
+    {"metric": "OU_per_class_accuracy", "experiment": "6.1", "paper_value": 100.0, "user_value": 53.75, "percentage_deviation": 46.25, "severity": "critical"},
+    {"metric": "rB0.1_per_class_accuracy", "experiment": "6.1", "paper_value": 98.9, "user_value": 92.75, "percentage_deviation": 6.22, "severity": "moderate"},
+    {"metric": "rB0.3_per_class_accuracy", "experiment": "6.1", "paper_value": 99.0, "user_value": 79.0, "percentage_deviation": 20.2, "severity": "significant"},
+    {"metric": "low_nu_heston_misclass_as_OU", "experiment": "6.8_low_nu", "paper_value": 69.8, "user_value": 1.6, "percentage_deviation": 97.71, "severity": "critical", "note": "known open issue, documented prior to this run"},
+    {"metric": "high_nu_heston_misclass_as_OU", "experiment": "6.8_high_nu", "paper_value": 9.1, "user_value": 6.6, "percentage_deviation": 27.47, "severity": "significant"}
+  ],
+  "notes": "User ran Experiment 6.1 and both 6.8 nu-variants at demo scale (3000 paths/class train, 800/class test, vs paper's 250000/50000). Most-degraded new finding: OU per-class accuracy collapsed to 53.75% vs paper's 100% (46.25% deviation), disproportionate to the milder degradation seen in the other 3 classes -- flagged as the highest-priority follow-up, hypothesized to be a sample-size effect on the already-hardest Heston/OU boundary rather than a code defect. The low-nu deviation (97.7%) is a previously-documented open issue (Section 6.8 'comparable ranges' calibration ambiguity), not new. 15 of the paper's ~23 tracked metrics remain untested (Experiments 5.1-5.3, 6.2-6.3, 6.5, 6.6, 6.9)."
+}

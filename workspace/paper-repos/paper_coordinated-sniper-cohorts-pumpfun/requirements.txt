@@ -1,0 +1,8 @@
+pandas==2.2.2
+numpy==1.26.4
+networkx==3.3
+scipy==1.13.1
+matplotlib==3.9.0
+pyyaml==6.0.1
+tqdm==4.66.4
+orjson==3.10.3

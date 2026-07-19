@@ -1,0 +1,131 @@
+{
+  "paper_id": "arxiv_2306_015006",
+  "plan_version": 1,
+  "created_at": "2026-07-12T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": "11.8",
+    "use_huggingface": true,
+    "config_library": "yaml",
+    "reasoning": "DNABERT-2 ships an official HuggingFace model (zhihanzhou/DNABERT-2-117M) with a proper model_type + bundled BPE tokenizer and ALiBi/GEGLU custom code (trust_remote_code). Unlike HyenaDNA, AutoModel loads it cleanly, so the faithful reproduction path is to fine-tune the released weights. GUE datasets are on HF hub. CUDA optional for Colab. YAML config keeps per-task settings simple."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/dnabert2/models/classifier.py",
+      "description": "Loads official DNABERT-2 backbone via AutoModel + adds a classification head for GUE tasks.",
+      "sir_modules_mapped": ["TokenEmbedding", "ALiBiAttention", "GEGLU_FFN", "MLMHead"],
+      "classes": [
+        {"name": "DNABERT2Classifier", "base_class": "nn.Module", "public_methods": [
+          {"name": "from_pretrained", "signature": "from_pretrained(cls, model_name: str, num_classes: int, pool: str, device: str) -> 'DNABERT2Classifier'", "returns": "model"},
+          {"name": "forward", "signature": "forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor", "returns": "logits [B, num_classes]"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/dnabert2/data/tokenizer.py",
+      "description": "Thin wrapper over the official DNABERT-2 BPE tokenizer (AutoTokenizer).",
+      "sir_modules_mapped": ["BPETokenizer"],
+      "classes": [{"name": "DNATokenizer", "base_class": "object", "public_methods": [{"name": "encode_batch", "signature": "encode_batch(self, seqs: List[str], max_len: int) -> Dict[str, torch.Tensor]", "returns": "input_ids + attention_mask"}]}]
+    },
+    {
+      "path": "src/dnabert2/data/gue.py",
+      "description": "Configurable GUE loader for all 28 GUE datasets across 7 tasks (Table 12). Reads local CSVs or downloads via HF datasets.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "GUEDataset", "base_class": "torch.utils.data.Dataset", "public_methods": [{"name": "__getitem__", "signature": "__getitem__(self, idx: int) -> Tuple[str, int]", "returns": "(sequence, label)"}]}]
+    },
+    {
+      "path": "src/dnabert2/training/trainer.py",
+      "description": "Fine-tuning loop implementing Appendix A.3 recipe (AdamW lr 3e-5, warmup 50, wd 0.01, validate + keep best-by-val-loss).",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "Trainer", "base_class": "object", "public_methods": [{"name": "fit", "signature": "fit(self) -> Dict[str, float]", "returns": "best test metrics"}]}]
+    },
+    {
+      "path": "src/dnabert2/evaluation/metrics.py",
+      "description": "MCC and F1 per GUE Table 12 (MCC for most tasks, F1 for Covid).",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/dnabert2/utils/config.py",
+      "description": "YAML loader + seed utility (python/numpy/torch) + GUE task registry (metric + num_classes per task).",
+      "sir_modules_mapped": [],
+      "classes": []
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "GUE classification forward",
+      "input": {"name": "input_ids", "shape": "[B, L]", "dtype": "int64"},
+      "output": {"name": "logits", "shape": "[B, num_classes]", "dtype": "float32"},
+      "steps": [
+        "BPE-tokenize raw DNA -> input_ids [B, L], attention_mask [B, L]",
+        "DNABERT-2 backbone (AutoModel) -> hidden [B, L, 768]",
+        "masked mean-pool over attention_mask -> pooled [B, 768]",
+        "linear classifier head -> logits [B, num_classes]"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {"model_name": "zhihanzhou/DNABERT-2-117M", "d_model": 768, "num_classes": 2, "pool": "mean"},
+    "training": {"optimizer": "adamw", "lr": 3.0e-5, "weight_decay": 0.01, "beta1": 0.9, "beta2": 0.98, "batch_size": 32, "warmup_steps": 50, "epochs": 4, "eval_every": 200},
+    "data": {"task": "promoter_detection", "subset": "all", "data_dir": "data/", "max_len": 128},
+    "evaluation": {"metric": "mcc", "split": "test"},
+    "hardware": {"device": "auto", "num_workers": 2, "seed": 42, "deterministic": false}
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": ">=2.1", "reason": "core framework"},
+      {"package": "transformers", "version": ">=4.35", "reason": "AutoModel/AutoTokenizer for DNABERT-2 (trust_remote_code)"},
+      {"package": "einops", "version": ">=0.7", "reason": "required by DNABERT-2 remote modeling code"},
+      {"package": "datasets", "version": ">=2.14", "reason": "download GUE datasets from HF hub"},
+      {"package": "huggingface_hub", "version": ">=0.19", "reason": "weights + data download"},
+      {"package": "scikit-learn", "version": ">=1.3", "reason": "MCC + F1 metrics"},
+      {"package": "pandas", "version": ">=2.0", "reason": "read GUE CSVs"},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "config"},
+      {"package": "tqdm", "version": ">=4.66", "reason": "progress bars"},
+      {"package": "numpy", "version": ">=1.24", "reason": "arrays/seeding"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=7.4"},
+      {"package": "ruff", "version": ">=0.1"},
+      {"package": "jupyter", "version": ">=1.0"}
+    ]
+  },
+  "entrypoints": [
+    {"filename": "train.py", "purpose": "Fine-tune DNABERT-2 on a GUE task", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "YAML config"},
+      {"flag": "--task", "type": "str", "required": false, "default": null, "help": "override GUE task"},
+      {"flag": "--subset", "type": "str", "required": false, "default": null, "help": "override task subset (e.g. all/tata/notata)"},
+      {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "random seed"},
+      {"flag": "--debug", "type": "bool", "required": false, "default": false, "help": "tiny subset + few steps"},
+      {"flag": "--dry-run", "type": "bool", "required": false, "default": false, "help": "build components, skip training"}
+    ]},
+    {"filename": "evaluate.py", "purpose": "Evaluate a checkpoint on a GUE test split", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "config"},
+      {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "checkpoint path"}
+    ]},
+    {"filename": "inference.py", "purpose": "Classify a single DNA sequence", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "config"},
+      {"flag": "--sequence", "type": "str", "required": true, "default": null, "help": "raw DNA string"},
+      {"flag": "--checkpoint", "type": "str", "required": false, "default": null, "help": "optional finetuned ckpt"}
+    ]},
+    {"filename": "data/download.py", "purpose": "Download GUE benchmark datasets via API", "cli_args": [
+      {"flag": "--task", "type": "str", "required": false, "default": null, "help": "specific GUE task; omit for all"},
+      {"flag": "--data-dir", "type": "str", "required": false, "default": "data/", "help": "output directory"}
+    ]}
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget", "curl"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {"severity": "Low", "description": "DNABERT-2 remote code pins a specific transformers/triton behavior; Flash-Attn path may fall back to eager on CPU.", "source": "sir.architecture", "mitigation": "trust_remote_code=True; model runs in eager attention on CPU/T4 automatically."},
+    {"severity": "Low", "description": "Exact layer count/d_model inferred (SIR conf 0.7).", "source": "sir.implementation_assumptions", "mitigation": "Not needed — dims come from the loaded pretrained config, not hardcoded."},
+    {"severity": "Medium", "description": "GUE dataset access/format varies; some tasks are large.", "source": "sir.evaluation_protocol", "mitigation": "download.py pulls the GUE HF dataset; loader handles CSV; default to small promoter task for Colab."},
+    {"severity": "Low", "description": "Pooling strategy for classification not specified in paper (conf 0.75).", "source": "sir.ambiguities", "mitigation": "Config-selectable mean/cls pooling; default mean with # ASSUMED comment."}
+  ]
+}

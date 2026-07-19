@@ -1,0 +1,156 @@
+{
+  "paper_id": "arxiv_2306_015794",
+  "plan_version": 1,
+  "created_at": "2026-07-11T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": "11.8",
+    "use_huggingface": true,
+    "config_library": "yaml",
+    "reasoning": "Paper and official repo are PyTorch. HuggingFace Hub hosts the LongSafari/hyenadna pretrained weights and AutoModel classes (trust_remote_code), and HF datasets serves the NT benchmarks. CUDA optional so the repo runs on Colab CPU/GPU. YAML config keeps it Colab-friendly without Hydra overhead."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/hyenadna/models/hyena_operator.py",
+      "description": "From-scratch reference implementation of the order-2 Hyena operator (FFT long conv + implicit filter MLP). Fallback/教学 path; primary inference uses pretrained weights.",
+      "sir_modules_mapped": ["HyenaBlock", "FFN", "LayerNorm"],
+      "classes": [
+        {"name": "HyenaFilter", "base_class": "nn.Module", "public_methods": [{"name": "forward", "signature": "forward(self, L: int) -> torch.Tensor", "returns": "implicit filter [L, D]"}]},
+        {"name": "HyenaOperator", "base_class": "nn.Module", "public_methods": [{"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "[B, L, D]"}]},
+        {"name": "HyenaBlock", "base_class": "nn.Module", "public_methods": [{"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "[B, L, D]"}]}
+      ]
+    },
+    {
+      "path": "src/hyenadna/models/pretrained.py",
+      "description": "Loads official pretrained HyenaDNA backbone + adds a classification head for downstream tasks.",
+      "sir_modules_mapped": ["TokenEmbedding", "HyenaBlock", "LMHead"],
+      "classes": [
+        {"name": "HyenaDNAClassifier", "base_class": "nn.Module", "public_methods": [
+          {"name": "from_pretrained", "signature": "from_pretrained(cls, variant: str, num_classes: int, device: str) -> 'HyenaDNAClassifier'", "returns": "model"},
+          {"name": "forward", "signature": "forward(self, input_ids: torch.Tensor) -> torch.Tensor", "returns": "logits [B, num_classes]"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/hyenadna/data/tokenizer.py",
+      "description": "Character-level single-nucleotide tokenizer.",
+      "sir_modules_mapped": ["CharTokenizer"],
+      "classes": [{"name": "CharTokenizer", "base_class": "object", "public_methods": [{"name": "encode", "signature": "encode(self, seq: str, max_len: int) -> List[int]", "returns": "token ids"}]}]
+    },
+    {
+      "path": "src/hyenadna/data/dataset.py",
+      "description": "GenomicBenchmarks / NT benchmark torch Dataset wrappers.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "GenomicDataset", "base_class": "torch.utils.data.Dataset", "public_methods": [{"name": "__getitem__", "signature": "__getitem__(self, idx: int) -> Tuple[torch.Tensor, int]", "returns": "(input_ids, label)"}]}]
+    },
+    {
+      "path": "src/hyenadna/training/trainer.py",
+      "description": "Fine-tuning loop with metric logging and checkpointing.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "Trainer", "base_class": "object", "public_methods": [{"name": "fit", "signature": "fit(self) -> Dict[str, float]", "returns": "metrics"}]}]
+    },
+    {
+      "path": "src/hyenadna/training/losses.py",
+      "description": "Cross-entropy (downstream) and causal LM loss (reference pretraining).",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/hyenadna/evaluation/metrics.py",
+      "description": "top-1 accuracy, MCC, F1.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/hyenadna/utils/config.py",
+      "description": "YAML config loader + seed utility (python/numpy/torch).",
+      "sir_modules_mapped": [],
+      "classes": []
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "Downstream classification forward",
+      "input": {"name": "input_ids", "shape": "[B, L]", "dtype": "int64"},
+      "output": {"name": "logits", "shape": "[B, num_classes]", "dtype": "float32"},
+      "steps": [
+        "input_ids [B, L] -> pretrained HyenaDNA backbone -> hidden [B, L, D]",
+        "mean-pool or last-token pool over L -> pooled [B, D]",
+        "linear classifier head -> logits [B, num_classes]"
+      ]
+    },
+    {
+      "name": "Hyena operator (reference)",
+      "input": {"name": "x", "shape": "[B, L, D]", "dtype": "float32"},
+      "output": {"name": "y", "shape": "[B, L, D]", "dtype": "float32"},
+      "steps": [
+        "project x -> (x0, x1, x2) via short conv",
+        "h0, h = implicit filter MLP over positions (order 2)",
+        "u = x1 * FFTConv(h0, x0)",
+        "y = x2 * FFTConv(h, u)",
+        "return y [B, L, D]"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {"variant": "hyenadna-tiny-1k-seqlen", "d_model": 128, "n_layer": 2, "max_len": 1024, "num_classes": 2, "pool": "mean"},
+    "training": {"optimizer": "adamw", "lr": 6e-5, "weight_decay": 0.1, "batch_size": 32, "epochs": 5, "scheduler": "cosine", "warmup_ratio": 0.1, "mixed_precision": "bf16"},
+    "data": {"source": "genomic-benchmarks", "dataset": "human_nontata_promoters", "data_dir": "data/", "max_len": 1024},
+    "evaluation": {"metrics": ["accuracy", "mcc", "f1"], "split": "test"},
+    "hardware": {"device": "auto", "num_workers": 2, "seed": 42, "deterministic": false}
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": ">=2.1", "reason": "core framework, FFT ops for Hyena"},
+      {"package": "transformers", "version": ">=4.35", "reason": "load pretrained HyenaDNA via AutoModel trust_remote_code"},
+      {"package": "huggingface_hub", "version": ">=0.19", "reason": "download weights + NT datasets"},
+      {"package": "datasets", "version": ">=2.14", "reason": "Nucleotide Transformer benchmark loading"},
+      {"package": "genomic-benchmarks", "version": ">=0.0.9", "reason": "GenomicBenchmarks API download"},
+      {"package": "scikit-learn", "version": ">=1.3", "reason": "MCC/F1 metrics"},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "config parsing"},
+      {"package": "tqdm", "version": ">=4.66", "reason": "progress bars"},
+      {"package": "numpy", "version": ">=1.24", "reason": "arrays/seeding"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=7.4"},
+      {"package": "ruff", "version": ">=0.1"}
+    ]
+  },
+  "entrypoints": [
+    {"filename": "train.py", "purpose": "Fine-tune HyenaDNA on a genomic classification dataset", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "path to YAML config"},
+      {"flag": "--resume", "type": "str", "required": false, "default": null, "help": "checkpoint to resume"},
+      {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "random seed"},
+      {"flag": "--debug", "type": "bool", "required": false, "default": false, "help": "tiny subset + few steps"},
+      {"flag": "--dry-run", "type": "bool", "required": false, "default": false, "help": "build components, skip training"}
+    ]},
+    {"filename": "evaluate.py", "purpose": "Evaluate a checkpoint on the test split", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "config"},
+      {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "checkpoint path"}
+    ]},
+    {"filename": "inference.py", "purpose": "Classify a single DNA sequence", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "config"},
+      {"flag": "--sequence", "type": "str", "required": true, "default": null, "help": "raw DNA string"},
+      {"flag": "--checkpoint", "type": "str", "required": false, "default": null, "help": "optional finetuned ckpt"}
+    ]},
+    {"filename": "data/download.py", "purpose": "Download datasets via API/curl", "cli_args": [
+      {"flag": "source", "type": "str", "required": true, "default": null, "help": "genomic-benchmarks | hg38 | nt-benchmarks"},
+      {"flag": "--dataset", "type": "str", "required": false, "default": null, "help": "specific dataset name"},
+      {"flag": "--data-dir", "type": "str", "required": false, "default": "data/", "help": "output directory"}
+    ]}
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget", "curl"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {"severity": "Medium", "description": "Hyena implicit-filter MLP details (SIR confidence 0.55) are from the Hyena reference, not this paper. From-scratch operator may not match pretrained numerics.", "source": "sir.mathematical_spec", "mitigation": "Primary path uses official pretrained weights; from-scratch operator is clearly labeled reference-only and swappable."},
+    {"severity": "Medium", "description": "Training LR/warmup/precision partly inferred (confidence 0.62).", "source": "sir.training_pipeline", "mitigation": "Expose all in config with # ASSUMED comments; default to repo-documented lr=6e-5 for downstream."},
+    {"severity": "Low", "description": "NT benchmark datasets require manual/processed download per NT appendix.", "source": "repo notes", "mitigation": "download.py nt-benchmarks pulls via HF datasets and prints instructions if a task is unavailable."},
+    {"severity": "Low", "description": "hg38 FASTA is ~1GB; heavy for Colab free tier.", "source": "dataset size", "mitigation": "download.py checks existence, prints size, supports --data-dir; pretraining is opt-in."}
+  ]
+}

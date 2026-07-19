@@ -1,13 +1,25 @@
-﻿{
+{
   "index_version": 1,
   "total_papers": 5,
   "papers": [
+    {
+      "paper_id": "arxiv_2511_19942",
+      "title": "Differential Smoothing Mitigates Sharpening and Improves LLM Reasoning",
+      "domain": "RL",
+      "sir_version": 1,
+      "sir_confidence": 0.66,
+      "has_repo": true,
+      "has_notebook": false,
+      "has_comparison": false,
+      "pipeline_complete": false,
+      "last_updated": "2026-07-17T00:00:00Z"
+    },
     {
       "paper_id": "arxiv_2605_06564",
       "title": "Dynamic Treatment on Networks",
       "domain": "RL / Causal Inference / Network Science",
       "sir_version": 1,
-      "sir_confidence": 0.83,
+      "sir_confidence": 0.78,
       "has_repo": true,
       "has_notebook": true,
       "has_comparison": true,
@@ -15,11 +27,11 @@
       "last_updated": "2026-05-09T00:00:00Z"
     },
     {
-      "paper_id": "arxiv_2605_17307",
-      "title": "Deep Reinforcement Learning Framework for Diversified Portfolio Management Across Global Equity Markets",
-      "domain": "RL / Quantitative Finance / Portfolio Management",
+      "paper_id": "arxiv_2606_11859",
+      "title": "Scenario Generation for Time Series and Curves: A Comparison of Nonparametric and Semiparametric Bootstrap",
+      "domain": "Other",
       "sir_version": 1,
-      "sir_confidence": 0.88,
+      "sir_confidence": 0.78,
       "has_repo": true,
       "has_notebook": true,
       "has_comparison": false,
@@ -56,3 +68,4 @@
     }
   ]
 }
+

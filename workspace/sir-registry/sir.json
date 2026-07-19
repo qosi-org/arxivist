@@ -1,0 +1,426 @@
+{
+  "paper_id": "arxiv_2606_11859",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Scenario Generation for Time Series and Curves: A Comparison of Nonparametric and Semiparametric Bootstrap",
+    "authors": ["Nicola Baldoni", "Michele Sparviero", "Lorenzo Viola"],
+    "affiliations": ["ARCA Fondi SGR"],
+    "arxiv_id": "2606.11859v2",
+    "doi": null,
+    "submission_date": "2026-05",
+    "abstract": "Generating stochastic trajectories for asset classes is an increasingly relevant task in quantitative finance. Traditional approaches, such as the stationary bootstrap, preserve by construction the empirical distribution of asset-class returns, but do not ensure that each simulated path is economically realistic. We review semiparametric methods combining parametric structure with resampling of residuals.",
+    "domain": "Other",
+    "key_claims": [
+      "The Stationary Bootstrap preserves empirical marginal distributions asymptotically but does not guarantee individual simulated paths are economically realistic.",
+      "The VAR-Bootstrap introduces an autoregressive (mean-reverting) structure combined with nonparametric residual resampling, trading some distributional fidelity for dynamic/economic plausibility.",
+      "Embedding a dynamic Nelson-Siegel factor representation into the VAR-Bootstrap (Nelson-Siegel VAR-Bootstrap) yields more regular and financially coherent simulated yield curves than resampling rates directly.",
+      "Empirically, Stationary Bootstrap has the lowest KL divergence to historical distributions, but VAR-Bootstrap and NS VAR-Bootstrap substantially reduce no-arbitrage (monotonicity of discount factor) violations.",
+      "No single methodology dominates: the choice is a trade-off between statistical adherence to history and economic-financial plausibility of individual paths."
+    ],
+    "parsed_at": "2026-07-14T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "Nelson-Siegel VAR-Bootstrap",
+    "modules": [
+      {
+        "name": "StationaryBootstrap",
+        "operation_type": "nonparametric_block_resampling",
+        "input_shape": "[T, n] historical joint vector z_t = (r_t, Δy_t)",
+        "output_shape": "[T, n] simulated trajectory z*_t",
+        "parameters": {
+          "block_length_distribution": "geometric (Politis & Romano stationary bootstrap)",
+          "resampled_quantities": "price returns r_t and rate first-differences Δy_t"
+        },
+        "paper_section": "Section 2",
+        "confidence": 0.9,
+        "notes": "Baseline/reference method. Levels reconstructed multiplicatively for price factors (P_hat_t = (1+r*_t) ⊙ P_hat_{t-1}) and additively for rate factors (y_hat_t = y_hat_{t-1} + Δy*_t)."
+      },
+      {
+        "name": "VARBootstrap",
+        "operation_type": "semiparametric_VAR1_plus_residual_resampling",
+        "input_shape": "[T, n] state vector x_t = (r_t, y_t), n = n_x + n_y",
+        "output_shape": "[T, n] simulated trajectory x_hat_t",
+        "parameters": {
+          "model": "VAR(1): x_t = a0 + A1 x_{t-1} + eta_t",
+          "residual_treatment": "nonparametric resampling with replacement of historical residuals eta_hat_t",
+          "stationarity_condition": "spectral radius rho(A1) < 1",
+          "invariant_mean": "mu = (I - A1)^-1 a0"
+        },
+        "paper_section": "Section 3",
+        "confidence": 0.92,
+        "notes": "Price component represented as returns r_t, rate component as levels y_t. Equity levels reconstructed multiplicatively post-simulation; rate levels taken directly from x_hat_t. Parameter count grows as n^2 (A1 matrix)."
+      },
+      {
+        "name": "NelsonSiegelFactorExtraction",
+        "operation_type": "cross_sectional_least_squares_fit",
+        "input_shape": "[T, M] observed rates y_t(tau) across M maturities",
+        "output_shape": "[T, 3] latent factors beta_t = (beta0_t, beta1_t, beta2_t)",
+        "parameters": {
+          "model_equation": "y_t(tau) = beta0_t + beta1_t*L1(tau) + beta2_t*L2(tau)",
+          "loadings": "L1(tau) = (1 - e^{-lambda*tau})/(lambda*tau); L2(tau) = L1(tau) - e^{-lambda*tau}",
+          "lambda_calibration": "exogenous; chosen by minimizing MSE between observed and reconstructed rates using maturities <= 5 years, fixed across time",
+          "per_date_estimation": "quadratic (least-squares) optimization of beta0, beta1, beta2 for each date given fixed lambda"
+        },
+        "paper_section": "Section 4",
+        "confidence": 0.9,
+        "notes": "Level/slope/curvature interpretation of beta0/beta1/beta2. Follows dynamic Diebold-Li (2006) parameterization of static Nelson-Siegel (1987)."
+      },
+      {
+        "name": "NelsonSiegelVARBootstrap",
+        "operation_type": "semiparametric_VAR1_on_latent_factors_plus_curve_reconstruction",
+        "input_shape": "[T, 3] Nelson-Siegel factor series beta_t (optionally augmented with other price/rate factors r_t, y_t in joint state x_t)",
+        "output_shape": "[T, M] simulated yield curve y_hat_t(tau) across maturities tau",
+        "parameters": {
+          "model": "VAR(1) on factors: beta_t = a0 + A1 beta_{t-1} + eta_t",
+          "residual_treatment": "nonparametric resampling with replacement of historical factor-VAR residuals",
+          "curve_reconstruction": "y_hat_t(tau) = ell(tau) beta_hat_t, with ell(tau) = [1, L1(tau), L2(tau)]",
+          "fitting_error_treatment": "epsilon_t(tau) (per-maturity NS fitting residual) is NOT resampled; only factor dynamics are propagated"
+        },
+        "paper_section": "Section 5",
+        "confidence": 0.88,
+        "notes": "Mitigates the n^2 parameter growth of plain VAR-Bootstrap applied directly to all curve nodes by modeling only 3 latent factors. Joint state vector can include additional price returns r_t and non-curve level factors y_t alongside beta_t."
+      }
+    ],
+    "connections": [
+      { "from": "HistoricalData", "to": "StationaryBootstrap", "tensor_name": "z_t (returns + rate differences)" },
+      { "from": "HistoricalData", "to": "VARBootstrap", "tensor_name": "x_t (returns + rate levels)" },
+      { "from": "HistoricalData", "to": "NelsonSiegelFactorExtraction", "tensor_name": "y_t(tau) observed curve" },
+      { "from": "NelsonSiegelFactorExtraction", "to": "NelsonSiegelVARBootstrap", "tensor_name": "beta_t" },
+      { "from": "NelsonSiegelVARBootstrap", "to": "SimulatedYieldCurve", "tensor_name": "y_hat_t(tau)" },
+      { "from": "VARBootstrap", "to": "NoArbitrageCheck", "tensor_name": "simulated curve / discount factors" },
+      { "from": "StationaryBootstrap", "to": "NoArbitrageCheck", "tensor_name": "simulated curve / discount factors" },
+      { "from": "NelsonSiegelVARBootstrap", "to": "NoArbitrageCheck", "tensor_name": "simulated curve / discount factors" }
+    ],
+    "variants": [
+      {
+        "name": "StationaryBootstrap",
+        "differences": { "type": "fully nonparametric", "state": "returns r_t and Δy_t differences" }
+      },
+      {
+        "name": "VARBootstrap (direct on curve nodes)",
+        "differences": { "type": "semiparametric VAR(1) + residual bootstrap", "state": "x_t = (r_t, y_t) with y_t possibly the full set of curve maturities" }
+      },
+      {
+        "name": "NelsonSiegelVARBootstrap",
+        "differences": { "type": "semiparametric VAR(1) on 3 latent NS factors + residual bootstrap + curve reconstruction", "state": "beta_t = (beta0_t, beta1_t, beta2_t), optionally augmented with r_t, y_t" }
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Return and rate-difference transforms",
+      "latex": "r_t^{(i)} = \\frac{P_t^{(i)} - P_{t-1}^{(i)}}{P_{t-1}^{(i)}}, \\quad \\Delta y_t^{(j)} = y_t^{(j)} - y_{t-1}^{(j)}",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 2",
+      "confidence": 0.95
+    },
+    {
+      "name": "Stationary Bootstrap simulation recursion",
+      "latex": "\\hat{P}_t = (\\mathbf{1}_{n_x} + r_t^*) \\odot \\hat{P}_{t-1}, \\qquad \\hat{y}_t = \\hat{y}_{t-1} + \\Delta y_t^*",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["block length distribution parameter (geometric)"],
+      "undefined_symbols": [],
+      "paper_section": "Section 2",
+      "confidence": 0.93
+    },
+    {
+      "name": "VAR(1) model",
+      "latex": "x_t = a_0 + A_1 x_{t-1} + \\eta_t",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["a_0", "A_1"],
+      "undefined_symbols": [],
+      "paper_section": "Section 3",
+      "confidence": 0.95
+    },
+    {
+      "name": "VAR residuals",
+      "latex": "\\hat{\\eta}_t = x_t - \\hat{a}_0 - \\hat{A}_1 x_{t-1}",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 3",
+      "confidence": 0.95
+    },
+    {
+      "name": "VAR-Bootstrap simulation recursion",
+      "latex": "\\hat{x}_t = \\hat{a}_0 + \\hat{A}_1 \\hat{x}_{t-1} + \\eta_t^*",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 3",
+      "confidence": 0.95
+    },
+    {
+      "name": "Stationarity / mean-reversion condition",
+      "latex": "\\rho(A_1) < 1, \\qquad \\mu = (I - A_1)^{-1} a_0",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 3",
+      "confidence": 0.93
+    },
+    {
+      "name": "Dynamic Nelson-Siegel curve equation",
+      "latex": "y_t(\\tau) = \\beta_{0,t} + \\beta_{1,t} L_1(\\tau) + \\beta_{2,t} L_2(\\tau)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["lambda"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4",
+      "confidence": 0.95
+    },
+    {
+      "name": "Nelson-Siegel factor loadings",
+      "latex": "L_1(\\tau) = \\frac{1-e^{-\\lambda\\tau}}{\\lambda\\tau}, \\qquad L_2(\\tau) = \\frac{1-e^{-\\lambda\\tau}}{\\lambda\\tau} - e^{-\\lambda\\tau}",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["lambda"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4",
+      "confidence": 0.95
+    },
+    {
+      "name": "Nelson-Siegel curve with fitting error",
+      "latex": "y_t(\\tau) = \\beta_{0,t} + \\beta_{1,t} L_1(\\tau) + \\beta_{2,t} L_2(\\tau) + \\varepsilon_t(\\tau)",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["lambda"],
+      "undefined_symbols": [],
+      "paper_section": "Section 5",
+      "confidence": 0.93
+    },
+    {
+      "name": "Factor VAR(1) dynamics",
+      "latex": "\\beta_t = a_0 + A_1 \\beta_{t-1} + \\eta_t",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["a_0", "A_1"],
+      "undefined_symbols": [],
+      "paper_section": "Section 5",
+      "confidence": 0.93
+    },
+    {
+      "name": "NS-VAR-Bootstrap simulated curve reconstruction",
+      "latex": "\\hat{y}_t(\\tau) = \\ell(\\tau) \\hat{\\beta}_t = \\ell(\\tau)\\hat{a}_0 + \\ell(\\tau) \\hat{A}_1 \\hat{\\beta}_{t-1} + \\ell(\\tau)\\eta_t^*, \\quad \\ell(\\tau) = [1, L_1(\\tau), L_2(\\tau)]",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 5",
+      "confidence": 0.92
+    },
+    {
+      "name": "Kullback-Leibler divergence metric",
+      "latex": "D_{KL}(f_1 \\| f_2) := \\int f_1(x) \\log\\left(\\frac{f_1(x)}{f_2(x)}\\right) dx",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["KDE bandwidth"],
+      "undefined_symbols": [],
+      "paper_section": "Section 6",
+      "confidence": 0.92
+    },
+    {
+      "name": "Discount factor / no-arbitrage monotonicity condition",
+      "latex": "B(0,\\tau) = e^{-\\tau y(\\tau)}, \\qquad 1 = B(0,0) \\geq B(0,T_1) \\geq B(0,T_2) \\geq 0 \\text{ for } T_1 < T_2",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Appendix B",
+      "confidence": 0.9
+    }
+  ],
+  "tensor_semantics": [
+    { "name": "P_t", "shape_notation": "[n_x]", "dtype": null, "tensor_type": "input", "module": "StationaryBootstrap", "confidence": 0.85 },
+    { "name": "r_t", "shape_notation": "[n_x]", "dtype": null, "tensor_type": "intermediate", "module": "StationaryBootstrap/VARBootstrap", "confidence": 0.85 },
+    { "name": "y_t", "shape_notation": "[n_y]", "dtype": null, "tensor_type": "input", "module": "StationaryBootstrap/VARBootstrap", "confidence": 0.85 },
+    { "name": "Delta_y_t", "shape_notation": "[n_y]", "dtype": null, "tensor_type": "intermediate", "module": "StationaryBootstrap", "confidence": 0.85 },
+    { "name": "z_t", "shape_notation": "[n] = [n_x + n_y]", "dtype": null, "tensor_type": "intermediate", "module": "StationaryBootstrap", "confidence": 0.85 },
+    { "name": "x_t", "shape_notation": "[n] = [n_x + n_y]", "dtype": null, "tensor_type": "intermediate", "module": "VARBootstrap", "confidence": 0.85 },
+    { "name": "A_1", "shape_notation": "[n, n] (or [3,3] for NS-VAR)", "dtype": null, "tensor_type": "parameter", "module": "VARBootstrap/NelsonSiegelVARBootstrap", "confidence": 0.9 },
+    { "name": "a_0", "shape_notation": "[n] (or [3] for NS-VAR)", "dtype": null, "tensor_type": "parameter", "module": "VARBootstrap/NelsonSiegelVARBootstrap", "confidence": 0.9 },
+    { "name": "eta_t", "shape_notation": "[n] (or [3] for NS-VAR)", "dtype": null, "tensor_type": "intermediate", "module": "VARBootstrap/NelsonSiegelVARBootstrap", "confidence": 0.85 },
+    { "name": "beta_t", "shape_notation": "[3] (beta0, beta1, beta2)", "dtype": null, "tensor_type": "intermediate", "module": "NelsonSiegelFactorExtraction", "confidence": 0.9 },
+    { "name": "y_t(tau)", "shape_notation": "[M] maturities (3m,6m,1..10y => M=12)", "dtype": null, "tensor_type": "input", "module": "NelsonSiegelFactorExtraction", "confidence": 0.9 },
+    { "name": "epsilon_t(tau)", "shape_notation": "[M]", "dtype": null, "tensor_type": "intermediate", "module": "NelsonSiegelFactorExtraction", "confidence": 0.85 }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Ordinary Least Squares (VAR(1) estimation) / per-date quadratic optimization (Nelson-Siegel factor fit)",
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.6
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.2
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.55
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      { "name": "MSCI Europe Net Total Return EUR Index (Equity EUR)", "split": "historical daily/monthly series", "size": null, "publicly_available": false },
+      { "name": "12-month Italian Treasury Bills (BOT) gross yield, proxy for 1y Italian rate", "split": "historical daily/monthly series", "size": null, "publicly_available": false },
+      { "name": "Euro area HICP ex-tobacco (non-revised, non-seasonally adjusted)", "split": "historical monthly series", "size": null, "publicly_available": false },
+      { "name": "Italian yield curve (3m, 6m, 1-10y maturities)", "split": "historical daily/monthly series", "size": null, "publicly_available": false }
+    ],
+    "metrics": [
+      "Percentage of negative increments",
+      "Mean value of negative increments (conditional intensity)",
+      "Cross-factor correlation",
+      "Kullback-Leibler divergence (historical vs simulated marginal distributions)",
+      "Share of simulated curves with non-negative rates at all maturities",
+      "Percentage of no-arbitrage (discount factor monotonicity) violations"
+    ],
+    "reported_results": [
+      { "metric": "pct_negative_increments_daily", "dataset": "Equity EUR", "split": "daily", "value": 46.93, "is_primary": true },
+      { "metric": "pct_negative_increments_daily", "dataset": "1y Rate", "split": "daily", "value": 53.30, "is_primary": true },
+      { "metric": "pct_negative_increments_monthly", "dataset": "Equity EUR", "split": "monthly", "value": 40.14, "is_primary": true },
+      { "metric": "pct_negative_increments_monthly", "dataset": "1y Rate", "split": "monthly", "value": 55.44, "is_primary": true },
+      { "metric": "pct_negative_increments_monthly", "dataset": "Inflation", "split": "monthly", "value": 49.60, "is_primary": true },
+      { "metric": "KL_divergence_VAR_Bootstrap_daily", "dataset": "Equity EUR", "split": "daily", "value": 0.0027, "is_primary": true },
+      { "metric": "KL_divergence_VAR_Bootstrap_daily", "dataset": "1y Rate", "split": "daily", "value": 0.0137, "is_primary": true },
+      { "metric": "KL_divergence_Stationary_Bootstrap_daily", "dataset": "Equity EUR", "split": "daily", "value": 0.0050, "is_primary": false },
+      { "metric": "KL_divergence_Stationary_Bootstrap_daily", "dataset": "1y Rate", "split": "daily", "value": 0.0082, "is_primary": false },
+      { "metric": "pct_curves_without_negative_rates", "dataset": "Stationary Bootstrap", "split": "5y horizon", "value": 77.44, "is_primary": true },
+      { "metric": "pct_curves_without_negative_rates", "dataset": "VAR-Bootstrap", "split": "5y horizon", "value": 87.84, "is_primary": true },
+      { "metric": "pct_curves_without_negative_rates", "dataset": "Nelson-Siegel VAR-Bootstrap", "split": "5y horizon", "value": 88.51, "is_primary": true },
+      { "metric": "pct_arbitrage_violations", "dataset": "Stationary Bootstrap", "split": "5y horizon, within non-negative subset", "value": 21.66, "is_primary": true },
+      { "metric": "pct_arbitrage_violations", "dataset": "VAR-Bootstrap", "split": "5y horizon, within non-negative subset", "value": 0.56, "is_primary": true },
+      { "metric": "pct_arbitrage_violations", "dataset": "Nelson-Siegel VAR-Bootstrap", "split": "5y horizon, within non-negative subset", "value": 0.24, "is_primary": true }
+    ],
+    "baselines": ["Stationary Bootstrap (Politis & Romano)"],
+    "compute": null,
+    "special_conditions": [
+      "10^4 simulated trajectories per methodology, 5-year horizon (1260 daily nodes or 60 monthly observations)",
+      "Inflation modeled only at monthly frequency with long-run level constrained to 2%",
+      "Yield curve analysis restricted to scenarios with non-negative rates at all maturities when testing arbitrage violations"
+    ],
+    "confidence": 0.9
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Stationary Bootstrap average block length / geometric distribution parameter is not explicitly given in the paper; a literature-typical value (e.g., mean block length ~ optimal per Politis-Romano rule or a fixed value such as 20 trading days) must be assumed.",
+      "basis": "literature default (Politis & Romano 1994 optimal block-length heuristics are standard practice)",
+      "confidence": 0.4,
+      "alternatives": ["Fixed block length (e.g. 5, 10, 20, 60 days)", "Data-driven optimal block length selection (Politis & White 2004)"],
+      "affects_section": "Stationary Bootstrap module"
+    },
+    {
+      "assumption": "Number and choice of historical sample window (start/end dates) for estimating VAR(1) and Nelson-Siegel parameters is not stated; assume the full available history for each series up to the paper's writing (mid-2026).",
+      "basis": "common practice for backtesting scenario generators",
+      "confidence": 0.4,
+      "alternatives": ["Rolling window estimation", "Fixed recent N-year window"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "VAR(1) parameters (a0, A1) estimated via ordinary least squares equation-by-equation, which is the standard/efficient estimator for VAR models under i.i.d. or weakly dependent residuals.",
+      "basis": "standard econometric practice for VAR(1) estimation",
+      "confidence": 0.75,
+      "alternatives": ["Maximum likelihood estimation (equivalent to OLS under Gaussian errors)", "GLS if residuals are correlated across equations"],
+      "affects_section": "VARBootstrap / NelsonSiegelVARBootstrap"
+    },
+    {
+      "assumption": "Nelson-Siegel decay parameter lambda is calibrated once (not time-varying) by minimizing MSE over the full history using maturities <= 5y, then held fixed for factor extraction at every date.",
+      "basis": "explicitly stated in Section 4, but the exact numeric value of lambda and optimizer (e.g., grid search vs. Nelder-Mead) are not given",
+      "confidence": 0.6,
+      "alternatives": ["Grid search over a lambda range", "Nonlinear least squares / Nelder-Mead optimization", "Fixed conventional lambda value (e.g., 0.0609 as in Diebold-Li 2006, tuned to maximize curvature loading at ~30 months)"],
+      "affects_section": "NelsonSiegelFactorExtraction"
+    },
+    {
+      "assumption": "KDE bandwidth for the Kullback-Leibler divergence computation is not specified; assume a standard rule-of-thumb bandwidth selector (e.g., Silverman's or Scott's rule).",
+      "basis": "paper explicitly notes KL value depends on bandwidth choice but does not specify it",
+      "confidence": 0.4,
+      "alternatives": ["Silverman's rule", "Scott's rule", "Cross-validated bandwidth"],
+      "affects_section": "evaluation_protocol (KL divergence metric)"
+    },
+    {
+      "assumption": "Residual resampling for VAR-Bootstrap and NS-VAR-Bootstrap draws i.i.d. with replacement from the full historical residual set (not block resampling), consistent with the AR-Bootstrap illustration in Appendix A.",
+      "basis": "inferred from Appendix A worked example, which resamples individual residuals with replacement rather than blocks",
+      "confidence": 0.65,
+      "alternatives": ["Block bootstrap of residuals to preserve residual autocorrelation/heteroskedasticity", "Parametric (e.g., Gaussian) residual simulation instead of resampling"],
+      "affects_section": "VARBootstrap / NelsonSiegelVARBootstrap"
+    },
+    {
+      "assumption": "Implementation language/framework not specified by the paper; assume Python with numpy/pandas/statsmodels/scipy as the standard quant research stack.",
+      "basis": "common practice in quantitative finance research reproduction",
+      "confidence": 0.55,
+      "alternatives": ["R", "MATLAB", "Julia"],
+      "affects_section": "implementation_assumptions (general)"
+    },
+    {
+      "assumption": "Maturities used for the full yield-curve analysis are 3m, 6m, and annual points from 1y to 10y (12 points total), as explicitly listed in Section 8 / Table 9.",
+      "basis": "explicitly stated in paper",
+      "confidence": 0.95,
+      "alternatives": [],
+      "affects_section": "evaluation_protocol"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 2 (Stationary Bootstrap)",
+      "description": "The exact block-length distribution parameter (mean block length) used for the geometric-block stationary bootstrap is never given numerically.",
+      "primary_assumption": "Optimal block length via Politis-Romano-style heuristic, order ~sqrt(T) to T^(1/3) trading days",
+      "alternatives": ["Fixed 20-day block", "Fixed 60-day block", "Cross-validated block length"],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 4 (Nelson-Siegel calibration)",
+      "description": "The specific numeric value obtained for the exogenous decay parameter lambda after MSE minimization is not reported anywhere in the paper.",
+      "primary_assumption": "lambda close to the Diebold-Li canonical value (~0.06 per month equivalent) but re-fit for this dataset",
+      "alternatives": ["Any lambda in a plausible 0.02-0.15 monthly-equivalent range depending on units of tau"],
+      "confidence": 0.5
+    },
+    {
+      "location": "Section 6 (KL divergence)",
+      "description": "KDE bandwidth selection method for computing the Kullback-Leibler divergence is explicitly acknowledged by the authors as consequential but is not specified.",
+      "primary_assumption": "Silverman's rule-of-thumb bandwidth, applied per-factor/per-maturity",
+      "alternatives": ["Scott's rule", "Manually tuned bandwidth", "Cross-validated bandwidth"],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 3 / Section 5 (residual resampling)",
+      "description": "Whether VAR-Bootstrap residuals are resampled independently at each simulated time step (i.i.d.) or in blocks (to preserve any residual autocorrelation/volatility clustering) is not explicitly stated in the main text; only the simple worked AR(1) example in Appendix A resamples i.i.d.",
+      "primary_assumption": "i.i.d. resampling with replacement from the pooled historical residual set",
+      "alternatives": ["Block resampling of residuals", "Bias-corrected resampling"],
+      "confidence": 0.6
+    },
+    {
+      "location": "Section 7 / Table 1-4 (historical sample period)",
+      "description": "Exact start/end dates of the historical estimation sample for Equity EUR, the 1y Italian rate, and inflation are not given.",
+      "primary_assumption": "A multi-decade sample ending at/near the paper's writing date (2026), long enough to cover multiple rate cycles",
+      "alternatives": ["A shorter post-2008 or post-2015 sample", "A sample restricted to a specific monetary-policy regime"],
+      "confidence": 0.35
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.9,
+    "mathematical_spec": 0.93,
+    "tensor_semantics": 0.85,
+    "training_pipeline": 0.55,
+    "evaluation_protocol": 0.9,
+    "implementation_assumptions": 0.55,
+    "overall_sir_confidence": 0.78
+  }
+}

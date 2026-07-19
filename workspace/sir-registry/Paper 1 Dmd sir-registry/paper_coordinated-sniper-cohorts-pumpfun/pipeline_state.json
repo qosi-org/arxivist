@@ -1,0 +1,28 @@
+{
+  "paper_id": "paper_coordinated-sniper-cohorts-pumpfun",
+  "current_stage": "COMPLETE",
+  "stages_completed": [
+    {"stage": 1, "name": "PaperParser",        "confidence": 0.91,  "files": ["sir.json"]},
+    {"stage": 2, "name": "SIRRegistry",        "confidence": 1.00,  "files": ["sir.json","metadata.json","sir_v1.json","global_index.json"]},
+    {"stage": 3, "name": "ArchitecturePlanner","confidence": 0.88,  "files": ["architecture_plan.json","architecture_plan_summary.md"]},
+    {"stage": 4, "name": "CodeGenerator",      "confidence": 0.91,  "files": ["37 repo files — detect.py, analyze.py, causal.py, run_all.py, 20 src modules, Docker, configs"]},
+    {"stage": 5, "name": "NotebookGenerator",  "confidence": 0.95,  "files": ["notebooks/reproduce_paper_coordinated-sniper-cohorts-pumpfun.ipynb (42 cells)"]},
+    {"stage": 6, "name": "ResultsComparator",  "confidence": 0.85,  "mode": "pre-run (Option C)",
+     "files": ["comparison/benchmark_comparison.md","comparison/hallucination_report.md","comparison/reproducibility_scorecard.md"],
+     "predicted_score_uncalibrated": 0.693,
+     "predicted_score_calibrated": 0.881,
+     "predicted_score_after_rank_fix": 0.930,
+     "hallucinations_found": 9,
+     "hallucinations_critical": 1,
+     "rerun_trigger": "Submit causal_buyer_flow_summary.txt to get post-run audit (Option A)"}
+  ],
+  "artifacts": {
+    "sir":                  "sir-registry/.../sir.json",
+    "architecture_plan":    "sir-registry/.../architecture_plan.json",
+    "repo":                 "paper-repos/paper_coordinated-sniper-cohorts-pumpfun/",
+    "notebook":             "paper-repos/.../notebooks/reproduce_paper_coordinated-sniper-cohorts-pumpfun.ipynb",
+    "comparison_report":    "paper-repos/.../comparison/benchmark_comparison.md",
+    "hallucination_report": "paper-repos/.../comparison/hallucination_report.md",
+    "scorecard":            "paper-repos/.../comparison/reproducibility_scorecard.md"
+  }
+}

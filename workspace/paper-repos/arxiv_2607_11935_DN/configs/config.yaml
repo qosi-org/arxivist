@@ -1,0 +1,63 @@
+# Configuration for reproducing arXiv:2607.11935
+# "Eigenvector rotation precedes eigenvalue-based early-warning signals:
+#  a TVP-Kalman approach to detecting critical transitions"
+#
+# NOTE: this paper has NO trained model. R and Q below are fixed
+# filter-design hyperparameters given directly in the paper (Section 2.2),
+# not learned/fit values. Comments marked "# ASSUMED" flag values not
+# explicitly stated in the paper (see sir.json confidence scores and
+# architecture_plan.json risk_assessment for detail).
+
+model:
+  kalman_state_dim: 4                    # [beta, beta', beta'', beta''']
+  kalman_R: 0.001                         # observation noise variance (paper Section 2.2, exact)
+  kalman_Q_diag: [1.0e-6, 1.0e-7, 1.0e-8, 1.0e-9]   # process noise diag (paper Section 2.2, exact)
+  kalman_dt_years: 0.0833333333            # 1/12 year (paper Section 2.2, exact)
+  transition_matrix_form: "taylor_order3"    # ASSUMED confidence 0.55: paper names this matrix
+                                               # ("Taylor expansion transition matrix of order 3")
+                                               # but does not give numeric entries -- see README.md
+
+data:
+  regions: ["arctic", "tropics", "monsoon"]
+  region_bounds:
+    arctic:   {lat_min: 65,  lat_max: 90,  lon_min: -180, lon_max: 180}
+    tropics:  {lat_min: -10, lat_max: 10,  lon_min: -180, lon_max: 180}
+    monsoon:  {lat_min: 5,   lat_max: 25,  lon_min: 60,   lon_max: 100}
+  n_observations: 284
+  date_range: ["2002-09", "2026-04"]
+  variables:
+    T: "SurfSkinTemp_A"
+    q: "H2O_MMR_Surf_A"
+  use_synthetic_fallback: true              # true: no NASA Earthdata credentials needed (see data/README_data.md)
+  ar1_variance_window_months: 24
+  permutation_entropy_embedding_dim: 3
+  permutation_entropy_window_months: 36
+  mutual_information_window_months: 36
+  mutual_information_n_neighbors: 3           # ASSUMED: paper says "nearest-neighbor regression" but not k
+
+evaluation:
+  significance_z_threshold: 2.0
+  max_cross_correlation_lag_months: 24
+  simulation_systems:
+    - fold_bifurcation
+    - beta_step_change
+    - beta_linear_decay
+    - logistic_map
+    - stommel_amoc
+    - critical_slowing_down
+  # Simulation parameters below are ASSUMED (confidence ~0.4): the paper gives
+  # only qualitative equations and bifurcation-parameter endpoints (Section 2.4),
+  # not noise magnitudes, forcing schedules, or exact simulation lengths.
+  simulation:
+    fold_bifurcation:      {n_steps: 250, tipping_t: 200, noise_std: 0.05}
+    beta_step_change:      {n_steps: 300, tipping_t: 200, beta_before: 0.8, beta_after: 0.2, noise_std: 0.1}
+    beta_linear_decay:     {n_steps: 300, decay_end: 250, beta_start: 1.0, beta_end: 0.2, noise_std: 0.1}
+    logistic_map:          {n_steps: 400, tipping_t: 133, r_start: 2.5, r_end: 4.0}
+    stommel_amoc:          {n_steps: 300, tipping_t: 200, freshwater_forcing_rate: 0.005, noise_std: 0.02}
+    critical_slowing_down: {n_steps: 300, tipping_t: 250, lambda_start: 1.0, lambda_end: 0.0, noise_std: 0.1}
+
+hardware:
+  device: "cpu"     # entire pipeline is lightweight time-series computation, no GPU used or needed
+  precision: "float64"
+  num_workers: 1
+  seed: 0

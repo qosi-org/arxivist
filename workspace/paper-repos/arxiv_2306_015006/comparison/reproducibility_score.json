@@ -1,0 +1,38 @@
+{
+  "paper_id": "arxiv_2306_015006",
+  "comparison_date": "2026-07-16",
+  "reproducibility_score": 0.966,
+  "score_confidence": "medium",
+  "metrics_compared": 1,
+  "metrics_matched": 1,
+  "arxivist_sir_version": 1,
+  "metric_comparisons": [
+    {
+      "metric": "mcc",
+      "dataset": "GUE/promoter_detection/all",
+      "split": "test",
+      "paper_value": 86.77,
+      "user_value": 86.14,
+      "absolute_deviation": -0.63,
+      "deviation_pct": -0.72,
+      "direction": "below",
+      "severity": "excellent",
+      "root_causes": []
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 1,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0,
+    "unmatched": 0
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 0,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": false
+}

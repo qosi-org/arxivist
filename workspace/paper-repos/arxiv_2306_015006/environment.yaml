@@ -1,0 +1,20 @@
+name: dnabert2
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pytorch>=2.1
+  - pytorch-cuda=11.8
+  - pip
+  - pip:
+      - transformers>=4.35
+      - einops>=0.7
+      - datasets>=2.14
+      - huggingface_hub>=0.19
+      - scikit-learn>=1.3
+      - pandas>=2.0
+      - pyyaml>=6.0
+      - tqdm>=4.66
+      - numpy>=1.24

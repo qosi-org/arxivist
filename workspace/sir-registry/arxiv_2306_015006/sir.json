@@ -1,0 +1,111 @@
+{
+  "paper_id": "arxiv_2306_015006",
+  "sir_version": 1,
+  "provenance": {
+    "title": "DNABERT-2: Efficient Foundation Model and Benchmark For Multi-Species Genomes",
+    "authors": ["Zhihan Zhou", "Yanrong Ji", "Weijian Li", "Pratik Dutta", "Ramana V Davuluri", "Han Liu"],
+    "affiliations": ["Northwestern University", "Stony Brook University"],
+    "arxiv_id": "2306.15006",
+    "doi": null,
+    "submission_date": "2023-06-26",
+    "abstract": "DNABERT-2 is a multi-species genome foundation model that replaces k-mer tokenization with Byte Pair Encoding (BPE) and uses ALiBi + Flash Attention to remove input-length limits. It matches SOTA (NT-2.5B) with ~21x fewer parameters and ~92x less pre-training GPU time, and introduces the Genome Understanding Evaluation (GUE) benchmark of 36 datasets across 9 tasks.",
+    "domain": "Multimodal",
+    "key_claims": [
+      "BPE tokenization overcomes k-mer information leakage and sample inefficiency for genomes",
+      "ALiBi removes input-length limits; Flash Attention + LoRA improve efficiency",
+      "Matches SOTA with 21x fewer params and ~92x less pre-training compute",
+      "Outperforms DNABERT on 23/28 GUE datasets (avg +6)",
+      "Introduces GUE: 36 datasets, 9 tasks, multi-species, input lengths 70-10000"
+    ],
+    "parsed_at": "2026-07-12T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "DNABERT-2-117M (Transformer encoder, BPE vocab 4096, ALiBi, GEGLU)",
+    "modules": [
+      {"name": "BPETokenizer", "operation_type": "tokenization", "input_shape": "[B] raw DNA str", "output_shape": "[B, L] int64", "parameters": {"algorithm": "SentencePiece BPE", "vocab_size": 4096}, "paper_section": "Sec 3.1", "confidence": 0.95, "notes": "Vocab 2^12=4096 chosen to balance perf/efficiency (Fig 3c)."},
+      {"name": "TokenEmbedding", "operation_type": "embedding", "input_shape": "[B, L]", "output_shape": "[B, L, D]", "parameters": {"D": 768}, "paper_section": "Sec 3.2", "confidence": 0.85, "notes": "BERT-base-like width; ~117M params."},
+      {"name": "ALiBiAttention", "operation_type": "attention", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"pos_encoding": "ALiBi (no learned pos emb)", "flash_attention": true, "num_heads": 12}, "paper_section": "Sec 3.2", "confidence": 0.9, "notes": "Static linear attention biases; head-specific geometric slopes m."},
+      {"name": "GEGLU_FFN", "operation_type": "mlp", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"activation": "GEGLU", "expansion": 4}, "paper_section": "Sec 3.2", "confidence": 0.9, "notes": "GEGLU(x)=GELU(xW+b) ⊗ (xV+c) replaces ReLU."},
+      {"name": "LowPrecisionLayerNorm", "operation_type": "normalization", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {}, "paper_section": "Sec 3.2", "confidence": 0.8, "notes": null},
+      {"name": "MLMHead", "operation_type": "linear", "input_shape": "[B, L, D]", "output_shape": "[B, L, vocab]", "parameters": {}, "paper_section": "Sec A.2", "confidence": 0.85, "notes": "Pretraining MLM head; downstream uses a classification head instead."},
+      {"name": "LoRA", "operation_type": "adapter", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"used_for": "optional PEFT fine-tuning", "rank": 8, "alpha": 16, "dropout": 0.05}, "paper_section": "Sec 3.2 / A.3", "confidence": 0.85, "notes": "LoRA used mainly for NT baseline; DNABERT-2 uses standard fine-tuning by default."}
+    ],
+    "connections": [
+      {"from": "BPETokenizer", "to": "TokenEmbedding", "tensor_name": "token_ids"},
+      {"from": "TokenEmbedding", "to": "ALiBiAttention", "tensor_name": "hidden"},
+      {"from": "ALiBiAttention", "to": "GEGLU_FFN", "tensor_name": "hidden"},
+      {"from": "GEGLU_FFN", "to": "MLMHead", "tensor_name": "hidden"}
+    ],
+    "variants": [
+      {"name": "DNABERT-2-117M", "differences": {"params_M": 117, "vocab": 4096, "flops_rel": 1.0}},
+      {"name": "DNABERT-2-with-further-pretrain", "differences": {"note": "extra MLM pretraining on GUE train sets (marked as DNABERT-2 diamond)"}}
+    ]
+  },
+  "mathematical_spec": [
+    {"name": "ALiBi attention", "latex": "\\mathrm{softmax}\\left(q_i K + m \\cdot [-(i-1),\\dots,-1,0,-1,\\dots,-(L-1-i)]\\right)", "role": "attention", "used_in": "both", "hyperparameters": ["m (head-specific slope)"], "undefined_symbols": [], "paper_section": "Sec 3.2", "confidence": 0.9},
+    {"name": "GEGLU", "latex": "\\mathrm{GEGLU}(x,W,V,b,c) = \\mathrm{GELU}(xW+b) \\otimes (xV+c)", "role": "activation", "used_in": "both", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 3.2", "confidence": 0.92},
+    {"name": "LoRA decomposition", "latex": "W_1 = W_0 + \\Delta W,\\; \\Delta W = BA,\\; B \\in \\mathbb{R}^{m\\times r}, A \\in \\mathbb{R}^{r\\times n}, r \\ll m,n", "role": "other", "used_in": "training", "hyperparameters": ["r", "alpha"], "undefined_symbols": [], "paper_section": "Sec 3.2", "confidence": 0.9},
+    {"name": "MLM loss", "latex": "\\mathcal{L}_{MLM} = -\\sum_{t \\in M} \\log p(x_t \\mid x_{\\setminus M})", "role": "loss", "used_in": "training", "hyperparameters": ["mask_ratio=0.15"], "undefined_symbols": [], "paper_section": "Sec A.2", "confidence": 0.9}
+  ],
+  "tensor_semantics": [
+    {"name": "token_ids", "shape_notation": "[B, L]", "dtype": "int64", "tensor_type": "input", "module": "TokenEmbedding", "confidence": 0.9},
+    {"name": "hidden", "shape_notation": "[B, L, 768]", "dtype": "float32", "tensor_type": "intermediate", "module": "ALiBiAttention", "confidence": 0.85},
+    {"name": "cls_logits", "shape_notation": "[B, num_classes]", "dtype": "float32", "tensor_type": "output", "module": "ClassificationHead", "confidence": 0.85}
+  ],
+  "training_pipeline": {
+    "optimizer": {"name": "AdamW", "learning_rate": 3e-5, "beta1": 0.9, "beta2": 0.98, "weight_decay": 0.01, "confidence": 0.92},
+    "lr_schedule": {"type": "linear warmup + constant (finetune); linear warmup 30k + linear decay (pretrain)", "warmup_steps": 50, "total_steps": null, "confidence": 0.9},
+    "batch_size": 32,
+    "effective_batch_size": 32,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": "fp16/bf16 (Composer/Transformers)",
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "Per-task epochs (Table 7): EMP 3, TF-M 1000 steps, CVC 8, TF-H 3, PD-tata 10, PD-o 4, CPD-tata 10, CPD-o 4, SSP 5",
+    "confidence": 0.9
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "GUE (28 datasets, 7 tasks)", "split": "train/dev/test provided", "size": null, "publicly_available": true},
+      {"name": "GUE+ (long-sequence tasks 5000-10000bp)", "split": "provided", "size": null, "publicly_available": true},
+      {"name": "Multi-species pretraining genome (135 species, 32.49B bases)", "split": "pretrain", "size": null, "publicly_available": true}
+    ],
+    "metrics": ["MCC", "F1"],
+    "reported_results": [
+      {"metric": "mcc", "dataset": "GUE/promoter_detection/all", "split": "test", "value": 86.77, "is_primary": true},
+      {"metric": "mcc", "dataset": "GUE/promoter_detection/notata", "split": "test", "value": 94.27, "is_primary": false},
+      {"metric": "mcc", "dataset": "GUE/promoter_detection/tata", "split": "test", "value": 71.59, "is_primary": false},
+      {"metric": "mcc", "dataset": "GUE/core_promoter_detection/all", "split": "test", "value": 69.37, "is_primary": false},
+      {"metric": "mcc", "dataset": "GUE/EMP/H3", "split": "test", "value": 78.27, "is_primary": false},
+      {"metric": "mcc", "dataset": "GUE/EMP/H3K4me3", "split": "test", "value": 36.27, "is_primary": false},
+      {"metric": "mcc", "dataset": "GUE/tf_human/0", "split": "test", "value": 71.99, "is_primary": false},
+      {"metric": "mcc", "dataset": "GUE/splice/reconstructed", "split": "test", "value": 84.99, "is_primary": false},
+      {"metric": "f1", "dataset": "GUE/covid_variant", "split": "test", "value": 71.02, "is_primary": false},
+      {"metric": "mcc", "dataset": "GUE/tf_mouse/1", "split": "test", "value": 84.77, "is_primary": false}
+    ],
+    "baselines": ["DNABERT (3/4/5/6-mer)", "NT-500M-human", "NT-500M-1000g", "NT-2500M-1000g", "NT-2500M-multi"],
+    "compute": "Pretrain ~14 days on 8x RTX 2080Ti; downstream fine-tuning on consumer GPUs",
+    "special_conditions": ["3 random seeds averaged", "validate every 200 steps, keep lowest-val-loss checkpoint", "same HPs across datasets except max_len and steps"],
+    "confidence": 0.95
+  },
+  "implementation_assumptions": [
+    {"assumption": "d_model=768, 12 heads, 12 layers (BERT-base-like)", "basis": "117M params + 'adapts Transformer Encoder / BERT-base' statements", "confidence": 0.75, "alternatives": ["different depth/width combos summing to 117M"], "affects_section": "architecture"},
+    {"assumption": "Downstream classification: mean/CLS pooling + linear head", "basis": "standard BERT fine-tuning; HF SequenceClassification", "confidence": 0.8, "alternatives": ["CLS token only", "mean pool"], "affects_section": "architecture"},
+    {"assumption": "max_len per task from GUE sequence lengths (70-1000 for GUE)", "basis": "Table 1/12", "confidence": 0.9, "alternatives": [], "affects_section": "training_pipeline"}
+  ],
+  "ambiguities": [
+    {"location": "Sec 3.2", "description": "Exact layer count / d_model not stated numerically; only 'BERT-base-like' and 117M params.", "primary_assumption": "12 layers, d_model 768, 12 heads", "alternatives": ["deeper narrower", "shallower wider"], "confidence": 0.7},
+    {"location": "Downstream head", "description": "Pooling strategy for classification not specified.", "primary_assumption": "mean-pool over tokens then linear", "alternatives": ["CLS token"], "confidence": 0.75}
+  ],
+  "confidence_annotations": {
+    "architecture": 0.85,
+    "mathematical_spec": 0.9,
+    "tensor_semantics": 0.85,
+    "training_pipeline": 0.9,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.77,
+    "overall_sir_confidence": 0.87
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "paper_id": "arxiv_2306_015794",
+  "paper_title": "HyenaDNA: Long-Range Genomic Sequence Modeling at Single Nucleotide Resolution",
+  "current_stage": 6,
+  "stages_completed": [1, 2, 3, 4, 5],
+  "stage_timestamps": { "1": "2026-07-11T00:00:00Z", "2": "2026-07-11T00:00:00Z", "3": "2026-07-11T00:00:00Z", "4": "2026-07-12T00:00:00Z", "5": "2026-07-11T00:00:00Z", "6": "2026-07-12T00:00:00Z" },
+  "stage_confidence": { "1": 0.78, "2": 1.0, "3": 0.78, "4": 0.95, "5": 0.85, "6": 0.94 },
+  "sir_path": "sir-registry/arxiv_2306_015794/sir.json",
+  "repo_path": "paper-repos/arxiv_2306_015794/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2306_015794/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2306_015794/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2306_015794/notebooks/reproduce_arxiv_2306_015794.ipynb",
+    "comparison_report": "paper-repos/arxiv_2306_015794/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": { "training_pipeline": 0.62 },
+  "human_review_required": false,
+  "human_review_reasons": [],
+  "loop_count": 3,
+  "retry_history": [
+    {"stage": 4, "retry_at": "2026-07-12T00:00:00Z", "reason": "AutoModel rejected HyenaDNA config (no model_type)", "outcome": "success"},
+    {"stage": 4, "retry_at": "2026-07-12T00:00:00Z", "reason": "PyTorch 2.6 weights_only=True blocked OmegaConf ckpt", "outcome": "success"},
+    {"stage": 4, "retry_at": "2026-07-12T00:00:00Z", "reason": "hand-written model keys mismatched checkpoint; vendored authors' standalone_hyenadna.py, fixed vocab pad + tokenizer ids", "outcome": "success"}
+  ],
+  "created_at": "2026-07-11T00:00:00Z",
+  "last_updated": "2026-07-11T00:00:00Z",
+  "pipeline_complete": true
+}

@@ -1,0 +1,91 @@
+{
+  "paper_id": "arxiv_2607_11935",
+  "comparison_date": "2026-07-18T15:11:21Z",
+  "reproducibility_score": 0.01,
+  "score_confidence": "medium",
+  "metrics_compared": 15,
+  "metrics_matched": 6,
+  "deviation_summary": {
+    "excellent": 1,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 5
+  },
+  "matched_metrics": [
+    {
+      "metric": "|beta| (mean absolute elasticity)",
+      "dataset": "NASA AIRS Tropics",
+      "paper_value": 0.492,
+      "user_value": 0.4910013841393236,
+      "percentage_deviation": -0.203,
+      "severity": "Excellent"
+    },
+    {
+      "metric": "sigma_beta",
+      "dataset": "NASA AIRS Tropics",
+      "paper_value": 0.035,
+      "user_value": 0.003623954823244974,
+      "percentage_deviation": -89.6,
+      "severity": "Critical"
+    },
+    {
+      "metric": "r(beta, AR(1)_T)",
+      "dataset": "NASA AIRS Tropics",
+      "paper_value": 0.08,
+      "user_value": -0.39524971064018727,
+      "percentage_deviation": -594.1,
+      "severity": "Critical",
+      "note": "sign flip and significance flip: paper reports non-significant (p=0.22), user run reports highly significant (p=3.4e-11) -- this is a failure to reproduce the paper's central orthogonality claim"
+    },
+    {
+      "metric": "r(beta, MI)",
+      "dataset": "NASA AIRS Tropics",
+      "paper_value": -0.33,
+      "user_value": 0.04132421678243459,
+      "percentage_deviation": -112.5,
+      "severity": "Critical",
+      "note": "sign flip and significance flip: paper reports p<0.001, user run reports non-significant (p=0.52)"
+    },
+    {
+      "metric": "beta lead time over AR(1) (Stommel AMOC simulation)",
+      "dataset": "Simulated Stommel AMOC",
+      "paper_value": 39,
+      "user_value": 20,
+      "percentage_deviation": -48.7,
+      "severity": "Critical",
+      "note": "same qualitative winner (beta) as paper, margin smaller than reported"
+    },
+    {
+      "metric": "beta lead time over AR(1) (critical slowing down simulation)",
+      "dataset": "Simulated critical slowing down",
+      "paper_value": 153,
+      "user_value": 35,
+      "percentage_deviation": -77.1,
+      "severity": "Critical",
+      "note": "same qualitative winner (beta) as paper, margin smaller than reported"
+    }
+  ],
+  "unmatched_paper_metrics": [
+    "|beta|, sigma_beta, r(beta,AR1), r(beta,MI) -- NASA AIRS Arctic",
+    "|beta|, sigma_beta, r(beta,AR1), r(beta,MI) -- NASA AIRS Indian Monsoon",
+    "beta lead-lag range vs classical EWS (observational, all regions)"
+  ],
+  "qualitative_winner_comparison": [
+    {"simulation": "Fold bifurcation", "paper_winner": "AR1", "user_winner": "AR1", "match": true},
+    {"simulation": "Beta step change", "paper_winner": "AR1", "user_winner": "beta", "match": false},
+    {"simulation": "Beta linear decay", "paper_winner": "beta", "user_winner": "beta", "match": true, "note": "paper: AR1 never crosses threshold; user run: AR1 does cross, just later than beta"},
+    {"simulation": "Logistic map", "paper_winner": "tie", "user_winner": "tie", "match": true},
+    {"simulation": "Stommel AMOC", "paper_winner": "beta", "user_winner": "beta", "match": true},
+    {"simulation": "Critical slowing down", "paper_winner": "beta", "user_winner": "beta", "match": true}
+  ],
+  "hallucination_count": {
+    "structural": 1,
+    "parametric": 3,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "architecture_plan_version_used": 1,
+  "requires_manual_review": true,
+  "manual_review_reason": "The paper's central empirical claim (beta orthogonal to AR(1), r~0, p>0.05) is not reproduced in this run (r=-0.395, p=3.4e-11) on synthetic-fallback data. Root cause is very likely the synthetic data generator entangling beta and AR(1) by shared construction, not an implementation defect -- but this must be confirmed against real NASA AIRS data before drawing conclusions about the paper's empirical validity."
+}

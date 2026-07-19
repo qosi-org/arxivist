@@ -1,0 +1,23 @@
+{
+  "paper_id": "paper_coordinated-sniper-cohorts-pumpfun",
+  "title": "Coordinated Sniper Cohorts on Pump.fun: Detection of 1,012 Persistent Wallet Rings and the Limits of Naive Causal Inference for First-Hour Buyer Flow",
+  "authors": ["Arati Uday Kamat"],
+  "domain": "On-Chain Market Microstructure / Blockchain Forensics",
+  "arxiv_id": null,
+  "zenodo_doi": "10.5281/zenodo.20978741",
+  "version": 1,
+  "created_at": "2026-07-14T00:01:00Z",
+  "last_updated": "2026-07-14T00:02:00Z",
+  "sir_confidence": 0.91,
+  "stages_with_data": ["paper_parser", "sir_registry"],
+  "has_comparison_report": false,
+  "repo_path": "paper-repos/paper_coordinated-sniper-cohorts-pumpfun/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-14T00:02:00Z",
+      "reason": "initial commit",
+      "changed_sections": ["all"]
+    }
+  ]
+}

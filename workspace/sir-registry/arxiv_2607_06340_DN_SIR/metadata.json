@@ -1,0 +1,28 @@
+{
+  "paper_id": "arxiv_2607_06340",
+  "title": "Signature-based identification of volatility models from path geometry",
+  "authors": [
+    "\u00d2scar Bur\u00e9s",
+    "Rafael De Santiago"
+  ],
+  "domain": "Tabular",
+  "arxiv_id": "2607.06340",
+  "version": 1,
+  "created_at": "2026-07-12T00:00:00Z",
+  "last_updated": "2026-07-13T00:00:00Z",
+  "sir_confidence": 0.82,
+  "stages_with_data": [
+    "stage1_sir",
+    "stage6_comparison"
+  ],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2607_06340/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-12T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    }
+  ]
+}

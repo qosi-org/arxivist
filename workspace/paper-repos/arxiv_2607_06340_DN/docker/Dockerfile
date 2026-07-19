@@ -1,0 +1,12 @@
+FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime
+
+RUN apt-get update && apt-get install -y git wget build-essential && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+WORKDIR /workspace
+COPY . .
+RUN pip install -e .
+
+CMD ["python", "train.py", "--help"]
