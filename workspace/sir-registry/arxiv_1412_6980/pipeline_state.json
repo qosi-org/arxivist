@@ -1,0 +1,15 @@
+{
+  "paper_id": "arxiv_1412_6980",
+  "sir_version": 1,
+  "last_completed_stage": 5,
+  "stages": {
+    "stage1_parse": "complete",
+    "stage2_registry": "complete",
+    "stage3_plan": "complete",
+    "stage4_codegen": "complete",
+    "stage5_notebook": "complete",
+    "stage6_compare": "pending"
+  },
+  "overall_confidence": 0.96,
+  "human_review_required": false
+}
