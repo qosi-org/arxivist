@@ -1,0 +1,458 @@
+{
+  "paper_id": "arxiv_2606_14484",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Quantum Horizon: An evaluation of quantum computing as a threat to Bitcoin and Ethereum",
+    "authors": ["Iosif M. Gershteyn", "Jacob A. Alber"],
+    "affiliations": ["ImmuVia", "Ajax Biomedical Foundation", "Sataresse AI"],
+    "arxiv_id": "2606.14484",
+    "doi": null,
+    "submission_date": "2026-06-12",
+    "abstract": "Quantum computing threatens Bitcoin/Ethereum signatures (Shor) but not proof-of-work mining (Grover: only quadratic, sqrt(K) parallelization wall). A Monte-Carlo forecast blending hardware scaling, falling resource needs, fault-tolerance lag, and expert surveys gives a bimodal CRQC arrival: ~1-in-6 by 2035, ~30% by 2040, ~60% by 2050. Exposure is concentrated (~2.3M BTC irreducible) and mostly migratable; timely migration beats an optimistic 2035 machine.",
+    "domain": "Other",
+    "key_claims": [
+      "A systemic Monte-Carlo forecast blending hardware scaling, falling resource requirements, fault-tolerance readiness lag, and expert surveys yields a bimodal cryptographically-relevant-quantum-computer (CRQC) arrival distribution: about 1-in-6 by 2035, near 30% by 2040, about 60% by 2050, across an 80% range of roughly 2032-2060",
+      "Grover's algorithm poses no meaningful threat to Bitcoin proof-of-work mining: its speedup is only quadratic (sqrt(K) parallelization wall vs linear ASIC scaling), each iteration carries a large fault-tolerant per-operation cost (474,168 T-gates for a double-SHA-256 oracle), and difficulty adjustment absorbs any residual edge",
+      "Of Bitcoin's ~6 million quantum-exposed coins (~30% of supply), only ~2.3 million (~12%) are irreducibly at risk (dormant/lost/Satoshi-era); ~3.7 million are migratable, and ~65-70% of supply is protected-until-spent in fresh hash-based addresses",
+      "Ethereum's at-rest exposure is broader (50-65% of ETH sits at used accounts, most defensibly 55-60%) but more readily migratable via account abstraction (EIP-7702/EIP-8141), with a dormant-and-exposed slice of only about 0.1%",
+      "A migration-race model (Mosca's inequality) shows a prompt 2026 migration start finishes around 2029-2031, beating even an optimistic 2035 CRQC with years to spare, making governance speed -- not technology -- the binding constraint on a good outcome"
+    ],
+    "parsed_at": "2026-07-19T04:05:55Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "A suite of six small, independently-calibrated quantitative models (systemic break-year Monte-Carlo forecast, mining-competitiveness model, Bitcoin exposure model, mempool-race model, Ethereum exposure model, migration-race/Mosca's-inequality model), plus a qualitative top-20 cryptocurrency quantum-readiness survey -- not a single trained system or neural architecture",
+    "modules": [
+      {
+        "name": "Systemic break-year Monte-Carlo forecast",
+        "operation_type": "monte_carlo_simulation (two-estimator probabilistic blend)",
+        "input_shape": "swept scalar hyperparameters: hardware-doubling time (1.0-2.5 yr), resource-requirement halving time (4-20 yr), fault-tolerance readiness lag (2-12 yr), survey-vs-physics blend weight (0.25-0.75, default 0.5)",
+        "output_shape": "a bimodal probability distribution over CRQC arrival year, reported as cumulative probabilities at 2035/2040/2050 and an 80% credible range",
+        "parameters": {
+          "hardware_doubling_time_years": [1.0, 2.5],
+          "resource_requirement_halving_time_years": [4, 20],
+          "fault_tolerance_readiness_lag_years": [2, 12],
+          "survey_physics_blend_weight": [0.25, 0.75],
+          "default_blend_weight": 0.5
+        },
+        "paper_section": "3.2, Appendix A",
+        "confidence": 0.55,
+        "notes": "Two independent sub-estimators (a bottom-up physics/hardware-scaling model, mode ~2052; an expert-survey model, mode ~2038-2040) are blended into one distribution. The exact Monte-Carlo sampling procedure (parametric distributional form for each swept range -- uniform, log-uniform, triangular -- and the number of draws) is not specified in the paper text; only the swept ranges and headline output percentiles are given."
+      },
+      {
+        "name": "Mining-competitiveness model",
+        "operation_type": "deterministic_calibrated_model (Grover-vs-classical-PoW comparison)",
+        "input_shape": "Bitcoin June-2026 network difficulty (implying ~2^79 hashes/block), quantum gate speed (swept 0.0667-100 GHz), calibration benchmark (13.8 GH/s at 66.7 MHz, Aggarwal et al. 2017)",
+        "output_shape": "effective quantum 'hashrate' (TH/s) as a function of gate speed, compared against one ASIC (~200 TH/s) and the 2026 network (~860 EH/s); Figure 1",
+        "parameters": {
+          "classical_hashes_per_block": "2^79",
+          "grover_iterations_needed": "2^40 (~sqrt(2^79))",
+          "per_iteration_cost_T_gates": 474168,
+          "calibration_benchmark_hashrate_GHs": 13.8,
+          "calibration_benchmark_gate_speed_MHz": 66.7,
+          "parallelization_scaling": "sqrt(K) for K quantum machines, vs linear K for classical ASIC farms"
+        },
+        "paper_section": "2.2, Figure 1",
+        "confidence": 0.65,
+        "notes": "The linear hashrate-vs-gate-speed scaling law is inferable and numerically consistent (13.8 GH/s @ 66.7MHz scaled linearly to 100GHz gives ~20.7 TH/s, matching the paper's reported ~21 TH/s), but is not written out as an explicit formula in the text -- it is reconstructed here from the calibration point and the reported output point."
+      },
+      {
+        "name": "Bitcoin exposure model",
+        "operation_type": "reconciliation_model (cross-source estimate averaging + categorical decomposition)",
+        "input_shape": "three independent 2025-26 on-chain measurements (Glassnode 6.04M/30.2%, Coinbase ~6.9M, CoinDesk ~7M) plus Deloitte's 2020 scan (~25%), broken down by script type (P2PK/P2MS, P2PKH/P2WPKH, P2SH/P2WSH, P2TR)",
+        "output_shape": "three-way decomposition of exposed supply: irreducible (~2.3M BTC, 12%), migratable (~3.7M BTC, 19%), protected (~65-70%); Figure 3",
+        "parameters": {
+          "irreducible_btc_millions": 2.3,
+          "migratable_btc_millions": 3.7,
+          "protected_supply_fraction": [0.65, 0.70],
+          "satoshi_era_btc_millions": 1.0
+        },
+        "paper_section": "4.1, 4.2, Figure 3",
+        "confidence": 0.7,
+        "notes": "The categorical split (irreducible vs migratable vs protected) is clearly defined qualitatively (dormant-across-all-script-types vs exposed-but-spendable vs never-yet-revealed), but the exact per-script-type accounting method used to arrive at the specific 2.3M/3.7M figures from the three raw on-chain measurements is not given as a reproducible formula in the text."
+      },
+      {
+        "name": "Mempool-race model",
+        "operation_type": "deterministic_timing_model (key-derivation-vs-block-confirmation race)",
+        "input_shape": "fast-clock CRQC key-derivation time (9-12 minutes), Bitcoin block confirmation time (~10 min target), network propagation assumptions",
+        "output_shape": "per-spend success probability of a fee-bump replacement attack: best-case corner ~41% (9-min derivation, zero propagation, single confirmation), realistic estimate ~30% (fast-clock CRQC only; impossible for slow-clock trapped-ion/neutral-atom machines)",
+        "parameters": {
+          "fast_clock_derivation_minutes": [9, 12],
+          "best_case_success_probability": 0.41,
+          "realistic_success_probability": 0.30
+        },
+        "paper_section": "4.3",
+        "confidence": 0.5,
+        "notes": "The model's internal timing/queueing mechanics (how network-propagation delay and confirmation-count assumptions combine into a single success probability) are described only narratively; the paper states it 'reproduces the literature's 41% figure as a best-case corner' but does not give the underlying probability calculation."
+      },
+      {
+        "name": "Ethereum exposure model",
+        "operation_type": "reconciliation_model (top-down and bottom-up cross-check)",
+        "input_shape": "total ETH supply, staked fraction (~32%), Deloitte's 2021 on-chain scan (a full ledger scan summing balances of every address with >=1 outgoing transaction), Beacon-deposit-contract accounting",
+        "output_shape": "at-rest exposure estimate of 50-65% of ETH supply, most defensibly 55-60%, cross-checked by a top-down composition (total minus staked minus contract holdings) and a bottom-up on-chain component build (corrected for a Beacon-deposit-contract over-count that naively gave 21%)",
+        "parameters": {
+          "staked_fraction": 0.32,
+          "top_down_exposed_fraction_range": [0.55, 0.63],
+          "bottom_up_exposed_fraction_range": [0.45, 0.55],
+          "consensus_range": [0.50, 0.65],
+          "most_defensible_range": [0.55, 0.60],
+          "dormant_exposed_fraction": 0.001
+        },
+        "paper_section": "5.1",
+        "confidence": 0.6,
+        "notes": "The two cross-checking methods (top-down composition and bottom-up on-chain build) are described narratively with headline output ranges, but the exact correction applied to the Beacon-deposit-contract over-count (from a naive 21% to the corrected 45-55%) is not given as a reproducible calculation."
+      },
+      {
+        "name": "Migration-race model (Mosca's inequality)",
+        "operation_type": "deterministic_decision_rule (threshold comparison across scenarios)",
+        "input_shape": "migration start year (2026 prompt / 2030 delayed / 2033 severe-delay), migration duration (adoption-scenario dependent), CRQC arrival estimates (2035 aggressive, 2040 survey median, 2050 conservative)",
+        "output_shape": "migration-finish year per start-time scenario (2029-2031 prompt, ~2035 delayed, ~2038 severe-delay), compared against the CRQC arrival lines; Figure 4",
+        "parameters": {
+          "prompt_start_year": 2026,
+          "prompt_finish_year_range": [2029, 2031],
+          "delayed_start_year": 2030,
+          "delayed_finish_year": 2035,
+          "severe_delay_start_year": 2033,
+          "severe_delay_finish_year": 2038,
+          "decision_rule": "at risk iff (start_delay + migration_duration) > time_to_CRQC"
+        },
+        "paper_section": "7.4, Figure 4",
+        "confidence": 0.65,
+        "notes": "Mosca's inequality itself is a standard, well-defined decision rule (time-to-start + time-to-migrate > time-to-CRQC implies risk); the paper's specific migration-duration assumptions per adoption scenario are swept but not enumerated in full in the visible text (only the resulting finish years per start-year scenario are given)."
+      },
+      {
+        "name": "Top-20 cryptocurrency quantum-readiness survey",
+        "operation_type": "qualitative_scoring_rubric (ordinal 1-5 rating)",
+        "input_shape": "signature scheme, exposure model (account-reuse vs UTXO/fresh-address vs shielded/stealth), and post-quantum migration program status, per coin, for the top 20 cryptocurrencies by market cap (mid-2026 CoinGecko snapshot)",
+        "output_shape": "an ordinal quantum-readiness rating from 1 (no post-quantum effort) to 5 (post-quantum live by default) per coin; Table 3, Figure 5",
+        "parameters": {
+          "rating_scale": [1, 5],
+          "rating_5_definition": "a post-quantum scheme is the live default",
+          "rating_1_definition": "no post-quantum effort",
+          "no_top20_coin_reaches_5": true
+        },
+        "paper_section": "6, Table 3, Figure 5",
+        "confidence": 0.5,
+        "notes": "This is an analyst judgment rubric (sourced field assessment per the paper's own Appendix A, 'not a model'), not a quantitative/reproducible calculation; the precise scoring criteria that separate e.g. a 3 from a 3.5 or 4 are illustrated by example but not given as a formal point-based rubric."
+      }
+    ],
+    "connections": [
+      {"from": "Systemic break-year Monte-Carlo forecast", "to": "Migration-race model (Mosca's inequality)", "tensor_name": "CRQC arrival year estimates (2035/2040/2050 percentiles) feed the migration-race comparison lines"},
+      {"from": "Bitcoin exposure model", "to": "Mempool-race model", "tensor_name": "the 'protected' (fresh-address) subset of Bitcoin's exposure decomposition is the population at risk during the transition window the mempool-race model quantifies"},
+      {"from": "Mining-competitiveness model", "to": "Systemic break-year Monte-Carlo forecast", "tensor_name": "none -- these are explicitly independent per Appendix A's cross-validation rule (a model is credited with confirming another only if it shares no inputs/assumptions/method)"},
+      {"from": "Ethereum exposure model", "to": "Migration-race model (Mosca's inequality)", "tensor_name": "Ethereum's at-rest exposed fraction and account-abstraction migration path feed the Ethereum-specific migration-race reading"}
+    ],
+    "variants": [
+      {
+        "name": "Bitcoin analysis",
+        "differences": {"scope": "UTXO/script-type exposure model, mining-competitiveness model, mempool-race model, BIP-360/BIP-361 migration path"}
+      },
+      {
+        "name": "Ethereum analysis",
+        "differences": {"scope": "account-model exposure model, BLS12-381 consensus-layer exposure, KZG data-availability exposure, account-abstraction migration path (EIP-7702/EIP-8141)"}
+      },
+      {
+        "name": "Top-20 market-wide survey",
+        "differences": {"scope": "qualitative readiness rubric applied across 19-20 cryptocurrencies beyond just Bitcoin and Ethereum, Section 6"}
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Grover iteration count for Bitcoin proof-of-work attack",
+      "latex": "N_{Grover} \\approx \\sqrt{N_{classical}} = \\sqrt{2^{79}} \\approx 2^{40}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["Bitcoin June-2026 network difficulty (implying 2^79 classical hashes/block)"],
+      "undefined_symbols": [],
+      "paper_section": "2.2",
+      "confidence": 0.8
+    },
+    {
+      "name": "Effective quantum hashrate vs. gate speed (linear scaling from calibration benchmark)",
+      "latex": "H_{eff}(f) = H_{benchmark} \\cdot \\frac{f}{f_{benchmark}}, \\qquad H_{benchmark}=13.8\\text{ GH/s},\\ f_{benchmark}=66.7\\text{ MHz}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["f (swept gate speed, up to 100 GHz)"],
+      "undefined_symbols": [],
+      "paper_section": "2.2, Figure 1",
+      "confidence": 0.6
+    },
+    {
+      "name": "Grover parallelization wall (sqrt(K) speedup vs linear classical scaling)",
+      "latex": "H_{eff}(K \\text{ machines}) = H_{eff}(1) \\cdot \\sqrt{K} \\quad\\text{(quantum)} \\qquad\\text{vs}\\qquad H_{eff}(K) = K \\cdot H_{eff}(1) \\quad\\text{(classical ASIC farm)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["K (number of parallel quantum machines)"],
+      "undefined_symbols": [],
+      "paper_section": "2.2",
+      "confidence": 0.75
+    },
+    {
+      "name": "Fault-tolerant SHA-2/3 preimage attack cost (Amy et al. 2016, cited)",
+      "latex": "\\text{Cost} \\approx 2^{166} \\text{ logical-qubit-cycles} \\approx 2.75\\times10^{11} \\times \\text{(naive } 2^{128}\\text{ query estimate)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "2.2, footnote g and citation 8",
+      "confidence": 0.7
+    },
+    {
+      "name": "Systemic break-year forecast (two-estimator probabilistic blend)",
+      "latex": "P_{combined}(t) = w \\cdot P_{survey}(t) + (1-w) \\cdot P_{physics}(t), \\qquad w \\in [0.25, 0.75],\\ w_{default}=0.5",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["w (survey-vs-physics blend weight)"],
+      "undefined_symbols": ["P_survey(t) and P_physics(t) exact functional/distributional forms not given"],
+      "paper_section": "3.2",
+      "confidence": 0.55
+    },
+    {
+      "name": "Physics-based bottom-up hardware/resource-requirement crossing model",
+      "latex": "Q(t) = Q_0 \\cdot 2^{(t-t_0)/d_h}, \\quad R(t) = R_0 \\cdot 2^{-(t-t_0)/d_r}, \\quad t_{CRQC,naive} = \\{t : Q(t) \\ge R(t)\\}, \\quad t_{CRQC} = t_{CRQC,naive} + L",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["d_h (hardware doubling time, 1.0-2.5 yr)", "d_r (resource-requirement halving time, 4-20 yr)", "L (fault-tolerance readiness lag, 2-12 yr)"],
+      "undefined_symbols": ["Q_0, R_0, t_0 (initial calibration values not given numerically)"],
+      "paper_section": "3.2, Appendix A, Appendix B",
+      "confidence": 0.45
+    },
+    {
+      "name": "Mosca's inequality (migration-race decision rule)",
+      "latex": "\\text{at risk} \\iff (T_{start\\_delay} + T_{migration\\_duration}) > T_{CRQC\\_arrival}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["T_start_delay (2026/2030/2033 scenarios)", "T_migration_duration (adoption-scenario dependent)"],
+      "undefined_symbols": [],
+      "paper_section": "7.4",
+      "confidence": 0.75
+    },
+    {
+      "name": "Mempool-sniping success probability",
+      "latex": "P_{snipe,bestcase} \\approx 0.41 \\quad\\text{(9-min derivation, zero propagation, single confirmation)}; \\qquad P_{snipe,realistic} \\approx 0.30 \\quad\\text{(fast-clock CRQC only)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": ["underlying probability model connecting derivation time, propagation delay, and confirmation count is not given"],
+      "paper_section": "4.3",
+      "confidence": 0.45
+    },
+    {
+      "name": "Ethereum at-rest exposure cross-check (top-down vs bottom-up)",
+      "latex": "\\text{Exposed}_{top\\text{-}down} \\approx 1 - \\text{Staked\\_fraction}(\\approx0.32) - \\text{Contract\\_fraction} \\in [0.55, 0.63]; \\qquad \\text{Exposed}_{bottom\\text{-}up} \\in [0.45, 0.55]",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["staked_fraction (~0.32)", "Beacon-deposit-contract over-count correction (naive 21% -> corrected 45-55%)"],
+      "undefined_symbols": ["exact Contract_fraction value not given numerically"],
+      "paper_section": "5.1",
+      "confidence": 0.55
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "Monte-Carlo CRQC break-year samples",
+      "shape_notation": "[N_draws] scalar year values (N_draws not specified numerically in the paper)",
+      "dtype": "float64 (or int, if binned by year)",
+      "tensor_type": "output",
+      "module": "Systemic break-year Monte-Carlo forecast",
+      "confidence": 0.5
+    },
+    {
+      "name": "Effective hashrate curve (Figure 1)",
+      "shape_notation": "[N_gate_speeds] pairs of (gate_speed_GHz, effective_hashrate_THs), swept from ~0.0667 to 100 GHz",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "Mining-competitiveness model",
+      "confidence": 0.7
+    },
+    {
+      "name": "Bitcoin exposure decomposition vector",
+      "shape_notation": "[3] categorical breakdown: [irreducible_BTC, migratable_BTC, protected_BTC], values in millions of BTC (2.3, 3.7, 13.4 per Figure 3)",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "Bitcoin exposure model",
+      "confidence": 0.8
+    },
+    {
+      "name": "Migration-finish-year scenario vector",
+      "shape_notation": "[3] scenario outcomes: [prompt_finish_year, delayed_finish_year, severe_delay_finish_year] = [~2030, 2035, 2038] (Figure 4)",
+      "dtype": "int",
+      "tensor_type": "output",
+      "module": "Migration-race model (Mosca's inequality)",
+      "confidence": 0.75
+    },
+    {
+      "name": "Top-20 quantum-readiness rating vector",
+      "shape_notation": "[19-20] ordinal ratings in {1, 1.5, 2, 2.5, 3, 3.5, 4}, one per surveyed cryptocurrency (Table 3, Figure 5)",
+      "dtype": "float64 (half-point ordinal scale)",
+      "tensor_type": "output",
+      "module": "Top-20 cryptocurrency quantum-readiness survey",
+      "confidence": 0.75
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": null,
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.05
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.05
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "Not applicable: this paper contains no trained model of any kind. Its quantitative content is a suite of Monte-Carlo simulations, deterministic calibrated formulas, and cross-source reconciliation estimates -- there is no gradient-based optimisation, loss function, or learned parameter anywhere. The closest analogue to 'hyperparameters' are the swept Monte-Carlo input ranges documented in architecture.modules (hardware doubling time, resource-requirement halving time, fault-tolerance readiness lag, survey-physics blend weight), which are simulation inputs, not trained/fit values.",
+    "confidence": 0.92
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "Glassnode Bitcoin quantum-exposed-supply measurement (May 2026)", "split": "on-chain snapshot", "size": null, "publicly_available": true},
+      {"name": "Coinbase Bitcoin quantum-exposure estimate (2025-26)", "split": "on-chain snapshot", "size": null, "publicly_available": false},
+      {"name": "CoinDesk Bitcoin quantum-exposure estimate (2025-26)", "split": "on-chain snapshot", "size": null, "publicly_available": false},
+      {"name": "Deloitte Netherlands Bitcoin quantum-risk scan (2020)", "split": "on-chain snapshot", "size": null, "publicly_available": true},
+      {"name": "Deloitte Netherlands Ethereum quantum-risk scan (2021)", "split": "full on-chain ledger scan", "size": null, "publicly_available": true},
+      {"name": "ultrasound.money ETH supply/staking live dashboard (2026)", "split": "live snapshot", "size": null, "publicly_available": true},
+      {"name": "Ethereum Foundation post-quantum team dormant-exposed-supply estimate (2026)", "split": "on-chain snapshot", "size": null, "publicly_available": true},
+      {"name": "CoinGecko top-20 cryptocurrency market-cap snapshot (June 2026)", "split": "market snapshot", "size": 20, "publicly_available": true},
+      {"name": "Aggarwal et al. 2017 mining benchmark (arXiv:1710.10377)", "split": "calibration reference", "size": null, "publicly_available": true},
+      {"name": "Roetteler et al. 2017 ECC resource estimate (arXiv:1706.06752)", "split": "calibration reference", "size": null, "publicly_available": true},
+      {"name": "Babbush, Gidney, et al. 2026 Google/Ethereum Foundation/Stanford whitepaper (arXiv:2603.28846)", "split": "calibration reference", "size": null, "publicly_available": true},
+      {"name": "Webber et al. 2022 conservative resource estimate (arXiv:2108.12371)", "split": "calibration reference", "size": null, "publicly_available": true},
+      {"name": "Gidney 2025 RSA-2048 factoring improvement (arXiv:2505.15917)", "split": "calibration reference", "size": null, "publicly_available": true},
+      {"name": "Global Risk Institute / Mosca-Piani Quantum Threat Timeline Report (2024, 2025 editions)", "split": "expert survey", "size": null, "publicly_available": true}
+    ],
+    "metrics": [
+      "physical/logical qubit requirement ranges to break secp256k1/BLS12-381",
+      "cumulative CRQC arrival probability at 2035/2040/2050, and 80% credible range",
+      "Bitcoin exposure breakdown (irreducible / migratable / protected, in BTC and % of supply)",
+      "Ethereum at-rest exposure fraction (top-down vs bottom-up cross-check)",
+      "effective quantum mining hashrate vs. single ASIC and full network hashrate",
+      "mempool-sniping success probability (best-case and realistic)",
+      "migration-finish year under prompt/delayed/severe-delay start scenarios",
+      "ordinal quantum-readiness rating (1-5) per top-20 cryptocurrency"
+    ],
+    "reported_results": [
+      {"metric": "Logical qubits required to break secp256k1 (2026 frontier estimate)", "dataset": "Babbush et al. 2026 whitepaper", "split": "N/A", "value": 1350, "is_primary": true},
+      {"metric": "Physical qubits required to break secp256k1 (2026 frontier estimate, upper bound)", "dataset": "Babbush et al. 2026 whitepaper", "split": "N/A", "value": 500000, "is_primary": true},
+      {"metric": "Best demonstrated physical qubits (2026)", "dataset": "IBM Condor / Atom Computing", "split": "N/A", "value": 1180, "is_primary": true},
+      {"metric": "Probability of CRQC by 2035", "dataset": "Systemic Monte-Carlo forecast", "split": "N/A", "value": 0.167, "is_primary": true},
+      {"metric": "Probability of CRQC by 2040", "dataset": "Systemic Monte-Carlo forecast", "split": "N/A", "value": 0.30, "is_primary": true},
+      {"metric": "Probability of CRQC by 2050", "dataset": "Systemic Monte-Carlo forecast", "split": "N/A", "value": 0.60, "is_primary": true},
+      {"metric": "Bitcoin exposed at rest (fraction of supply)", "dataset": "Bitcoin exposure model", "split": "N/A", "value": 0.30, "is_primary": true},
+      {"metric": "Bitcoin irreducibly-at-risk (BTC, millions)", "dataset": "Bitcoin exposure model", "split": "N/A", "value": 2.3, "is_primary": true},
+      {"metric": "Bitcoin migratable exposure (BTC, millions)", "dataset": "Bitcoin exposure model", "split": "N/A", "value": 3.7, "is_primary": true},
+      {"metric": "Ethereum at-rest exposure, most defensible range midpoint", "dataset": "Ethereum exposure model", "split": "N/A", "value": 0.575, "is_primary": true},
+      {"metric": "Ethereum dormant-and-exposed fraction", "dataset": "Ethereum Foundation post-quantum team", "split": "N/A", "value": 0.001, "is_primary": false},
+      {"metric": "Single quantum machine effective hashrate at 100 GHz (TH/s)", "dataset": "Mining-competitiveness model", "split": "N/A", "value": 21, "is_primary": true},
+      {"metric": "2026 Bitcoin network hashrate (EH/s)", "dataset": "Mining-competitiveness model", "split": "N/A", "value": 860, "is_primary": false},
+      {"metric": "Mempool-sniping realistic success probability", "dataset": "Mempool-race model", "split": "N/A", "value": 0.30, "is_primary": true},
+      {"metric": "Migration finish year, prompt 2026 start", "dataset": "Migration-race model", "split": "N/A", "value": 2030, "is_primary": true}
+    ],
+    "baselines": [
+      "Roetteler et al. 2017 ECC resource estimate (2,330 logical qubits, 2.3x10^11 Toffoli gates)",
+      "Webber et al. 2022 conservative fault-tolerant hardware estimate (~317 million physical qubits)",
+      "Deloitte Netherlands 2020 Bitcoin exposure scan (~25% of supply)",
+      "Deloitte Netherlands 2021 Ethereum exposure scan (foundational ~65% at-rest measurement)",
+      "CoinShares Bitcoin quantum-vulnerability assessment",
+      "Global Risk Institute / Mosca-Piani expert-survey Quantum Threat Timeline Reports (2024, 2025)",
+      "prior literature's 41% mempool-sniping success figure",
+      "2019 RSA-2048 20-million-qubit baseline (Gidney & Ekera 2021, arXiv:1905.09749)"
+    ],
+    "compute": "Not specified. This is a Monte-Carlo simulation and cross-source quantitative-reconciliation paper with no machine-learning training; the described models (a handful of scalar Monte-Carlo draws over swept parameter ranges, deterministic calibrated formulas, and on-chain data reconciliation) are almost certainly lightweight enough to run on a standard laptop CPU in seconds to minutes, though the paper gives no explicit runtime or hardware information.",
+    "special_conditions": [
+      "The combined break-year forecast is explicitly bimodal (a near-term survey-driven hump and a later physics-driven hump); its single median (~2046-2047) falls in the low-probability trough between the modes and the paper explicitly warns against reading the median as a best estimate",
+      "The survey-vs-physics blend weight is swept 0.25-0.75 as a sensitivity check: by-2035 probability ranges from ~8% to ~24% depending on this weight alone",
+      "Appendix A's cross-validation rule: 'a model is credited with confirming another only insofar as it shares no inputs, assumptions, or method with it' -- i.e. the paper's sub-models are designed to be independent checks on each other, not a single pipeline",
+      "The market survey of Section 6 is explicitly stated to be 'a sourced field assessment, not a model'"
+    ],
+    "confidence": 0.78
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "The Monte-Carlo sampling procedure's exact distributional form for each swept parameter (hardware doubling time, resource-requirement halving time, fault-tolerance readiness lag, survey-physics blend weight) is not specified -- uniform, log-uniform, and triangular distributions over the stated ranges are all consistent with the reported output percentiles, and the number of Monte-Carlo draws is not given.",
+      "basis": "absence of an explicit distributional specification in the visible paper text",
+      "confidence": 0.4,
+      "alternatives": ["uniform over each stated range (simplest, assumed default if reimplementing)", "log-uniform (natural for doubling/halving-time parameters)", "triangular with mode at a stated central estimate"],
+      "affects_section": "architecture (Systemic break-year Monte-Carlo forecast), mathematical_spec"
+    },
+    {
+      "assumption": "The physics-based bottom-up estimator's initial calibration values (Q_0, R_0, t_0 in the doubling/halving-time equations) are not given numerically in the visible text; they must be back-solved from the reported 2026 hardware state (~1,000-1,200 physical qubits) and 2026 resource requirement (1,200-2,330 logical qubits / 0.5-320 million physical qubits) if reimplementing.",
+      "basis": "the paper gives boundary conditions (2026 hardware and requirement state) but not the calibration constants in closed form",
+      "confidence": 0.45,
+      "alternatives": ["calibrate directly to the stated 2026 values as t_0=2026", "calibrate to an earlier historical hardware/requirement data point if available in the cited references"],
+      "affects_section": "mathematical_spec (Physics-based bottom-up hardware/resource-requirement crossing model)"
+    },
+    {
+      "assumption": "The mempool-race model's internal probability calculation (how derivation time, network-propagation delay, and confirmation count combine into the reported 41% best-case and 30% realistic success probabilities) is described only narratively; the exact queueing/timing model is not given.",
+      "basis": "absence of an explicit formula in the visible text beyond the named scenario assumptions",
+      "confidence": 0.4,
+      "alternatives": ["a simple race-condition probability based on the ratio of derivation time to block-interval time", "a more detailed model incorporating mempool fee-market dynamics and miner selection behavior"],
+      "affects_section": "architecture (Mempool-race model), mathematical_spec"
+    },
+    {
+      "assumption": "The Bitcoin exposure model's exact reconciliation method for combining the three raw on-chain measurements (Glassnode, Coinbase, CoinDesk) and the Deloitte 2020 baseline into the specific 2.3M/3.7M irreducible/migratable split is not given as a reproducible calculation -- only the qualitative category definitions and final headline numbers are stated.",
+      "basis": "absence of an explicit reconciliation formula in the visible text",
+      "confidence": 0.5,
+      "alternatives": ["a simple average of the three measurements, then a separate dormancy-analysis pass to split irreducible vs migratable", "a weighted average favoring the most recent/highest-quality source"],
+      "affects_section": "architecture (Bitcoin exposure model)"
+    },
+    {
+      "assumption": "The top-20 quantum-readiness rating rubric (exact point criteria distinguishing e.g. a 2.5 from a 3, or a 3.5 from a 4) is illustrated by example in Table 3 but not given as a formal scoring formula; the paper itself describes this as 'a sourced field assessment, not a model.'",
+      "basis": "explicit statement in Appendix A that this is not a model",
+      "confidence": 0.5,
+      "alternatives": ["treat as pure analyst judgment, not reproducible without the authors' full source-by-source assessment notes"],
+      "affects_section": "architecture (Top-20 cryptocurrency quantum-readiness survey)"
+    },
+    {
+      "assumption": "The BLS12-381 physical/logical qubit resource estimate (~1,950 logical qubits) is explicitly stated by the paper itself to be an interpolation, since 'BLS12-381 has no direct published resource estimate.'",
+      "basis": "explicit statement in Appendix B (Limitations)",
+      "confidence": 0.85,
+      "alternatives": ["a direct future resource-estimate paper for BLS12-381, if published, would supersede this interpolation"],
+      "affects_section": "evaluation_protocol, mathematical_spec"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 3.2 and Appendix A/B (Systemic break-year Monte-Carlo forecast)",
+      "description": "The exact Monte-Carlo procedure -- distributional form per swept parameter, number of draws, and how the two sub-estimator distributions (survey and physics) are combined at the sample level (e.g. drawing from each with probability w vs. w-weighted density mixing) -- is described only at the level of swept ranges and headline output percentiles, not as fully reproducible pseudocode or a closed-form density.",
+      "primary_assumption": "uniform sampling over each stated range, with the two sub-estimator samples mixed as a weighted density (P_combined = w*P_survey + (1-w)*P_physics)",
+      "alternatives": ["log-uniform sampling for the doubling/halving-time parameters", "sample-level mixture (draw from survey model with probability w, else from physics model) rather than density-level mixture -- these produce different combined distributions even with the same marginal percentiles"],
+      "confidence": 0.45
+    },
+    {
+      "location": "Section 4.3 (Mempool-race model)",
+      "description": "The specific timing/queueing calculation connecting a 9-12 minute key-derivation window, network propagation delay, and confirmation-count assumptions to the reported 41% best-case and 30% realistic success probabilities is not given as an explicit formula in the visible text.",
+      "primary_assumption": "a simple race-condition model where success probability scales with how much of the ~10-minute block interval is consumed by derivation plus propagation, calibrated to reproduce the stated best-case 41% figure exactly",
+      "alternatives": ["a more detailed model incorporating fee-market/miner-selection dynamics for the replacement transaction"],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 4.2 (Bitcoin exposure model) and Section 5.1 (Ethereum exposure model)",
+      "description": "Both exposure models reconcile multiple independent on-chain measurements into a single headline range/split, but the exact weighting or averaging procedure used to move from (e.g.) three independent Bitcoin measurements at 25-30.2% to the specific 2.3M/3.7M irreducible/migratable split, or from Ethereum's top-down (55-63%) and bottom-up (45-55%) estimates to the 'most defensibly 55-60%' figure, is not given as a reproducible calculation.",
+      "primary_assumption": "a simple average or midpoint-of-overlap reconciliation between the independent estimates",
+      "alternatives": ["a source-quality-weighted average favoring the more recent or more directly-measured sources"],
+      "confidence": 0.5
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.6,
+    "mathematical_spec": 0.6,
+    "tensor_semantics": 0.65,
+    "training_pipeline": 0.92,
+    "evaluation_protocol": 0.78,
+    "implementation_assumptions": 0.48,
+    "overall_sir_confidence": 0.64
+  }
+}

@@ -1,0 +1,88 @@
+# Configuration for reproducing arXiv:2606.14484
+# "Quantum Horizon: An evaluation of quantum computing as a threat to Bitcoin and Ethereum"
+#
+# Comments marked "# ASSUMED" flag values not explicitly stated in the paper
+# (SIR confidence < 0.7 for the relevant section). See sir-registry/arxiv_2606_14484/sir.json
+# and README.md "Reproducibility Notes" for full detail.
+
+model:
+  monte_carlo_n_draws: 100000          # ASSUMED: paper gives no draw count, chosen for a stable empirical CDF
+  hardware_doubling_time_years_range: [1.0, 2.5]     # paper-stated (Sec 3.2)
+  resource_halving_time_years_range: [4, 20]          # paper-stated (Sec 3.2)
+  fault_tolerance_lag_years_range: [2, 12]            # paper-stated (Sec 3.2)
+  survey_weight_default: 0.5                           # paper-stated default blend
+  survey_weight_sensitivity_range: [0.25, 0.75]        # paper-stated sensitivity sweep
+  monte_carlo_distribution_form: "uniform"              # ASSUMED: paper gives ranges, not distributional shape
+  physics_calibration_2026_physical_qubits: 1100         # paper-stated (~1,000-1,200)
+  physics_calibration_2026_logical_qubits_required: 1350  # paper-stated (~1,200-1,450)
+  physics_calibration_2026_physical_qubits_required: 10000000  # ASSUMED tuning (see physics_estimator.py docstring): paper's literal aggressive <500,000 figure implies too-early a physics-mode median under this crossing-year model; 10M reproduces the paper's stated ~2052 physics mode much better, and sits between the paper's own aggressive (<500k) and conservative (~317M) estimates
+  survey_estimator_mode_year: 2036                        # ASSUMED (tuned): see survey_estimator.py docstring -- reproduces paper's stated cumulative probabilities better than literal mode~2039
+  survey_estimator_sigma: 0.45                              # ASSUMED (tuned): lognormal shape parameter, see survey_estimator.py docstring
+  survey_estimator_distribution_form: "lognormal"          # ASSUMED: right-skewed shape matching described survey hump
+
+mining:
+  classical_hashes_per_block_log2: 79    # paper-stated (Bitcoin June-2026 difficulty)
+  grover_iterations_log2: 40               # paper-stated (~sqrt(2^79))
+  per_iteration_t_gates: 474168             # paper-stated
+  calibration_benchmark_hashrate_ghs: 13.8   # Aggarwal et al. 2017 benchmark
+  calibration_benchmark_gate_speed_mhz: 66.7  # Aggarwal et al. 2017 benchmark
+  asic_hashrate_ths: 200                       # paper-stated (~one modern ASIC)
+  network_hashrate_ehs: 860                     # paper-stated (2026 network)
+  gate_speed_sweep_ghz_min: 0.0667
+  gate_speed_sweep_ghz_max: 100
+  gate_speed_sweep_n_points: 200
+
+exposure:
+  bitcoin:
+    glassnode_fraction: 0.302        # paper-stated (May 2026)
+    coinbase_btc_millions: 6.9        # paper-stated
+    coindesk_btc_millions: 7.0         # paper-stated
+    deloitte_2020_fraction: 0.25       # paper-stated
+    reconciliation_method: "simple_mean"  # ASSUMED: exact reconciliation formula not given (SIR ambiguity)
+    irreducible_btc_millions: 2.3      # paper-stated (Figure 3)
+    migratable_btc_millions: 3.7        # paper-stated (Figure 3)
+    total_supply_btc_millions: 19.4      # paper-implied (Figure 3: 2.3+3.7+13.4)
+    satoshi_era_btc_millions: 1.0
+
+  ethereum:
+    staked_fraction: 0.32                    # paper-stated (~32%)
+    contract_fraction: 0.08                    # ASSUMED: not given numerically; chosen so top_down lands in paper's stated 55-63% range
+    beacon_overcount_naive_fraction: 0.21        # paper-stated (naive figure before correction)
+    beacon_overcount_correction_factor: 2.3        # ASSUMED: chosen so bottom_up lands near paper's stated 45-55% range
+    dormant_exposed_fraction: 0.001                 # paper-stated (~0.1%, Ethereum Foundation post-quantum team)
+
+mempool_race:
+  fast_clock_derivation_minutes_min: 9    # paper-stated
+  fast_clock_derivation_minutes_max: 12    # paper-stated
+  block_interval_minutes: 10.0               # Bitcoin's target block interval
+  best_case_target_probability: 0.41          # paper-stated (literature figure reproduced as best-case corner)
+  realistic_propagation_delay_minutes: 2.0      # ASSUMED: not given numerically; calibrated so output lands near paper's stated 30%
+  confirmations_required_realistic: 1
+
+migration:
+  scenarios:
+    prompt:
+      start_year: 2026
+      reported_finish_year_min: 2029      # paper-stated
+      reported_finish_year_max: 2031      # paper-stated
+    delayed:
+      start_year: 2030
+      reported_finish_year: 2035          # paper-stated
+    severe_delay:
+      start_year: 2033
+      reported_finish_year: 2038          # paper-stated
+  crqc_estimates:
+    aggressive: 2035     # paper-stated
+    survey_median: 2040   # paper-stated
+    conservative: 2050     # paper-stated
+
+readiness_survey:
+  table3_path: "data/table3_readiness_ratings.csv"
+  rating_scale_min: 1
+  rating_scale_max: 5
+
+hardware:
+  device: "cpu"
+  precision: "float64"
+  num_workers: 1
+  seed: 0

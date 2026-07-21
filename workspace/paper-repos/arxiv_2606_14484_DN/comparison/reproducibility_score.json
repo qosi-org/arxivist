@@ -1,0 +1,28 @@
+{
+  "paper_id": "arxiv_2606_14484",
+  "comparison_date": "2026-07-21",
+  "reproducibility_score": 0.826,
+  "score_confidence": "medium",
+  "metrics_compared": 15,
+  "metrics_matched": 13,
+  "deviation_summary": {
+    "excellent": 6,
+    "good": 2,
+    "moderate": 4,
+    "significant": 1,
+    "critical": 0
+  },
+  "unmatched_metrics": [
+    "2026 Bitcoin network hashrate (EH/s)",
+    "Ethereum dormant-and-exposed fraction"
+  ],
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 4,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "sir_overall_confidence": 0.64,
+  "requires_manual_review": true,
+  "manual_review_reason": "P(CRQC by 2035) deviates -26.95% from the paper's headline figure (0.122 vs 0.167), classified Significant. This is the paper's most-quoted single number, so the deviation should be understood before treating the run as fully reproduced, even though the reproducibility_score as a whole is high."
+}

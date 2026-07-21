@@ -1,0 +1,383 @@
+{
+  "paper_id": "arxiv_2606_14484",
+  "plan_version": 1,
+  "created_at": "2026-07-19T04:20:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "This paper contains no trained model -- it is a suite of Monte-Carlo simulations, deterministic calibrated formulas, and on-chain data reconciliation estimates (SIR training_pipeline confidence 0.92 that this is genuinely N/A). PyTorch is selected only to satisfy the SIR schema's required 'primary framework' field; the actual computational stack is NumPy (Monte-Carlo sampling, vectorised scenario sweeps) and pandas (tabular reconciliation of the Bitcoin/Ethereum exposure data sources and the top-20 readiness table). No CUDA/GPU is needed -- every model here is a scalar or low-dimensional Monte-Carlo simulation (thousands of draws over 3-4 parameters) or a closed-form calculation, trivially fast on CPU. YAML config covers all swept simulation ranges, calibration constants, and the many `# ASSUMED` values needed to fill gaps the paper itself leaves narrative rather than formulaic (see SIR ambiguities)."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/quantum_horizon/timeline/physics_estimator.py",
+      "description": "Bottom-up physics/hardware-scaling estimator: models physical-qubit count growth, the falling cryptanalytic resource requirement, and a fault-tolerance readiness lag, to produce a naive-then-corrected CRQC feasibility year distribution",
+      "sir_modules_mapped": ["Systemic break-year Monte-Carlo forecast"],
+      "classes": [
+        {
+          "name": "PhysicsBasedEstimator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "sample_break_years", "signature": "sample_break_years(self, n_draws: int, rng: np.random.Generator) -> np.ndarray", "returns": "array of shape [n_draws] of sampled CRQC feasibility years, incorporating the hardware-doubling, resource-halving, and fault-tolerance-lag draws"},
+            {"name": "crossing_year", "signature": "crossing_year(self, doubling_time: float, halving_time: float, q0: float, r0: float, t0: float) -> float", "returns": "the naive year at which physical-qubit count Q(t) first exceeds resource requirement R(t)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/timeline/survey_estimator.py",
+      "description": "Expert-survey-based CRQC arrival estimator (Global Risk Institute / Mosca-Piani style), modeled as a parametric distribution calibrated to the paper's reported mode (~2038-2040) and spread",
+      "sir_modules_mapped": ["Systemic break-year Monte-Carlo forecast"],
+      "classes": [
+        {
+          "name": "SurveyBasedEstimator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "sample_break_years", "signature": "sample_break_years(self, n_draws: int, rng: np.random.Generator) -> np.ndarray", "returns": "array of shape [n_draws] of sampled CRQC arrival years drawn from a distribution calibrated to the expert-survey mode/spread"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/timeline/monte_carlo_forecast.py",
+      "description": "Blends the physics-based and survey-based estimators into the paper's headline bimodal systemic break-year forecast (Figure 2), and reports cumulative probabilities and credible ranges",
+      "sir_modules_mapped": ["Systemic break-year Monte-Carlo forecast"],
+      "classes": [
+        {
+          "name": "SystemicForecastModel",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "run", "signature": "run(self, n_draws: int = 100000, survey_weight: float = 0.5, seed: int = 0) -> Dict", "returns": "dict with 'samples' (combined [n_draws] array), 'cdf_2035', 'cdf_2040', 'cdf_2050', 'median', 'range_80pct'"},
+            {"name": "sensitivity_sweep", "signature": "sensitivity_sweep(self, weights: List[float], n_draws: int = 100000, seed: int = 0) -> pd.DataFrame", "returns": "DataFrame of cdf_2035/median per survey_weight, reproducing the paper's 0.25-0.75 weight-sensitivity statement"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/mining/mining_competitiveness.py",
+      "description": "Grover-vs-classical-proof-of-work mining model: effective quantum hashrate vs gate speed, sqrt(K) parallelization wall, comparison against one ASIC and the full network (Figure 1)",
+      "sir_modules_mapped": ["Mining-competitiveness model"],
+      "classes": [
+        {
+          "name": "MiningCompetitivenessModel",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "effective_hashrate", "signature": "effective_hashrate(self, gate_speed_ghz: np.ndarray) -> np.ndarray", "returns": "effective single-machine hashrate in TH/s, linearly scaled from the Aggarwal et al. 2017 calibration benchmark (13.8 GH/s @ 66.7 MHz)"},
+            {"name": "parallel_hashrate", "signature": "parallel_hashrate(self, gate_speed_ghz: float, n_machines: np.ndarray) -> np.ndarray", "returns": "effective network hashrate for K quantum machines, scaling as sqrt(K) (the Grover parallelization wall)"},
+            {"name": "machines_for_51_percent", "signature": "machines_for_51_percent(self, gate_speed_ghz: float, network_hashrate_ehs: float) -> float", "returns": "number of quantum machines required to reach 51% of the given network hashrate under sqrt(K) scaling"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/exposure/bitcoin_exposure.py",
+      "description": "Reconciles independent Bitcoin on-chain exposure measurements (Glassnode, Coinbase, CoinDesk, Deloitte) into the paper's irreducible/migratable/protected supply decomposition (Figure 3)",
+      "sir_modules_mapped": ["Bitcoin exposure model"],
+      "classes": [
+        {
+          "name": "BitcoinExposureModel",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "reconcile_sources", "signature": "reconcile_sources(self, measurements: Dict[str, float]) -> float", "returns": "a single reconciled exposed-supply fraction from multiple named source measurements (ASSUMED: simple mean of sources, see config.yaml)"},
+            {"name": "decompose", "signature": "decompose(self, total_supply_btc: float, exposed_fraction: float, irreducible_btc: float, migratable_btc: float) -> Dict[str, float]", "returns": "dict with irreducible_btc, migratable_btc, protected_btc, and their fractions of total_supply_btc, matching Figure 3"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/exposure/ethereum_exposure.py",
+      "description": "Cross-checks Ethereum at-rest exposure via a top-down composition (total supply minus staked minus contract holdings) and a bottom-up on-chain component build, reconciling to the paper's 50-65% (most defensibly 55-60%) range",
+      "sir_modules_mapped": ["Ethereum exposure model"],
+      "classes": [
+        {
+          "name": "EthereumExposureModel",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "top_down_estimate", "signature": "top_down_estimate(self, staked_fraction: float, contract_fraction: float) -> float", "returns": "exposed_fraction = 1 - staked_fraction - contract_fraction"},
+            {"name": "bottom_up_estimate", "signature": "bottom_up_estimate(self, naive_beacon_overcount_fraction: float, correction_factor: float) -> float", "returns": "corrected on-chain exposed-account fraction (ASSUMED correction method, see config.yaml)"},
+            {"name": "reconcile", "signature": "reconcile(self, top_down: float, bottom_up: float) -> Tuple[float, float]", "returns": "(consensus_range_low, consensus_range_high) reconciling the two estimates"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/attacks/mempool_race.py",
+      "description": "Models the fast-clock-CRQC mempool-sniping race: deriving a private key from a spent public key within the block-confirmation window and broadcasting a fee-bump replacement before the original transaction confirms",
+      "sir_modules_mapped": ["Mempool-race model"],
+      "classes": [
+        {
+          "name": "MempoolRaceModel",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "snipe_success_probability", "signature": "snipe_success_probability(self, derivation_minutes: float, propagation_delay_minutes: float, confirmations_required: int, block_interval_minutes: float = 10.0) -> float", "returns": "probability the attacker's replacement transaction confirms before the original -- ASSUMED race-condition formula (ratio of remaining block-interval time to total race time), calibrated to reproduce the paper's stated 41% best-case figure"},
+            {"name": "is_feasible", "signature": "is_feasible(self, clock_type: str) -> bool", "returns": "False for slow-clock machines (trapped-ion, neutral-atom) which cannot derive a key inside the confirmation window; True for fast-clock machines (superconducting, photonic)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/migration/migration_race.py",
+      "description": "Implements Mosca's inequality as a migration-race decision rule across start-time/adoption scenarios, comparing migration-finish year against CRQC arrival estimates (Figure 4)",
+      "sir_modules_mapped": ["Migration-race model (Mosca's inequality)"],
+      "classes": [
+        {
+          "name": "MigrationRaceModel",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "is_at_risk", "signature": "is_at_risk(self, start_year: float, migration_duration_years: float, crqc_arrival_year: float) -> bool", "returns": "True iff (start_year + migration_duration_years) > crqc_arrival_year (Mosca's inequality)"},
+            {"name": "run_scenarios", "signature": "run_scenarios(self, scenarios: Dict[str, Dict], crqc_estimates: Dict[str, float]) -> pd.DataFrame", "returns": "DataFrame of migration-finish-year per named start-time scenario (prompt/delayed/severe-delay), each compared against the named CRQC arrival estimates (aggressive/survey-median/conservative), matching Figure 4"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/survey/readiness_rating.py",
+      "description": "Top-20 cryptocurrency quantum-readiness qualitative rating (1-5 ordinal scale), loaded from a config-driven table rather than computed, since the paper itself describes this as 'a sourced field assessment, not a model' (Table 3, Figure 5)",
+      "sir_modules_mapped": ["Top-20 cryptocurrency quantum-readiness survey"],
+      "classes": [
+        {
+          "name": "QuantumReadinessSurvey",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "load_ratings", "signature": "load_ratings(self, config_path: str) -> pd.DataFrame", "returns": "DataFrame with columns coin, signature_scheme, exposure_model, pq_status, rating -- transcribed directly from the paper's Table 3, not independently re-derived"},
+            {"name": "summary_stats", "signature": "summary_stats(self, ratings_df: pd.DataFrame) -> Dict", "returns": "dict with mean/median rating, count at each rating level, and the 'none reaches 5' check"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/quantum_horizon/utils/config.py",
+      "description": "YAML config loading and global random-seed management",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/quantum_horizon/utils/plotting.py",
+      "description": "Reproduces Figure 1 (hashrate vs gate speed), Figure 2 (bimodal break-year forecast), Figure 3 (Bitcoin exposure pie), Figure 4 (migration-race bar chart), Figure 5 (top-20 readiness bar chart)",
+      "sir_modules_mapped": [],
+      "classes": [],
+      "functions": [
+        {"name": "plot_figure1_hashrate", "signature": "plot_figure1_hashrate(gate_speeds: np.ndarray, hashrates: np.ndarray, asic_hashrate: float, network_hashrate: float, save_path: str = None) -> plt.Figure", "returns": "matplotlib figure matching Figure 1"},
+        {"name": "plot_figure2_forecast", "signature": "plot_figure2_forecast(survey_samples: np.ndarray, physics_samples: np.ndarray, combined_samples: np.ndarray, save_path: str = None) -> plt.Figure", "returns": "matplotlib figure matching Figure 2 (bimodal histogram overlay)"},
+        {"name": "plot_figure3_exposure_pie", "signature": "plot_figure3_exposure_pie(decomposition: Dict[str, float], save_path: str = None) -> plt.Figure", "returns": "matplotlib pie chart matching Figure 3"},
+        {"name": "plot_figure4_migration_race", "signature": "plot_figure4_migration_race(scenario_results: pd.DataFrame, crqc_lines: Dict[str, float], save_path: str = None) -> plt.Figure", "returns": "matplotlib bar chart matching Figure 4"},
+        {"name": "plot_figure5_readiness", "signature": "plot_figure5_readiness(ratings_df: pd.DataFrame, save_path: str = None) -> plt.Figure", "returns": "matplotlib horizontal bar chart matching Figure 5"}
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "Systemic break-year Monte-Carlo forecast pipeline",
+      "input": {"name": "swept parameter ranges (hardware doubling time, resource-requirement halving time, fault-tolerance lag, survey weight)", "shape": "scalars/ranges, not arrays", "dtype": "float64"},
+      "output": {"name": "combined break-year sample array + cumulative probabilities at 2035/2040/2050 + 80% range", "shape": "[n_draws] samples -> 3 scalar CDF values + 2 scalar range bounds", "dtype": "float64"},
+      "steps": [
+        "PhysicsBasedEstimator.sample_break_years() draws n_draws physics-model break years using randomly sampled doubling_time ~ U(1.0,2.5), halving_time ~ U(4,20), fault_tolerance_lag ~ U(2,12) (ASSUMED uniform distributions, config.yaml documents this)",
+        "SurveyBasedEstimator.sample_break_years() draws n_draws survey-model break years from a distribution calibrated to mode~2038-2040 (ASSUMED parametric form, e.g. a skewed/lognormal distribution, config.yaml documents this)",
+        "SystemicForecastModel.run() combines the two sample arrays via random selection with probability survey_weight per draw (ASSUMED sample-level mixture, not density-level -- see SIR ambiguities)",
+        "compute empirical CDF at 2035/2040/2050 and the 10th/90th percentile (80% range) from the combined sample array",
+        "plot_figure2_forecast() renders the bimodal histogram overlay matching Figure 2"
+      ]
+    },
+    {
+      "name": "Bitcoin and Ethereum exposure reconciliation pipeline",
+      "input": {"name": "named on-chain source measurements (Glassnode, Coinbase, CoinDesk, Deloitte for Bitcoin; staked fraction, contract fraction, Beacon-deposit overcount for Ethereum)", "shape": "scalars", "dtype": "float64"},
+      "output": {"name": "Bitcoin: [irreducible, migratable, protected] decomposition; Ethereum: [consensus_range_low, consensus_range_high]", "shape": "3 scalars (Bitcoin) + 2 scalars (Ethereum)", "dtype": "float64"},
+      "steps": [
+        "BitcoinExposureModel.reconcile_sources() averages the named source measurements (ASSUMED simple mean, config.yaml documents this)",
+        "BitcoinExposureModel.decompose() splits the reconciled exposed fraction into irreducible/migratable/protected using the paper's stated headline BTC counts (2.3M/3.7M) as fixed inputs rather than re-derived quantities",
+        "EthereumExposureModel.top_down_estimate() and .bottom_up_estimate() compute the two cross-checking fractions",
+        "EthereumExposureModel.reconcile() combines them into the paper's 50-65% (most defensibly 55-60%) consensus range",
+        "plot_figure3_exposure_pie() renders the Bitcoin decomposition matching Figure 3"
+      ]
+    },
+    {
+      "name": "Migration-race decision pipeline",
+      "input": {"name": "start-time scenarios (prompt 2026 / delayed 2030 / severe-delay 2033), migration-duration assumptions, CRQC arrival estimates", "shape": "scalars", "dtype": "float64"},
+      "output": {"name": "migration-finish year per scenario + at-risk boolean per (scenario, CRQC-estimate) pair", "shape": "[3 scenarios] x [3 CRQC estimates]", "dtype": "float64/bool"},
+      "steps": [
+        "MigrationRaceModel.run_scenarios() computes migration-finish year for each start-time scenario using the paper's reported adoption-scenario durations (ASSUMED reconstruction from the reported finish years, config.yaml documents this)",
+        "MigrationRaceModel.is_at_risk() checks Mosca's inequality for each (scenario, CRQC-estimate) pair",
+        "plot_figure4_migration_race() renders the bar chart matching Figure 4"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "monte_carlo_n_draws": "100000  # not specified in paper; chosen for a stable empirical CDF",
+      "hardware_doubling_time_years_range": [1.0, 2.5],
+      "resource_halving_time_years_range": [4, 20],
+      "fault_tolerance_lag_years_range": [2, 12],
+      "survey_weight_default": 0.5,
+      "survey_weight_sensitivity_range": [0.25, 0.75],
+      "monte_carlo_distribution_form": "uniform  # ASSUMED: paper gives ranges but not distributional shape (SIR confidence 0.45, ambiguity #1)",
+      "physics_calibration_2026_physical_qubits": 1100,
+      "physics_calibration_2026_logical_qubits_required": 1350,
+      "physics_calibration_2026_physical_qubits_required": 500000,
+      "survey_estimator_mode_year": 2039,
+      "survey_estimator_distribution_form": "lognormal  # ASSUMED: chosen to be right-skewed matching the paper's described survey-hump shape (SIR confidence 0.45)"
+    },
+    "mining": {
+      "classical_hashes_per_block_log2": 79,
+      "grover_iterations_log2": 40,
+      "per_iteration_t_gates": 474168,
+      "calibration_benchmark_hashrate_ghs": 13.8,
+      "calibration_benchmark_gate_speed_mhz": 66.7,
+      "asic_hashrate_ths": 200,
+      "network_hashrate_ehs": 860,
+      "gate_speed_sweep_ghz_range": [0.0667, 100]
+    },
+    "exposure": {
+      "bitcoin": {
+        "source_measurements": {"glassnode_fraction": 0.302, "coinbase_btc_millions": 6.9, "coindesk_btc_millions": 7.0, "deloitte_2020_fraction": 0.25},
+        "reconciliation_method": "simple_mean  # ASSUMED: paper does not give exact reconciliation formula (SIR ambiguity #3)",
+        "irreducible_btc_millions": 2.3,
+        "migratable_btc_millions": 3.7,
+        "total_supply_btc_millions": 19.4,
+        "satoshi_era_btc_millions": 1.0
+      },
+      "ethereum": {
+        "staked_fraction": 0.32,
+        "contract_fraction": "0.08  # ASSUMED: not given numerically; chosen so top_down = 1-0.32-0.08 = 0.60, within the paper's stated 55-63% top-down range (SIR ambiguity #3)",
+        "beacon_overcount_naive_fraction": 0.21,
+        "beacon_overcount_correction_factor": "2.3  # ASSUMED: chosen so bottom_up lands near the paper's stated 45-55% range (SIR ambiguity #3)",
+        "dormant_exposed_fraction": 0.001
+      }
+    },
+    "mempool_race": {
+      "fast_clock_derivation_minutes_range": [9, 12],
+      "block_interval_minutes": 10.0,
+      "best_case_target_probability": 0.41,
+      "realistic_propagation_delay_minutes": "2.0  # ASSUMED: not given numerically; calibrated so realistic_success_probability lands near the paper's stated 30% (SIR ambiguity #2)",
+      "confirmations_required_realistic": 1
+    },
+    "migration": {
+      "scenarios": {
+        "prompt": {"start_year": 2026, "reported_finish_year_range": [2029, 2031]},
+        "delayed": {"start_year": 2030, "reported_finish_year": 2035},
+        "severe_delay": {"start_year": 2033, "reported_finish_year": 2038}
+      },
+      "crqc_estimates": {"aggressive": 2035, "survey_median": 2040, "conservative": 2050}
+    },
+    "readiness_survey": {
+      "table3_path": "data/table3_readiness_ratings.csv",
+      "rating_scale": [1, 5]
+    },
+    "hardware": {
+      "device": "cpu",
+      "precision": "float64",
+      "num_workers": 1,
+      "seed": 0
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "numpy", "version": "1.26.4", "reason": "Monte-Carlo sampling, vectorised gate-speed/hashrate sweeps"},
+      {"package": "scipy", "version": "1.13.1", "reason": "distributional forms for the survey estimator (lognormal), statistical utilities"},
+      {"package": "pandas", "version": "2.2.2", "reason": "tabular reconciliation of exposure sources, migration-scenario sweeps, and the top-20 readiness table"},
+      {"package": "matplotlib", "version": "3.9.0", "reason": "reproducing paper Figures 1-5"},
+      {"package": "pyyaml", "version": "6.0.1", "reason": "config file loading"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": "8.2.0"},
+      {"package": "pytest-cov", "version": "5.0.0"},
+      {"package": "black", "version": "24.4.2"},
+      {"package": "ruff", "version": "0.4.4"},
+      {"package": "mypy", "version": "1.10.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "run_timeline_forecast.py",
+      "purpose": "Run the systemic Monte-Carlo break-year forecast (blending physics and survey estimators) and reproduce Figure 2 and its cumulative-probability headline numbers",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--n-draws", "type": "int", "required": false, "default": 100000, "help": "Number of Monte-Carlo draws"},
+        {"flag": "--survey-weight", "type": "float", "required": false, "default": 0.5, "help": "Blend weight for the survey estimator (paper sweeps 0.25-0.75)"},
+        {"flag": "--sensitivity-sweep", "action": "store_true", "required": false, "default": false, "help": "Also run the 0.25-0.75 survey-weight sensitivity sweep"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write results and figures"}
+      ]
+    },
+    {
+      "filename": "run_mining_analysis.py",
+      "purpose": "Run the mining-competitiveness model and reproduce Figure 1",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write results and figures"}
+      ]
+    },
+    {
+      "filename": "run_exposure_analysis.py",
+      "purpose": "Run the Bitcoin and Ethereum exposure-reconciliation models and the mempool-race model, reproducing Figure 3",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--chain", "type": "str", "required": false, "default": "all", "help": "bitcoin | ethereum | all"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write results and figures"}
+      ]
+    },
+    {
+      "filename": "run_migration_race.py",
+      "purpose": "Run the migration-race (Mosca's inequality) scenarios and reproduce Figure 4",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write results and figures"}
+      ]
+    },
+    {
+      "filename": "run_readiness_survey.py",
+      "purpose": "Load and summarise the top-20 cryptocurrency quantum-readiness ratings, reproducing Table 3 and Figure 5",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write results and figures"}
+      ]
+    },
+    {
+      "filename": "run_all.py",
+      "purpose": "Convenience wrapper running all five analyses in sequence",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Directory to write all outputs"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.11-slim",
+    "system_deps": ["build-essential", "gcc"],
+    "workdir": "/workspace",
+    "default_cmd": "python run_all.py --config configs/config.yaml"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "The Monte-Carlo forecast's exact distributional forms (for the swept doubling/halving/lag ranges and for the survey estimator) and the precise mixture method (sample-level vs density-level) are not specified in the paper. Different reasonable choices could shift the reported by-2035/by-2040/by-2050 probabilities noticeably, since the paper itself notes the by-2035 figure is sensitive to the survey weight alone (8-24% across 0.25-0.75).",
+      "source": "SIR ambiguities[0], implementation_assumptions[0], confidence 0.4-0.45",
+      "mitigation": "config.yaml exposes every distributional-form choice explicitly with '# ASSUMED' comments; SystemicForecastModel.sensitivity_sweep() reproduces the paper's own stated 0.25-0.75 weight-sensitivity check so a user can see how much of the headline result is sensitive to this modeling choice, rather than treating the reproduced numbers as more precise than the paper itself claims them to be."
+    },
+    {
+      "severity": "High",
+      "description": "The mempool-race model's internal timing/queueing formula connecting derivation time, propagation delay, and confirmation count to a success probability is not given; the 'realistic 30%' figure is backed into via an ASSUMED propagation-delay parameter tuned to hit that target, not independently derived.",
+      "source": "SIR ambiguities[1], implementation_assumptions[2], confidence 0.4",
+      "mitigation": "MempoolRaceModel.snipe_success_probability() takes propagation_delay_minutes as an explicit, documented parameter (config.yaml) rather than hard-coding the 30% output, so a user can see exactly which input was tuned and substitute their own timing model if they have access to the paper's actual code (github.com/imgcode/quantum-horizon, cited but not available to this pipeline)."
+    },
+    {
+      "severity": "Medium",
+      "description": "Both exposure-reconciliation models' source-combination method (simple mean vs weighted average vs source-quality judgment) is not given; the specific 2.3M/3.7M Bitcoin split and the Ethereum contract_fraction/beacon_overcount_correction_factor values are back-calculated to match the paper's headline numbers rather than independently derived from the raw source measurements.",
+      "source": "SIR ambiguities[2], implementation_assumptions[3], confidence 0.5",
+      "mitigation": "BitcoinExposureModel.reconcile_sources() and EthereumExposureModel's methods take the raw source measurements as inputs and the reconciliation method as a named, swappable strategy (config.yaml 'reconciliation_method' field), so a user can substitute weighted-average or other reconciliation logic without touching the decomposition/cross-check logic downstream."
+    },
+    {
+      "severity": "Medium",
+      "description": "The top-20 quantum-readiness survey (Section 6) is explicitly analyst judgment, not a computed model (the paper itself says so in Appendix A). Table 3's data must be manually transcribed into data/table3_readiness_ratings.csv rather than derived from any formula, and could drift from the paper if transcribed incorrectly.",
+      "source": "SIR architecture.modules 'Top-20 cryptocurrency quantum-readiness survey', confidence 0.5",
+      "mitigation": "QuantumReadinessSurvey.load_ratings() reads from a versioned CSV transcribed directly from the paper's Table 3, with a unit test asserting the transcribed ratings match the paper's reported values (e.g. 'no top-20 coin reaches 5', Bitcoin and Dogecoin near the bottom) to catch transcription drift."
+    },
+    {
+      "severity": "Low",
+      "description": "The physics-based estimator's initial calibration constants (Q_0, R_0, t_0) are back-solved from the paper's stated 2026 boundary conditions rather than given directly, which could introduce compounding error if the boundary-condition values (2026 hardware/requirement state) are themselves ranges rather than point estimates.",
+      "source": "SIR implementation_assumptions[1], confidence 0.45",
+      "mitigation": "config.yaml exposes physics_calibration_2026_physical_qubits and the requirement bounds as explicit named fields, and PhysicsBasedEstimator.crossing_year() is unit-tested to confirm it reproduces a plausible 2040s-2050s naive crossing year before the fault-tolerance lag is added, matching the paper's stated physics-estimator mode of ~2052."
+    }
+  ]
+}
