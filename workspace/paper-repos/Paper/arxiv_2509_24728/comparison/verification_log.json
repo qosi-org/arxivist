@@ -1,0 +1,446 @@
+{
+  "paper_id": "arxiv_2509_24728",
+  "log_date": "2026-07-16T00:00:00Z",
+  "arxivist_stage": 6,
+  "mode": "PRE_RUN",
+  "total_checks": 47,
+  "passed": 38,
+  "failed": 0,
+  "pending": 9,
+  "checks": [
+
+    {
+      "id": "VL-001",
+      "category": "mathematical_correctness",
+      "description": "CatNat forward pass: probabilities sum to 1 for K in {2,4,8,16,32} and both activations",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check, item 1/20. torch.allclose(p.sum(-1), ones, atol=1e-5) for all configs.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-002",
+      "category": "mathematical_correctness",
+      "description": "Corollary 4.3: G_nu(s)_ii = P(a_i)*(pi/A)^2 at s=0, K=4",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 9/20 and notebook cell validation Exp-03.",
+      "sir_equation": "EQ7",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-003",
+      "category": "mathematical_correctness",
+      "description": "log_prob().exp() == forward() for K in {4,8,16}",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 20/20. atol=1e-5.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-004",
+      "category": "mathematical_correctness",
+      "description": "Root node always reached with P(a_root)=1.0",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 12/20.",
+      "sir_equation": "EQ9",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-005",
+      "category": "mathematical_correctness",
+      "description": "BinaryTreeIndex: each leaf has exactly H=log2(K) ancestors",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 17/20. ancestor_mask.sum(dim=-1) == H for all K.",
+      "sir_equation": "EQ9",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-006",
+      "category": "mathematical_correctness",
+      "description": "Natural activation saturation: nu(-100)=0, nu(0)=0.5, nu(+100)=1.0",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 4/20 and notebook cell 04.",
+      "sir_equation": "EQ6",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-007",
+      "category": "mathematical_correctness",
+      "description": "Slope match: d(nu)/ds|_{s=0} == d(sigma)/ds|_{s=0} (both = 0.25, A=2pi)",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 19/20. |g_nu - g_sig| < 1e-4.",
+      "sir_equation": "EQ6",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-008",
+      "category": "mathematical_correctness",
+      "description": "KLDivCategorical = 0 for uniform posterior over K=8 categories",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 8/20. |kl| < 1e-4.",
+      "sir_equation": "EQ11",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-009",
+      "category": "mathematical_correctness",
+      "description": "EnergyScore = 0 when all M predictions equal target and predictions are identical",
+      "status": "PASS",
+      "evidence": "test_losses.py::TestEnergyScore::test_zero_when_perfect_and_zero_variance. |ES| < 1e-5.",
+      "sir_equation": "EQ10",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-010",
+      "category": "mathematical_correctness",
+      "description": "VAELoss: total = recon + kl (beta=1.0)",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 18/20. torch.allclose(total, recon+kl, atol=1e-5).",
+      "sir_equation": "EQ11",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-011",
+      "category": "mathematical_correctness",
+      "description": "LOO baseline: b[0] = mean(losses[1:]) for M=4 samples",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 6/20. |b[0] - 3.0| < 1e-4.",
+      "sir_equation": "EQ9",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-012",
+      "category": "mathematical_correctness",
+      "description": "GumbelSoftmax hard=True output is one-hot (sums to 1, all entries 0 or 1)",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 15/20.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-013",
+      "category": "mathematical_correctness",
+      "description": "REINFORCE log_prob <= 0 for all valid categorical samples",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 16/20.",
+      "sir_equation": "EQ9",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-014",
+      "category": "mathematical_correctness",
+      "description": "Softmax FIM has non-zero off-diagonal entries (-p_i*p_j, Proposition 4.1)",
+      "status": "PASS",
+      "evidence": "test_fim.py::TestSoftmaxFIMDense. G[offdiag].abs().max() > 0.01.",
+      "sir_equation": "EQ3",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-015",
+      "category": "numerical_stability",
+      "description": "CatNat forward pass: no NaN or Inf at s=+100 and s=-100 for K in {4,8,16}",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 12/20.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-016",
+      "category": "numerical_stability",
+      "description": "CatNat probabilities sum to 1 within 1e-4 at s=+100 (log-space forward prevents underflow)",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 12/20.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-017",
+      "category": "gradient_flow",
+      "description": "Gradient flows through CatNat (natural activation): s.grad is non-None and non-NaN",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 3/20.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-018",
+      "category": "gradient_flow",
+      "description": "Gradient flows through GumbelSoftmax straight-through: s.grad non-None and non-NaN",
+      "status": "PASS",
+      "evidence": "test_samplers.py::TestGumbelSoftmaxSampler::test_gradient_flows_through_hard_sample.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-019",
+      "category": "shape_correctness",
+      "description": "CatNat input [B, K-1] -> output [B, K] for all K in {2,4,8,16,32}",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 1/20.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-020",
+      "category": "shape_correctness",
+      "description": "CatNat handles multidimensional batch: [3,5,K-1] -> [3,5,K]",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 11/20.",
+      "sir_equation": "EQ4",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-021",
+      "category": "shape_correctness",
+      "description": "CatVAE: encoder [B,1,28,28] -> [B,N,K-1], decoder [B,N,K] -> [B,1,28,28]",
+      "status": "PASS",
+      "evidence": "Stage 5 RISK-03 resolution verification. All shapes confirmed live.",
+      "sir_equation": "EQ1",
+      "confidence": 0.88
+    },
+    {
+      "id": "VL-022",
+      "category": "shape_correctness",
+      "description": "REINFORCESampler: sample() output [M, n_edges, K], log_prob() output [M, n_edges]",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 16/20.",
+      "sir_equation": "EQ9",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-023",
+      "category": "shape_correctness",
+      "description": "FIM diagonal shape: [B, K-1] for any K and batch size",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 9/20.",
+      "sir_equation": "EQ5",
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-024",
+      "category": "api_correctness",
+      "description": "K=3 (non-power-of-2) raises ValueError in CatNat and BinaryTreeIndex",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 5/20.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-025",
+      "category": "api_correctness",
+      "description": "build_parameterization('unknown', K=8) raises ValueError",
+      "status": "PASS",
+      "evidence": "test_catnat.py::TestAllParameterizations::test_unknown_parameterization_raises.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-026",
+      "category": "api_correctness",
+      "description": "LOOBaseline raises ValueError for M < 2 samples",
+      "status": "PASS",
+      "evidence": "test_samplers.py::TestLOOBaseline::test_requires_m_geq_2.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-027",
+      "category": "api_correctness",
+      "description": "Config loading: vae.yaml parses to VAEConfig with experiment='vae', catnat.K=16",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 14/20.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-028",
+      "category": "api_correctness",
+      "description": "All 4 parameterizations (natural, sigmoid, softmax, sparsemax) produce valid simplex",
+      "status": "PASS",
+      "evidence": "Stage 4 integrity check item 2/20.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-029",
+      "category": "training_pipeline",
+      "description": "Gumbel temperature annealing: tau(step=0)=1.0, tau(step=1e7) clamped to 0.5",
+      "status": "PASS",
+      "evidence": "Stage 5 notebook cell 08 validation.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-030",
+      "category": "training_pipeline",
+      "description": "LOO baseline is detached from computation graph (not differentiated)",
+      "status": "PASS",
+      "evidence": "test_samplers.py::TestLOOBaseline::test_detached.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-031",
+      "category": "training_pipeline",
+      "description": "Score initialization U(0, 0.1) matches Appendix E.5",
+      "status": "PASS",
+      "evidence": "src/catnat/utils/init_utils.py::init_scores_uniform confirmed. GSLModel applies it at __init__.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-032",
+      "category": "training_pipeline",
+      "description": "Gumbel injection point confirmed at leaf log-probs (RISK-02 resolution)",
+      "status": "PASS",
+      "evidence": "Stage 5 web search + canonical Gumbel-Softmax literature review. Confidence raised 0.65->0.92.",
+      "sir_equation": null,
+      "confidence": 0.92
+    },
+    {
+      "id": "VL-033",
+      "category": "notebook_validation",
+      "description": "reproduce_arxiv_2509_24728.ipynb: valid nbformat 4.5, 22 cells, 0 missing IDs",
+      "status": "PASS",
+      "evidence": "Stage 5 nbformat validation.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-034",
+      "category": "notebook_validation",
+      "description": "explore_arxiv_2509_24728.ipynb: valid nbformat 4.5, 11 cells, 0 missing IDs",
+      "status": "PASS",
+      "evidence": "Stage 5 nbformat validation.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-035",
+      "category": "notebook_validation",
+      "description": "All 9 notebook code cells pass dry-run execution (imports + tensor ops)",
+      "status": "PASS",
+      "evidence": "Stage 5 dry-run: 9/9 checks passed.",
+      "sir_equation": null,
+      "confidence": 0.99
+    },
+    {
+      "id": "VL-036",
+      "category": "hallucination_audit",
+      "description": "H-01 (VAE decoder upsample): identified, mitigated with nn.Upsample(28,28)",
+      "status": "PASS",
+      "evidence": "hallucination_report.md, H-01. Mitigation applied in Stage 5.",
+      "sir_equation": null,
+      "confidence": 0.80
+    },
+    {
+      "id": "VL-037",
+      "category": "hallucination_audit",
+      "description": "H-02 (Gumbel injection): resolved, leaf log-probs confirmed canonical",
+      "status": "PASS",
+      "evidence": "hallucination_report.md, H-02. Closed in Stage 5.",
+      "sir_equation": null,
+      "confidence": 0.92
+    },
+    {
+      "id": "VL-038",
+      "category": "hallucination_audit",
+      "description": "H-03 (GCN self-loops): documented, standard Kipf & Welling 2017 convention applied",
+      "status": "PASS",
+      "evidence": "hallucination_report.md, H-03.",
+      "sir_equation": null,
+      "confidence": 0.85
+    },
+
+    {
+      "id": "VL-039",
+      "category": "experimental_results",
+      "description": "GSL catnat-nu Energy Score within 5% of paper Table 2 for all 5 theta* settings",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ10",
+      "confidence": null,
+      "target": "theta*=0.5 -> ES=14.937±0.023"
+    },
+    {
+      "id": "VL-040",
+      "category": "experimental_results",
+      "description": "GSL catnat-nu MAE(theta) substantially lower than softmax baseline",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ10",
+      "confidence": null,
+      "target": "theta*=0.5 -> MAE(theta)=0.0061 vs softmax 0.0132"
+    },
+    {
+      "id": "VL-041",
+      "category": "experimental_results",
+      "description": "VAE catnat-nu NLL <= softmax NLL for N=20, K=16, MNIST, Adam",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ11",
+      "confidence": null,
+      "target": "catnat-nu=97.0 <= softmax=97.5"
+    },
+    {
+      "id": "VL-042",
+      "category": "experimental_results",
+      "description": "VAE NLL within 2 nats of paper Table 3 for N=20, K=16",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ11",
+      "confidence": null,
+      "target": "catnat-nu 97.0±0.4"
+    },
+    {
+      "id": "VL-043",
+      "category": "experimental_results",
+      "description": "RL catnat-nu Breakout return > softmax return",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ12",
+      "confidence": null,
+      "target": "catnat-nu 406±34 > softmax 398±25"
+    },
+    {
+      "id": "VL-044",
+      "category": "experimental_results",
+      "description": "RL catnat-nu Seaquest return substantially > softmax return (>10%)",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ12",
+      "confidence": null,
+      "target": "catnat-nu 2164±533 vs softmax 1875±312 (+15%)"
+    },
+    {
+      "id": "VL-045",
+      "category": "experimental_results",
+      "description": "Softmax baseline GSL ES within 5% of paper Table 2 (sanity check)",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ10",
+      "confidence": null,
+      "target": "theta*=0.5 softmax ES=14.990±0.020"
+    },
+    {
+      "id": "VL-046",
+      "category": "experimental_results",
+      "description": "Softmax baseline VAE NLL within 2 nats of paper Table 3 (sanity check)",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ11",
+      "confidence": null,
+      "target": "N=20 K=16 softmax NLL=97.5±0.5"
+    },
+    {
+      "id": "VL-047",
+      "category": "experimental_results",
+      "description": "catnat-nu > catnat-sigma on majority of VAE settings (natural activation advantage)",
+      "status": "PENDING",
+      "evidence": "No user results submitted.",
+      "sir_equation": "EQ7",
+      "confidence": null,
+      "target": "catnat-nu slightly better or equal to catnat-sigma overall (Table 3)"
+    }
+  ]
+}

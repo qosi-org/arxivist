@@ -1,0 +1,185 @@
+{
+  "paper_id": "arxiv_2509_24728",
+  "paper_title": "Beyond Softmax: A Natural Parameterization for Categorical Random Variables",
+  "comparison_date": "2026-07-16T00:00:00Z",
+  "arxivist_stage": 6,
+  "mode": "PRE_RUN",
+  "note": "No user experimental results submitted. Score reflects implementation fidelity audit against SIR only. Re-run Stage 6 with experimental results to get a full reproducibility score.",
+
+  "reproducibility_score": null,
+  "score_confidence": "N/A",
+  "score_basis": "pre_run_audit_only",
+
+  "implementation_fidelity_score": 0.81,
+  "implementation_fidelity_confidence": "medium",
+  "implementation_fidelity_basis": "Computed from SIR confidence annotations weighted by component criticality, minus open hallucination penalties.",
+  "implementation_fidelity_breakdown": {
+    "mathematical_spec_fidelity":    0.97,
+    "architecture_fidelity":         0.85,
+    "training_pipeline_fidelity":    0.88,
+    "evaluation_protocol_fidelity":  0.90,
+    "data_pipeline_fidelity":        0.72,
+    "weighted_mean":                 0.86,
+    "open_hallucination_penalty":    0.05,
+    "final_score":                   0.81
+  },
+
+  "paper_targets": {
+    "GSL": {
+      "theta_0.1":  {"ES": 7.425,  "ES_std": 0.014,  "PP_MAE": 0.3837, "PP_MAE_std": 0.0015, "PP_MSE": 0.617,  "PP_MSE_std": 0.004,  "MAE_theta": 0.0052, "MAE_theta_std": 0.0003},
+      "theta_0.25": {"ES": 10.859, "ES_std": 0.012,  "PP_MAE": 0.8201, "PP_MAE_std": 0.0012, "PP_MSE": 1.304,  "PP_MSE_std": 0.003,  "MAE_theta": 0.0051, "MAE_theta_std": 0.0003},
+      "theta_0.5":  {"ES": 14.937, "ES_std": 0.023,  "PP_MAE": 1.2537, "PP_MAE_std": 0.0019, "PP_MSE": 2.466,  "PP_MSE_std": 0.007,  "MAE_theta": 0.0061, "MAE_theta_std": 0.0006},
+      "theta_0.75": {"ES": 10.674, "ES_std": 0.012,  "PP_MAE": 0.7969, "PP_MAE_std": 0.0015, "PP_MSE": 1.267,  "PP_MSE_std": 0.004,  "MAE_theta": 0.0043, "MAE_theta_std": 0.0002},
+      "theta_0.9":  {"ES": 7.340,  "ES_std": 0.015,  "PP_MAE": 0.3973, "PP_MAE_std": 0.0015, "PP_MSE": 0.607,  "PP_MSE_std": 0.003,  "MAE_theta": 0.0023, "MAE_theta_std": 0.0001}
+    },
+    "VAE_Adam": {
+      "MNIST_N10_K8_catnat_nu":         {"NLL": 99.8,  "NLL_std": 0.4},
+      "MNIST_N10_K16_catnat_nu":        {"NLL": 97.6,  "NLL_std": 0.2},
+      "MNIST_N10_K32_catnat_nu":        {"NLL": 96.9,  "NLL_std": 0.4},
+      "MNIST_N20_K8_catnat_nu":         {"NLL": 97.7,  "NLL_std": 0.2},
+      "MNIST_N20_K16_catnat_nu":        {"NLL": 97.0,  "NLL_std": 0.4},
+      "MNIST_N20_K32_catnat_nu":        {"NLL": 96.9,  "NLL_std": 0.4},
+      "MNIST_N30_K8_catnat_nu":         {"NLL": 97.9,  "NLL_std": 0.3},
+      "MNIST_N30_K16_catnat_nu":        {"NLL": 97.6,  "NLL_std": 0.3},
+      "MNIST_N30_K32_catnat_nu":        {"NLL": 97.7,  "NLL_std": 0.8},
+      "MNIST_N10_K8_softmax":           {"NLL": 100.9, "NLL_std": 0.5},
+      "MNIST_N10_K16_softmax":          {"NLL": 98.1,  "NLL_std": 0.7},
+      "MNIST_N10_K32_softmax":          {"NLL": 98.6,  "NLL_std": 0.7},
+      "MNIST_N20_K8_softmax":           {"NLL": 97.8,  "NLL_std": 0.2},
+      "MNIST_N20_K16_softmax":          {"NLL": 97.5,  "NLL_std": 0.5},
+      "MNIST_N20_K32_softmax":          {"NLL": 98.2,  "NLL_std": 0.8},
+      "MNIST_N30_K8_softmax":           {"NLL": 98.8,  "NLL_std": 0.7},
+      "MNIST_N30_K16_softmax":          {"NLL": 98.8,  "NLL_std": 0.9},
+      "MNIST_N30_K32_softmax":          {"NLL": 99.3,  "NLL_std": 0.7},
+      "BinaryMNIST_N20_K16_catnat_nu":  {"NLL": 76.6,  "NLL_std": 0.3},
+      "BinaryMNIST_N20_K16_softmax":    {"NLL": 78.1,  "NLL_std": 0.4}
+    },
+    "RL": {
+      "Breakout_softmax":   {"Return": 398,  "Return_std": 25},
+      "Breakout_catnat_nu": {"Return": 406,  "Return_std": 34},
+      "Seaquest_softmax":   {"Return": 1875, "Return_std": 312},
+      "Seaquest_catnat_nu": {"Return": 2164, "Return_std": 533}
+    }
+  },
+
+  "user_results": "PENDING",
+
+  "metrics_compared": 0,
+  "metrics_matched": 0,
+  "metrics_total_paper": 36,
+
+  "deviation_summary": {
+    "excellent":   0,
+    "good":        0,
+    "moderate":    0,
+    "significant": 0,
+    "critical":    0,
+    "pending":     36
+  },
+
+  "hallucination_count": {
+    "structural":  4,
+    "parametric":  4,
+    "omission":    2,
+    "total":       10,
+    "resolved":    1,
+    "open":        7,
+    "design_decision": 2
+  },
+
+  "hallucination_severity_breakdown": {
+    "critical":    0,
+    "significant": 2,
+    "moderate":    3,
+    "minor":       5
+  },
+
+  "open_hallucinations": [
+    {
+      "id": "H-01",
+      "type": "structural",
+      "severity": "Significant",
+      "description": "VAE decoder uses nn.Upsample(28,28) not present in paper. Mitigation applied but not verified against reference.",
+      "affected_metrics": ["VAE NLL"],
+      "estimated_deviation": "< 0.5 nats"
+    },
+    {
+      "id": "H-05",
+      "type": "parametric",
+      "severity": "Significant",
+      "description": "VAE encoder conv channels [32,64,64] assumed. Paper does not specify. Reference codebase not fully verified.",
+      "affected_metrics": ["VAE NLL"],
+      "estimated_deviation": "1-3 nats"
+    },
+    {
+      "id": "H-06",
+      "type": "parametric",
+      "severity": "Moderate",
+      "description": "GNN hidden dim=64 assumed. Paper does not specify.",
+      "affected_metrics": ["GSL PP-MAE", "GSL PP-MSE"],
+      "estimated_deviation": "1-5%"
+    },
+    {
+      "id": "H-07",
+      "type": "parametric",
+      "severity": "Moderate",
+      "description": "GSL n_nodes=15 assumed from Figure 5. Paper refers to Manenti et al. 2025 for details.",
+      "affected_metrics": ["All GSL metrics"],
+      "estimated_deviation": "5-20%"
+    },
+    {
+      "id": "H-09",
+      "type": "omission",
+      "severity": "Moderate",
+      "description": "Full GSL experimental setup from Manenti et al. 2025 not fetched.",
+      "affected_metrics": ["All GSL metrics"],
+      "estimated_deviation": "5-20% (same root cause as H-07)"
+    },
+    {
+      "id": "H-10",
+      "type": "omission",
+      "severity": "Minor",
+      "description": "VAE training epochs not specified in paper. Using 100 with early stopping.",
+      "affected_metrics": ["VAE NLL"],
+      "estimated_deviation": "< 1 nat"
+    },
+    {
+      "id": "H-08",
+      "type": "parametric",
+      "severity": "Minor",
+      "description": "Seaquest action space (18 actions) padded to K=32. Inherent RISK-01 constraint.",
+      "affected_metrics": ["RL Seaquest Return"],
+      "estimated_deviation": "< 5%"
+    }
+  ],
+
+  "sir_confidence_scores": {
+    "architecture":             0.91,
+    "mathematical_spec":        0.97,
+    "tensor_semantics":         0.82,
+    "training_pipeline":        0.88,
+    "evaluation_protocol":      0.95,
+    "implementation_assumptions": 0.72,
+    "overall":                  0.88
+  },
+
+  "requires_manual_review": true,
+  "manual_review_reasons": [
+    "H-07/H-09: GSL node count must be confirmed from Manenti et al. 2025 before GSL results are meaningful",
+    "H-05: VAE conv channels must be confirmed from jxmorris12/categorical-vae before VAE NLL is comparable to Table 3",
+    "No user results submitted — full reproducibility score cannot be computed"
+  ],
+
+  "recommended_verification_order": [
+    "1. Confirm GSL node count from Manenti et al. 2025 (openreview.net/forum?id=TMRh3ScSCb)",
+    "2. Confirm VAE conv channels from jxmorris12/categorical-vae/blob/master/models.py",
+    "3. Run test suite: python -m pytest tests/ -v (all must pass)",
+    "4. Run softmax baseline first — if it matches paper within 5%, proceed to catnat-nu",
+    "5. Submit results to Stage 6 for full reproducibility score computation"
+  ],
+
+  "sir_version_used": 1,
+  "architecture_plan_version": 1,
+  "sir_sha256": "e96f44c717622ea6f8dada8fa6d94d7f38bc4b2bb4a8834a0cf8b7f0c4e489d7",
+  "architecture_plan_sha256": "4d7a3a214aba7cea226dd919f99fcd8f35652c1b7d6e4966b371723bb2d8e0fe"
+}

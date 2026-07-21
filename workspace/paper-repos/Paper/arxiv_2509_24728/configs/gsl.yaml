@@ -1,0 +1,62 @@
+# GSL experiment configuration — Section 5.1, Appendix E
+# Paper: "Beyond Softmax: A Natural Parameterization for Categorical Random Variables"
+
+experiment: "gsl"
+parameterization: "natural"  # one of: natural, sigmoid, softmax, sparsemax
+
+catnat:
+  K: 2              # Bernoulli (binary) edges — special case of catnat with K=2
+  activation: "natural"
+  natural_activation_C: 0.0
+  natural_activation_A: 6.283185307
+
+model:
+  # GCN architecture for both data-generating and learnable models (Appendix E.2)
+  n_nodes: 15         # ASSUMED: not specified; community graph from Fig 5 has ~15 nodes
+  n_communities: 4    # Stated: "4 communities" (Appendix E.1)
+  d_in: 1             # ASSUMED: scalar node features
+  d_hidden: 64        # ASSUMED: standard GCN hidden dim (confidence 0.75, RISK-05)
+  d_out: 1            # ASSUMED: scalar output per node
+  n_gcn_layers: 2     # ASSUMED: standard 2-layer GCN (confidence 0.75, RISK-05)
+
+data:
+  # Synthetic dataset generation (Appendix E.1)
+  n_samples: 10000         # Explicitly stated
+  sigma_x: 1.0             # Explicitly stated: x ~ N(0, σ²_x I)
+  train_frac: 0.8          # Explicitly stated: 80/10/10 split
+  val_frac: 0.1
+  test_frac: 0.1
+  # Five entropy settings tested (Table 1)
+  theta_star_values: [0.1, 0.25, 0.5, 0.75, 0.9]
+  theta_star: 0.5          # Default single run
+  data_dir: "data/gsl/"
+  seed: 42
+
+training:
+  optimizer: "adam"
+  weight_decay: 0.0        # Explicitly stated (Appendix E.5)
+  batch_size: 64           # Explicitly stated
+  epochs: 40               # Explicitly stated
+  M_samples: 32            # Explicitly stated: M=32 graph samples per step
+  gradient_estimator: "reinforce_loo"   # Score function with LOO baseline
+  # Score init: θ_ij ~ U(0, 0.1) — Explicitly stated (Appendix E.5, confidence: 0.99)
+  score_init_low: 0.0
+  score_init_high: 0.1
+  n_seeds: 10              # Explicitly stated
+  # 2-stage LR search (Appendix E.2)
+  lr_coarse_grid: [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5]
+  lr_refined_natural: [0.012, 0.015, 0.018, 0.022, 0.027, 0.033, 0.041]
+  lr_refined_sigmoid:  [0.025, 0.030, 0.037, 0.045, 0.055, 0.067, 0.082]
+  lr: 0.022                # Default: best from refined natural grid
+  log_every_n_steps: 10
+  save_every_n_epochs: 5
+
+output:
+  results_dir: "results/gsl/"
+  checkpoint_dir: "checkpoints/gsl/"
+
+hardware:
+  device: "cuda"
+  num_workers: 4
+  pin_memory: true
+  deterministic: false

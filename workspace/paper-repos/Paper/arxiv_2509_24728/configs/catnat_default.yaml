@@ -1,0 +1,27 @@
+# catnat default configuration
+# Paper: "Beyond Softmax: A Natural Parameterization for Categorical Random Variables"
+# Manenti & Alippi, ICML 2026. arXiv:2509.24728v2
+
+catnat:
+  # Number of categories. MUST be a power of 2 (RISK-01: balanced binary tree constraint).
+  # Paper uses K in {8, 16, 32} for VAE; K=2 (Bernoulli) for GSL.
+  # TODO (RISK-01): implement pad_to_power_of_2 for arbitrary K.
+  K: 8
+
+  # Activation function at internal tree nodes.
+  # 'natural' → ν(x) from Eq. 12 (recommended; yields constant diagonal FIM entries)
+  # 'sigmoid' → standard sigmoid (yields non-constant diagonal FIM entries)
+  activation: "natural"
+
+  # Natural activation parameters (Eq. 12, Section 4.2.2, Corollary 4.3)
+  # C shifts the function along x; default 0 so scores near zero map to prob ~0.5
+  # A controls the slope; set to 2π so ∂ν/∂s|_{s=0} = ∂σ/∂s|_{s=0}
+  # Neither A nor C are tunable hyperparameters — the paper fixes them. (confidence: 0.97)
+  natural_activation_C: 0.0
+  natural_activation_A: 6.283185307  # 2π
+
+hardware:
+  device: "cuda"          # "cuda" or "cpu"
+  deterministic: false    # True may slow training; enables torch.use_deterministic_algorithms
+  num_workers: 4
+  pin_memory: true
