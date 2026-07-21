@@ -1,0 +1,591 @@
+{
+  "paper_id": "arxiv_2509_24728",
+  "plan_version": 1,
+  "generated_at": "2026-07-16T00:00:00Z",
+  "sir_version_used": 1,
+
+  "framework_selection": {
+    "primary_framework": "PyTorch",
+    "version": ">=2.2.0",
+    "reasoning": "Paper explicitly uses PyTorch (Appendix E.5: 'All models are implemented in PyTorch'). Official catnat implementation at github.com/allemanenti/catnat-torch also uses PyTorch.",
+    "python_version": ">=3.10",
+    "cuda_required": true,
+    "cuda_min_version": "11.8",
+    "huggingface_integration": false,
+    "config_management": "YAML + dataclasses (lightweight; no Hydra dependency needed for this scope)",
+    "project_name": "catnat"
+  },
+
+  "module_hierarchy": {
+    "root": "catnat-reproduce/",
+    "tree": {
+      "src/catnat/": {
+        "__init__.py": "Package root; exports CatNat, NaturalActivation, SoftmaxBaseline, SparseMax",
+        "activations.py": {
+          "classes": ["NaturalActivation", "SigmoidActivation"],
+          "sir_source": "Natural Activation ν(x) — EQ6",
+          "public_methods": {
+            "NaturalActivation.forward(x: Tensor) -> Tensor": "Applies ν(x) elementwise; saturates outside [C-A/2, C+A/2]",
+            "NaturalActivation.fim_diagonal_factor(s: Tensor, p_reach: Tensor) -> Tensor": "Returns P(a_i)*(π/A)^2 — the diagonal FIM entry for diagnostics"
+          }
+        },
+        "catnat.py": {
+          "classes": ["CatNat"],
+          "sir_source": "catnat Parameterization (π) — EQ4, EQ5, EQ7",
+          "public_methods": {
+            "CatNat.__init__(K: int, activation: str)": "K must be power of 2; activation in ['natural','sigmoid']",
+            "CatNat.forward(s: Tensor) -> Tensor": "s: [B, K-1] -> p: [B, K]; builds leaf probs via tree traversal",
+            "CatNat.log_prob(s: Tensor) -> Tensor": "Returns log-probabilities [B, K] for numerical stability",
+            "CatNat.node_reach_probs(s: Tensor) -> Tensor": "Returns P(a_i) for each internal node [B, K-1] — needed for FIM diagnostics",
+            "CatNat.fim_diagonal(s: Tensor) -> Tensor": "Returns diagonal of FIM [B, K-1] per Theorem 4.2"
+          },
+          "design_notes": "Tree traversal implemented as vectorized tensor ops, NOT a loop over nodes. Node indices stored as a precomputed ancestor mask buffer."
+        },
+        "baselines.py": {
+          "classes": ["SoftmaxParam", "SparseMaxParam"],
+          "sir_source": "Baselines — EQ2, Martins & Astudillo 2016",
+          "public_methods": {
+            "SoftmaxParam.forward(s: Tensor) -> Tensor": "Standard softmax [B,K]->[B,K]",
+            "SparseMaxParam.forward(s: Tensor) -> Tensor": "Sparsemax projection onto simplex"
+          }
+        },
+        "samplers.py": {
+          "classes": ["GumbelSoftmaxSampler", "REINFORCESampler"],
+          "sir_source": "Sampler module — EQ9",
+          "public_methods": {
+            "GumbelSoftmaxSampler.forward(log_probs: Tensor, tau: float, hard: bool) -> Tensor": "Gumbel-Softmax with straight-through; hard=True gives one-hot in forward, dense in backward",
+            "GumbelSoftmaxSampler.anneal_temperature(step: int) -> float": "Exponential decay: tau_init * exp(-rate * step); clamps to tau_min",
+            "REINFORCESampler.sample(probs: Tensor, n_samples: int) -> Tensor": "Returns [n_samples, B, K] one-hot samples",
+            "REINFORCESampler.log_prob(samples: Tensor, probs: Tensor) -> Tensor": "Log probability of samples under Cat(probs)"
+          }
+        },
+        "models/": {
+          "__init__.py": "Exports VAEEncoder, VAEDecoder, CatVAE, GCNEncoder, GSLModel, PPOAgent",
+          "vae.py": {
+            "classes": ["VAEEncoder", "VAEDecoder", "CatVAE"],
+            "sir_source": "Encoder g_θ (CNN), Decoder f_ψ (Transposed CNN) — Section 5.2, Appendix F.1",
+            "public_methods": {
+              "VAEEncoder.forward(x: Tensor) -> Tensor": "x:[B,1,28,28] -> scores:[B,N,K-1]",
+              "VAEDecoder.forward(C: Tensor) -> Tensor": "C:[B,N,K] -> x_recon:[B,1,28,28]",
+              "CatVAE.forward(x: Tensor) -> dict": "Returns {recon, probs, log_probs, C_hard, C_soft, elbo}",
+              "CatVAE.elbo(x: Tensor, beta: float) -> Tensor": "Computes ELBO = recon_loss + beta*kl_div",
+              "CatVAE.importance_weighted_nll(x: Tensor, n_samples: int) -> Tensor": "512-sample IWAE bound for evaluation"
+            },
+            "architecture_details": {
+              "encoder_conv": "Conv2d(1,32,4,2) -> Conv2d(32,64,4,2) -> Conv2d(64,128,4,2) -> Flatten -> Linear(?,512) -> Linear(512, N*(K-1))",
+              "decoder_deconv": "Linear(N*K, 512) -> Linear(512,?) -> Unflatten -> ConvTranspose2d x3 -> Sigmoid",
+              "note_conv_sizes": "ASSUMED from referenced codebase (confidence 0.70) — TODO: verify against github.com/jxmorris12/categorical-vae"
+            }
+          },
+          "gsl.py": {
+            "classes": ["GCNLayer", "GCNEncoder", "GSLModel"],
+            "sir_source": "Encoder g_θ (GCN), Decoder f_ψ (GCN) — Section 5.1, Appendix E",
+            "public_methods": {
+              "GCNLayer.forward(x: Tensor, adj: Tensor) -> Tensor": "x:[B,N,d] adj:[B,N,N] -> h:[B,N,d]",
+              "GSLModel.forward(x: Tensor, A_samples: Tensor) -> Tensor": "x:[B,N,d_in] A:[M,B,N,N] -> y:[M,B,N,d_out]",
+              "GSLModel.sample_graphs(n: int) -> Tensor": "Samples n adjacency matrices from Bernoulli latent graph distribution",
+              "GSLModel.latent_log_prob(A: Tensor) -> Tensor": "log P_θ(A) = sum of Bernoulli log-probs"
+            }
+          },
+          "ppo_agent.py": {
+            "classes": ["AtariCNN", "PPOActor", "PPOCritic", "PPOAgent"],
+            "sir_source": "Encoder g_θ (CNN), RL — Section 5.3, Appendix I.2",
+            "public_methods": {
+              "AtariCNN.forward(obs: Tensor) -> Tensor": "obs:[B,4,84,84] -> features:[B,512]",
+              "PPOActor.forward(features: Tensor) -> Tensor": "features:[B,512] -> action_probs:[B,A] via catnat or softmax",
+              "PPOCritic.forward(features: Tensor) -> Tensor": "features:[B,512] -> value:[B,1]",
+              "PPOAgent.get_action_and_value(obs: Tensor) -> dict": "Returns {action, log_prob, entropy, value}",
+              "PPOAgent.evaluate_actions(obs: Tensor, actions: Tensor) -> dict": "Returns {log_prob, entropy, value} for given actions"
+            },
+            "architecture_details": {
+              "conv1": "Conv2d(4, 32, kernel_size=8, stride=4)",
+              "conv2": "Conv2d(32, 64, kernel_size=4, stride=2)",
+              "conv3": "Conv2d(64, 64, kernel_size=3, stride=1)",
+              "fc": "Linear(64*7*7, 512)",
+              "init": "Orthogonal initialization for all layers"
+            }
+          }
+        },
+        "training/": {
+          "__init__.py": "",
+          "losses.py": {
+            "classes": ["EnergyScore", "VAELoss", "KLDivCategorical"],
+            "sir_source": "EQ10 (Energy Score), EQ11 (ELBO), Appendix F.4 (KL)",
+            "public_methods": {
+              "EnergyScore.forward(preds: Tensor, target: Tensor) -> Tensor": "preds:[M,B,D] target:[B,D] -> scalar ES loss per EQ10",
+              "VAELoss.forward(recon: Tensor, x: Tensor, probs: Tensor) -> dict": "Returns {total, recon, kl}",
+              "KLDivCategorical.forward(q_probs: Tensor, K: int) -> Tensor": "Analytic KL(Cat(q) || Uniform(1/K)); q_probs:[B,N,K]"
+            }
+          },
+          "trainers.py": {
+            "classes": ["GSLTrainer", "VAETrainer", "PPOTrainer"],
+            "public_methods": {
+              "GSLTrainer.train(model, dataset, config) -> dict": "Full training loop with LOO baseline REINFORCE",
+              "GSLTrainer.compute_loo_baseline(losses: Tensor) -> Tensor": "losses:[M,B] -> baseline:[M,B] (mean of other M-1)",
+              "VAETrainer.train(model, dataset, config) -> dict": "Training loop with Gumbel annealing",
+              "VAETrainer.anneal_step(trainer_state) -> float": "Returns current tau",
+              "PPOTrainer.train(agent, env, config) -> dict": "PPO update loop with GAE advantage estimation",
+              "PPOTrainer.compute_gae(rewards, values, dones, gamma, lam) -> Tensor": "Generalized Advantage Estimation"
+            }
+          },
+          "baseline.py": {
+            "classes": ["LOOBaseline", "MovingAverageBaseline"],
+            "public_methods": {
+              "LOOBaseline.compute(losses: Tensor) -> Tensor": "Leave-one-out baseline from M-sample batch",
+              "MovingAverageBaseline.update(loss: float) -> float": "EMA baseline for single-sample REINFORCE"
+            }
+          }
+        },
+        "evaluation/": {
+          "__init__.py": "",
+          "metrics.py": {
+            "classes": ["GSLMetrics", "VAEMetrics", "RLMetrics"],
+            "public_methods": {
+              "GSLMetrics.energy_score(preds, targets) -> float": "EQ10",
+              "GSLMetrics.pp_mae(preds, targets) -> float": "Point prediction MAE",
+              "GSLMetrics.pp_mse(preds, targets) -> float": "Point prediction MSE",
+              "GSLMetrics.theta_mae(theta_est, theta_star) -> float": "Latent calibration error",
+              "VAEMetrics.iwae_nll(model, dataloader, n_samples=512) -> float": "Importance-weighted NLL",
+              "VAEMetrics.elbo(model, dataloader) -> float": "ELBO estimate",
+              "RLMetrics.episodic_return(env, agent, n_episodes=10) -> float": "Mean episodic return"
+            }
+          },
+          "fim_analysis.py": {
+            "classes": ["FIMAnalyzer"],
+            "public_methods": {
+              "FIMAnalyzer.compute_diagonal(model, x) -> Tensor": "Computes diagonal FIM entries via Theorem 4.2",
+              "FIMAnalyzer.compare_landscape(softmax_model, catnat_model, x) -> dict": "Generates loss landscape comparison data (reproduces Figure 1)"
+            },
+            "note": "Optional diagnostic module; not required for reproduction but useful for verifying theoretical claims"
+          }
+        },
+        "data/": {
+          "__init__.py": "",
+          "gsl_dataset.py": {
+            "classes": ["SyntheticGSLDataset", "GSLDataGenerator"],
+            "public_methods": {
+              "GSLDataGenerator.generate(n_samples, theta_star, n_nodes, n_communities, seed) -> Dataset": "Generates synthetic (x,y) pairs via GCN on latent graph per Appendix E.1",
+              "SyntheticGSLDataset.__getitem__(idx) -> tuple": "Returns (x, y) pair"
+            }
+          },
+          "mnist_dataset.py": {
+            "classes": ["MNISTDataModule", "BinaryMNISTDataModule"],
+            "public_methods": {
+              "MNISTDataModule.train_dataloader() -> DataLoader": "Standard MNIST train split",
+              "BinaryMNISTDataModule.binarize(x: Tensor) -> Tensor": "Threshold at 0.5 of max intensity"
+            }
+          },
+          "atari_wrappers.py": {
+            "classes": ["AtariPreprocessor"],
+            "public_methods": {
+              "AtariPreprocessor.wrap(env) -> gym.Env": "Applies grayscale, resize 84x84, frame-stack 4, reward clip [-1,1]"
+            }
+          }
+        },
+        "utils/": {
+          "__init__.py": "",
+          "config.py": {
+            "classes": ["CatNatConfig", "GSLConfig", "VAEConfig", "RLConfig"],
+            "public_methods": {
+              "CatNatConfig.from_yaml(path: str) -> CatNatConfig": "Loads config from YAML",
+              "CatNatConfig.to_yaml(path: str)": "Saves config to YAML"
+            }
+          },
+          "tree_utils.py": {
+            "classes": ["BinaryTreeIndex"],
+            "public_methods": {
+              "BinaryTreeIndex.build_ancestor_mask(K: int) -> Tensor": "Precomputes [K-1, K-1] boolean mask: mask[i,j]=True iff node j is ancestor of node i. Used for vectorized tree traversal.",
+              "BinaryTreeIndex.get_leaf_paths(K: int) -> Tensor": "Returns [K, H] binary path matrix — the b_1,...,b_H for each leaf",
+              "BinaryTreeIndex.validate_K(K: int) -> bool": "Checks K is power of 2; raises ValueError otherwise"
+            },
+            "note": "Critical utility. The ancestor mask enables O(K log K) vectorized forward pass instead of O(K^2) node-by-node loop."
+          },
+          "init_utils.py": {
+            "functions": [
+              "init_scores_uniform(shape, low=0.0, high=0.1) -> Tensor: GSL score initialization per Appendix E.5",
+              "orthogonal_init(module): Orthogonal weight initialization for RL CNN per Appendix I.2"
+            ]
+          },
+          "reproducibility.py": {
+            "functions": [
+              "set_seed(seed: int): Sets torch, numpy, random seeds + deterministic CUDA",
+              "get_device(config) -> torch.device: Returns cuda/cpu based on config"
+            ]
+          }
+        }
+      },
+      "configs/": {
+        "gsl.yaml": "GSL experiment hyperparameters",
+        "vae.yaml": "VAE experiment hyperparameters",
+        "rl.yaml": "RL/PPO hyperparameters",
+        "catnat_default.yaml": "Default catnat parameterization settings"
+      },
+      "scripts/": {
+        "generate_gsl_data.py": "Standalone: generates and saves synthetic GSL datasets for all 5 theta* settings",
+        "run_gsl_grid.py": "Runs 2-stage LR grid search for GSL (coarse then refined)",
+        "run_vae_grid.py": "Runs 2-stage LR grid search for VAE across (N,K) configs",
+        "run_rl_tpe.py": "Runs 160-trial TPE hyperparameter search for RL"
+      },
+      "tests/": {
+        "test_catnat.py": "Unit tests: forward pass correctness, probabilities sum to 1, gradient flow",
+        "test_fim.py": "Unit tests: FIM diagonality verification vs numerical estimate",
+        "test_losses.py": "Unit tests: Energy Score, KL divergence, ELBO",
+        "test_samplers.py": "Unit tests: Gumbel-Softmax output shape, REINFORCE log-prob"
+      },
+      "train.py": "Main training entrypoint (CLI)",
+      "evaluate.py": "Main evaluation entrypoint (CLI)",
+      "docker/Dockerfile": "Container spec",
+      "requirements.txt": "Pinned dependencies",
+      "requirements-dev.txt": "Dev dependencies",
+      "environment.yaml": "Conda environment",
+      "README.md": "Setup and reproduction instructions"
+    }
+  },
+
+  "tensor_flow_specs": [
+    {
+      "name": "CatNat Forward Pass (core — all experiments)",
+      "pseudocode": [
+        "INPUT  s: [B, K-1]  float32  — unnormalized scores from encoder",
+        "STEP 1  a = activation(s)                           → [B, K-1]  — Bernoulli probs at each internal node via ν or σ",
+        "STEP 2  paths = tree_index.get_leaf_paths(K)        → [K, H]    — precomputed binary path matrix (0/1 for R/L at each level)",
+        "STEP 3  a_indexed = gather a along paths            → [B, K, H] — for each leaf, the activation values along its path",
+        "STEP 4  flip = where(paths==0, 1-a_indexed, a_indexed) → [B, K, H] — apply (1-a) for right branches, a for left",
+        "STEP 5  log_p = sum(log(flip + eps), dim=-1)        → [B, K]    — log-leaf-probabilities (sum of log-factors)",
+        "STEP 6  p = exp(log_p)                              → [B, K]    — leaf probabilities; sums to 1 by construction",
+        "OUTPUT p: [B, K]  float32"
+      ],
+      "implementation_note": "Steps 3-5 are the vectorized tree traversal using BinaryTreeIndex.ancestor_mask. Log-space computation in Step 5 is mandatory for numerical stability with deep trees (large K)."
+    },
+    {
+      "name": "CatVAE Forward Pass (VAE experiment)",
+      "pseudocode": [
+        "INPUT  x: [B, 1, 28, 28]  float32  — input image",
+        "STEP 1  s = encoder(x)                              → [B, N*(K-1)]  — CNN encoder scores",
+        "STEP 2  s = reshape(s, [B, N, K-1])                 → [B, N, K-1]",
+        "STEP 3  log_p = catnat.log_prob(s)                  → [B, N, K]     — log categorical probabilities",
+        "STEP 4  log_p_gumbel = log_p + gumbel_noise         → [B, N, K]     — add Gumbel noise to leaf log-probs",
+        "        NOTE: Gumbel noise injection is at leaf log-probs (confidence 0.65 — TODO: verify vs catnat-torch codebase)",
+        "STEP 5  C_soft = softmax(log_p_gumbel / tau)        → [B, N, K]     — soft relaxation",
+        "STEP 6  C_hard = one_hot(argmax(C_soft), K)         → [B, N, K]     — hard one-hot (straight-through)",
+        "STEP 7  C = C_hard + (C_soft - C_soft.detach())     → [B, N, K]     — straight-through estimator",
+        "STEP 8  x_recon = decoder(C.reshape(B, N*K))        → [B, 1, 28, 28] — reconstructed image via sigmoid",
+        "STEP 9  kl = KLDivCategorical(exp(log_p), K)        → scalar          — analytic KL vs Uniform",
+        "STEP 10 recon_loss = BCE(x_recon, x)                → scalar",
+        "STEP 11 elbo = recon_loss + kl                      → scalar",
+        "OUTPUT  {recon: [B,1,28,28], probs: [B,N,K], elbo: scalar}"
+      ]
+    },
+    {
+      "name": "GSL Training Step (GSL experiment)",
+      "pseudocode": [
+        "INPUT  x: [B, N_nodes, d_in]  — node features",
+        "       target y: [B, N_nodes, d_out]",
+        "STEP 1  theta = catnat.forward(score_params)         → [N_edges, 2]  — Bernoulli probs per edge (binary catnat: K=2)",
+        "STEP 2  A_samples = REINFORCE_sampler.sample(theta, M=32)  → [M, B, N_nodes, N_nodes]",
+        "STEP 3  y_preds = GNN(x, A_samples)                 → [M, B, N_nodes, d_out]",
+        "STEP 4  es_losses = EnergyScore(y_preds, y)          → [M, B]        — per-sample per-batch ES",
+        "STEP 5  baseline_b = LOOBaseline(es_losses)          → [M, B]",
+        "STEP 6  log_probs = REINFORCE_sampler.log_prob(A_samples, theta) → [M, B]",
+        "STEP 7  reinforce_grad_signal = (es_losses - baseline_b) * log_probs  → [M, B]",
+        "STEP 8  loss_theta = mean(reinforce_grad_signal)     → scalar",
+        "STEP 9  loss_psi = mean(es_losses)                   → scalar         — GNN params use direct gradient",
+        "STEP 10 total_loss = loss_psi + loss_theta.detach() * score_params   — combined with stop-gradient trick",
+        "OUTPUT  {loss: scalar, es: float, theta_est: Tensor}"
+      ]
+    },
+    {
+      "name": "PPO Policy Forward Pass (RL experiment)",
+      "pseudocode": [
+        "INPUT  obs: [B, 4, 84, 84]  uint8 → normalize to float32 / 255",
+        "STEP 1  features = AtariCNN(obs)                     → [B, 512]",
+        "STEP 2  action_scores = actor_head(features)         → [B, K-1]      — K = number of discrete actions, K-1 scores for catnat",
+        "STEP 3  action_probs = catnat.forward(action_scores) → [B, K]",
+        "STEP 4  action_dist = Categorical(action_probs)",
+        "STEP 5  action = action_dist.sample()                → [B]",
+        "STEP 6  log_prob = action_dist.log_prob(action)      → [B]",
+        "STEP 7  entropy = action_dist.entropy()              → [B]",
+        "STEP 8  value = critic_head(features)                → [B, 1]",
+        "OUTPUT  {action, log_prob, entropy, value}"
+      ],
+      "ppo_update_note": "PPO clipped surrogate + value loss + entropy bonus per EQ12. Advantages computed via GAE(γ=0.99, λ=0.95) and normalized per mini-batch."
+    }
+  ],
+
+  "configuration_schema": {
+    "catnat_default": {
+      "catnat": {
+        "K": 8,
+        "activation": "natural",
+        "C": 0,
+        "A": 6.283185307
+      }
+    },
+    "gsl": {
+      "experiment": "gsl",
+      "parameterization": "natural",
+      "model": {
+        "n_communities": 4,
+        "d_hidden": 64,
+        "n_layers": 2
+      },
+      "data": {
+        "n_samples": 10000,
+        "theta_star_values": [0.1, 0.25, 0.5, 0.75, 0.9],
+        "train_frac": 0.8,
+        "val_frac": 0.1,
+        "test_frac": 0.1,
+        "sigma_x": 1.0,
+        "score_init_low": 0.0,
+        "score_init_high": 0.1
+      },
+      "training": {
+        "optimizer": "adam",
+        "weight_decay": 0.0,
+        "batch_size": 64,
+        "epochs": 40,
+        "M_samples": 32,
+        "gradient_estimator": "reinforce_loo",
+        "lr_coarse_grid": [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5],
+        "lr_refined_natural": [0.012, 0.015, 0.018, 0.022, 0.027, 0.033, 0.041],
+        "lr_refined_sigmoid": [0.025, 0.03, 0.037, 0.045, 0.055, 0.067, 0.082],
+        "n_seeds": 10
+      }
+    },
+    "vae": {
+      "experiment": "vae",
+      "parameterization": "natural",
+      "model": {
+        "N": 20,
+        "K": 16,
+        "latent_dim_comment": "N categorical variables each with K classes"
+      },
+      "data": {
+        "dataset": "mnist",
+        "binarize": false,
+        "batch_size": 128
+      },
+      "training": {
+        "optimizer": "adam",
+        "gumbel_tau_init": 1.0,
+        "gumbel_tau_min": 0.5,
+        "gumbel_tau_anneal_rate": 3e-5,
+        "lr_coarse_grid": [0.0003, 0.001, 0.003, 0.01, 0.03],
+        "lr_refined_grid": [0.0045, 0.0056, 0.0069, 0.0085, 0.01, 0.013, 0.016, 0.02],
+        "n_seeds": 5,
+        "eval_importance_samples": 512
+      }
+    },
+    "rl": {
+      "experiment": "rl",
+      "parameterization": "natural",
+      "env": {
+        "name": "BreakoutNoFrameskip-v4",
+        "frame_stack": 4,
+        "frame_size": 84,
+        "reward_clip": 1.0
+      },
+      "training": {
+        "algorithm": "ppo",
+        "total_timesteps": 8000000,
+        "optimizer": "adam",
+        "adam_epsilon": 1e-5,
+        "lr_schedule": "linear_anneal",
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "n_seeds": 10,
+        "hparam_search_trials": 160,
+        "hparam_top_k": 10
+      }
+    }
+  },
+
+  "dependencies_manifest": {
+    "requirements_txt": [
+      "torch>=2.2.0",
+      "torchvision>=0.17.0",
+      "numpy>=1.26.0",
+      "gymnasium>=1.0.0",
+      "gymnasium[atari]>=1.0.0",
+      "ale-py>=0.9.0",
+      "torch-geometric>=2.5.0",
+      "pyyaml>=6.0.1",
+      "scipy>=1.12.0",
+      "optuna>=3.6.0",
+      "tqdm>=4.66.0",
+      "tensorboard>=2.16.0",
+      "pandas>=2.2.0",
+      "matplotlib>=3.8.0",
+      "seaborn>=0.13.0"
+    ],
+    "requirements_dev_txt": [
+      "pytest>=8.0.0",
+      "pytest-cov>=5.0.0",
+      "black>=24.0.0",
+      "ruff>=0.4.0",
+      "mypy>=1.10.0",
+      "ipykernel>=6.29.0",
+      "jupyter>=1.0.0"
+    ],
+    "dependency_rationale": {
+      "torch": "Primary framework (paper-specified)",
+      "torchvision": "MNIST dataset loader",
+      "numpy": "Array ops, data generation",
+      "gymnasium": "Atari RL environments",
+      "ale-py": "Atari Learning Environment backend",
+      "torch-geometric": "GCN implementation for GSL experiment",
+      "pyyaml": "Config file loading",
+      "scipy": "Statistical tests (Welch's t-test for evaluation)",
+      "optuna": "TPE hyperparameter search for RL experiment",
+      "tqdm": "Training progress bars",
+      "tensorboard": "Loss/metric logging",
+      "pandas": "Results table formatting",
+      "matplotlib/seaborn": "Loss landscape plots, result figures"
+    }
+  },
+
+  "entrypoints": [
+    {
+      "script": "train.py",
+      "description": "Main training script for all three experiments",
+      "cli_args": [
+        "--experiment {gsl, vae, rl}  [REQUIRED]",
+        "--config CONFIG_PATH  [default: configs/{experiment}.yaml]",
+        "--parameterization {natural, sigmoid, softmax, sparsemax}  [default: natural]",
+        "--seed INT  [default: 0]",
+        "--device {cuda, cpu}  [default: cuda if available]",
+        "--output_dir PATH  [default: results/{experiment}/{timestamp}]",
+        "--theta_star FLOAT  [GSL only; default: 0.5]",
+        "--N INT  [VAE only; number of categorical variables; default: 20]",
+        "--K INT  [VAE only; categories per variable; default: 16]",
+        "--env STR  [RL only; default: BreakoutNoFrameskip-v4]",
+        "--lr FLOAT  [override config learning rate]",
+        "--run_lr_search BOOL  [default: False; runs 2-stage grid search]"
+      ]
+    },
+    {
+      "script": "evaluate.py",
+      "description": "Evaluation against paper's reported metrics",
+      "cli_args": [
+        "--experiment {gsl, vae, rl}  [REQUIRED]",
+        "--checkpoint PATH  [REQUIRED]",
+        "--config CONFIG_PATH",
+        "--n_eval_samples INT  [VAE only; default: 512 for IWAE]",
+        "--output_dir PATH",
+        "--compute_fim BOOL  [default: False; runs FIM diagonal analysis]"
+      ]
+    },
+    {
+      "script": "scripts/generate_gsl_data.py",
+      "description": "Pre-generates and saves all 5 GSL synthetic datasets",
+      "cli_args": [
+        "--output_dir PATH  [default: data/gsl/]",
+        "--n_samples INT  [default: 10000]",
+        "--seed INT  [default: 42]"
+      ]
+    },
+    {
+      "script": "scripts/run_rl_tpe.py",
+      "description": "160-trial TPE hyperparameter search for RL; select top-10 configs for final eval",
+      "cli_args": [
+        "--env STR",
+        "--parameterization STR",
+        "--n_trials INT  [default: 160]",
+        "--n_final_seeds INT  [default: 10]",
+        "--storage STR  [Optuna storage URL; default: sqlite:///rl_hparam.db]"
+      ]
+    }
+  ],
+
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.2.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget", "unzip", "libgl1-mesa-glx", "libglib2.0-0"],
+    "python_setup": [
+      "COPY requirements.txt .",
+      "RUN pip install --no-cache-dir -r requirements.txt",
+      "RUN pip install --no-cache-dir gymnasium[atari] ale-py",
+      "RUN python -m ale_py.roms --import-all"
+    ],
+    "workdir": "/workspace/catnat-reproduce",
+    "volumes": ["/data", "/results"],
+    "default_cmd": "python train.py --experiment vae --parameterization natural"
+  },
+
+  "risk_assessment": [
+    {
+      "id": "RISK-01",
+      "severity": "HIGH",
+      "section": "K power-of-2 constraint",
+      "sir_confidence": 0.62,
+      "description": "The balanced binary tree structure requires K to be a power of 2. The paper never discusses non-power-of-2 K, but real applications may require arbitrary K.",
+      "mitigation": "BinaryTreeIndex.validate_K() raises ValueError for non-powers-of-2. Design CatNat with abstract TreeBuilder base class so alternative tree structures can be plugged in without API changes. Add a 'pad_to_power_of_2' config option that adds dummy categories and masks them in the output."
+    },
+    {
+      "id": "RISK-02",
+      "severity": "HIGH",
+      "section": "Gumbel-Softmax noise injection point",
+      "sir_confidence": 0.65,
+      "description": "The paper does not specify where Gumbel noise is added in the catnat+Gumbel-Softmax hybrid. Adding noise to leaf log-probs (our assumption) may differ from adding it at internal node logits, producing different gradient behavior.",
+      "mitigation": "Implement BOTH options as a config flag: gumbel_injection: {leaf_logprobs, node_logits}. Default to leaf_logprobs (our assumption). Add a unit test that checks gradient flow through both paths. Consult catnat-torch reference codebase to confirm before finalizing."
+    },
+    {
+      "id": "RISK-03",
+      "severity": "MEDIUM",
+      "section": "VAE conv layer architecture",
+      "sir_confidence": 0.70,
+      "description": "Exact kernel sizes, strides, and channel counts for the VAE encoder/decoder are not specified in the paper. Paper says '3 conv + 2 FC' but no dimensions given.",
+      "mitigation": "Fetch and parse the referenced codebase (github.com/jxmorris12/categorical-vae) during Stage 4 to extract exact layer specs. Mark assumed dimensions with # ASSUMED comments. Expose all layer dims as config parameters so they can be overridden."
+    },
+    {
+      "id": "RISK-04",
+      "severity": "MEDIUM",
+      "section": "Vectorized tree traversal numerical stability",
+      "sir_confidence": 0.97,
+      "description": "For large K (e.g. K=32, H=5), multiplying 5 probabilities can underflow to zero. Forward pass must use log-space arithmetic.",
+      "mitigation": "Implement Step 5 of CatNat forward in log-space (sum of logs rather than product of probs). CatNat.log_prob() is the primary internal method; CatNat.forward() calls exp(log_prob()). Add numerical tests checking probs sum to 1 within 1e-6 for K in {8,16,32,64}."
+    },
+    {
+      "id": "RISK-05",
+      "severity": "MEDIUM",
+      "section": "GSL GNN architecture details",
+      "sir_confidence": 0.75,
+      "description": "GSL model uses a GCN but layer count, hidden dim, and output dim are not fully specified. Paper says 'identical architecture' to the data-generating model but the data-generating model specs are also underspecified.",
+      "mitigation": "Use standard 2-layer GCN with hidden dim 64 as a reasonable default. Expose all architecture parameters in config. Reference Kipf & Welling (2017) GCN as the baseline implementation."
+    },
+    {
+      "id": "RISK-06",
+      "severity": "MEDIUM",
+      "section": "RL hyperparameter variability",
+      "sir_confidence": 0.88,
+      "description": "RL results are highly sensitive to hyperparameters. The paper uses a 160-trial TPE search and reports only the top-10 configs. Without this search, reproduced results may differ significantly.",
+      "mitigation": "Implement full TPE search via Optuna in scripts/run_rl_tpe.py. Also provide a 'fast reproduce' mode with the reported best hyperparameter ranges for Breakout and Seaquest as defaults, so users can skip the search if compute is limited."
+    },
+    {
+      "id": "RISK-07",
+      "severity": "LOW",
+      "section": "Atari environment version",
+      "sir_confidence": 0.85,
+      "description": "Paper refers to 'Breakout and Seaquest' environments without specifying v4 vs v5 or NoFrameskip variants. ALE versions affect results.",
+      "mitigation": "Use BreakoutNoFrameskip-v4 and SeaquestNoFrameskip-v4 (standard for PPO benchmarking per Huang et al. 2022 codebase that the paper references). Document this choice in README."
+    },
+    {
+      "id": "RISK-08",
+      "severity": "LOW",
+      "section": "Energy Score implementation",
+      "sir_confidence": 0.95,
+      "description": "The Energy Score (EQ10) requires M*(M-1) pairwise distance computations, which is O(M^2) in memory. M=32 produces 32*31=992 pairs per batch — manageable but worth noting.",
+      "mitigation": "Implement EnergyScore with broadcasting to avoid explicit loops. For M=32, the pairwise matrix is [32,31,B,D] which fits comfortably in GPU memory for typical batch sizes."
+    }
+  ],
+
+  "validation_checklist": {
+    "framework_selection_recorded": true,
+    "complete_module_hierarchy": true,
+    "tensor_flow_all_passes": true,
+    "config_schema_complete": true,
+    "dependencies_manifest_three_formats": true,
+    "all_entrypoints_defined": true,
+    "docker_spec_included": true,
+    "risk_assessment_complete": true
+  }
+}

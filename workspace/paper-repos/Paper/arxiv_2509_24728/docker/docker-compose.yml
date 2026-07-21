@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  train:
+    build: ..
+    image: catnat:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ../data:/workspace/data
+      - ../results:/workspace/results
+      - ../checkpoints:/workspace/checkpoints
+    command: python train.py --experiment vae --config configs/vae.yaml
+
+  notebook:
+    build: ..
+    image: catnat:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ../notebooks:/workspace/notebooks
+      - ../data:/workspace/data
+      - ../results:/workspace/results
+    ports:
+      - "8888:8888"
+    command: jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root

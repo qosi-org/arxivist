@@ -1,0 +1,59 @@
+# VAE experiment configuration — Section 5.2, Appendix F
+# Paper: "Beyond Softmax: A Natural Parameterization for Categorical Random Variables"
+
+experiment: "vae"
+parameterization: "natural"  # one of: natural, sigmoid, softmax, sparsemax
+
+catnat:
+  K: 16             # Categories per latent variable (paper tests 8, 16, 32)
+  activation: "natural"
+  natural_activation_C: 0.0
+  natural_activation_A: 6.283185307
+
+model:
+  N: 20             # Number of independent categorical latent variables (tests 10, 20, 30)
+  K: 16             # Must match catnat.K
+  # Encoder: 3 conv layers (ReLU) + 2 FC layers (Appendix F.1)
+  # RISK-03 RESOLVED: channels [32,64,64] with kernel=4,stride=2 is canonical for
+  # jxmorris12/categorical-vae on MNIST 28x28. Decoder mirrors with ConvTranspose2d.
+  encoder_channels: [32, 64, 64]
+  encoder_kernel_size: 4
+  encoder_stride: 2
+  encoder_fc_hidden: 512
+  decoder_fc_hidden: 512
+
+data:
+  dataset: "mnist"         # "mnist" or "binary_mnist"
+  binarize: false          # True → threshold pixels at 0.5 (Binary MNIST variant)
+  data_dir: "data/mnist/"
+  batch_size: 128          # Explicitly stated
+
+training:
+  optimizer: "adam"        # Primary; SGD tested as ablation
+  n_seeds: 5               # Explicitly stated
+  # Gumbel-Softmax annealing (Appendix F.3) — all values explicitly stated
+  gumbel_tau_init: 1.0
+  gumbel_tau_min: 0.5
+  gumbel_tau_anneal_rate: 3.0e-5   # Exponential decay rate
+  # WARNING (RISK-02, confidence: 0.65): Gumbel noise injected at LEAF log-probs.
+  # Alternative: inject at node logits. Config flag to switch:
+  gumbel_injection_point: "leaf_logprobs"  # or "node_logits" — TODO: verify vs catnat-torch
+  straight_through: true
+  # 2-stage LR grid search (Appendix F.2)
+  lr_coarse_grid: [0.0003, 0.001, 0.003, 0.01, 0.03]
+  lr_refined_grid: [0.0045, 0.0056, 0.0069, 0.0085, 0.01, 0.013, 0.016, 0.02]
+  lr: 0.01                 # Default; overridden by grid search
+  # Evaluation
+  eval_importance_samples: 512   # Explicitly stated (Burda et al. 2016 IWAE)
+  log_every_n_steps: 50
+  save_every_n_epochs: 10
+
+output:
+  results_dir: "results/vae/"
+  checkpoint_dir: "checkpoints/vae/"
+
+hardware:
+  device: "cuda"
+  num_workers: 4
+  pin_memory: true
+  deterministic: false
