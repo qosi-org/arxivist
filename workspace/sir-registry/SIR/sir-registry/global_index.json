@@ -1,0 +1,25 @@
+{
+  "index_version": 2,
+  "total_papers": 1,
+  "papers": [
+    {
+      "paper_id": "arxiv_2509_24728",
+      "title": "Beyond Softmax: A Natural Parameterization for Categorical Random Variables",
+      "authors": ["Alessandro Manenti", "Cesare Alippi"],
+      "venue": "ICML 2026",
+      "domain": "ML / Optimization / Probabilistic Models",
+      "sir_version": 1,
+      "sir_confidence": 0.88,
+      "pipeline_stage": 6,
+      "pipeline_complete": true,
+      "implementation_fidelity": 0.81,
+      "reproducibility_score": null,
+      "reproducibility_mode": "PRE_RUN",
+      "has_repo": true,
+      "has_notebooks": true,
+      "has_comparison": true,
+      "open_hallucinations": 7,
+      "last_updated": "2026-07-16T00:03:00Z"
+    }
+  ]
+}
