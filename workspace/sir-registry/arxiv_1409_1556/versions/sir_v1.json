@@ -1,0 +1,77 @@
+{
+  "paper_id": "arxiv_1409_1556",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Very Deep Convolutional Networks for Large-Scale Image Recognition",
+    "authors": ["Karen Simonyan", "Andrew Zisserman"],
+    "arxiv_id": "1409.1556",
+    "year": 2015,
+    "venue": "ICLR 2015"
+  },
+  "summary": "Systematic evaluation of CNN depth on accuracy. Proposes VGGNet: configurations A–E (11–19 weight layers) using small 3×3 convolutional filters throughout. Achieves state-of-the-art ILSVRC classification and localization results. Demonstrates that depth is key to improving accuracy.",
+  "modules": [
+    {
+      "name": "ConvBlock3x3",
+      "type": "building_block",
+      "description": "Repeated 3×3 conv + ReLU, channels fixed within block",
+      "confidence": 0.98
+    },
+    {
+      "name": "MaxPooling2x2",
+      "type": "pooling",
+      "description": "2×2 max pool with stride 2 after conv blocks",
+      "confidence": 0.98
+    },
+    {
+      "name": "FullyConnected",
+      "type": "head",
+      "description": "Three FC layers (4096, 4096, 1000) with ReLU and dropout (0.5)",
+      "confidence": 0.97
+    }
+  ],
+  "equations": [
+    {"id": "eq_conv", "latex": "y = \\text{ReLU}(W * x + b)", "desc": "3×3 convolution + ReLU", "confidence": 0.98},
+    {"id": "eq_receptive_field", "latex": "RF = 1 + 2 \\sum_{i=1}^{L} \\prod_{j=1}^{i-1} s_j", "desc": "Effective receptive field, L layers, stride s", "confidence": 0.9},
+    {"id": "eq_softmax", "latex": "p(k) = \\frac{\\exp(z_k)}{\\sum_k \\exp(z_k)}", "desc": "Softmax over 1000 classes", "confidence": 0.99}
+  ],
+  "training": {
+    "hyperparameters": {
+      "batch_size": {"value": 256, "confidence": 0.95},
+      "initial_lr": {"value": 0.01, "confidence": 0.95},
+      "lr_decay": {"value": "divide by 10 when validation plateaus", "confidence": 0.9},
+      "momentum": {"value": 0.9, "confidence": 0.95},
+      "weight_decay": {"value": 5e-4, "confidence": 0.95},
+      "dropout_rate": {"value": 0.5, "confidence": 0.97},
+      "num_epochs": {"value": 370, "confidence": 0.9}
+    },
+    "data_augmentation": "Random 224×224 crops from rescaled images, horizontal flips, RGB color jittering",
+    "confidence": 0.95
+  },
+  "evaluation": {
+    "datasets": ["ILSVRC-2012 (ImageNet)", "Localisation task"],
+    "metrics": {
+      "vgg16_top1_error": 7.4,
+      "vgg16_top5_error": 6.8,
+      "vgg19_top1_error": 7.3,
+      "vgg19_top5_error": 6.8
+    },
+    "confidence": 0.98
+  },
+  "confidence_annotations": {
+    "overall": 0.94,
+    "modules": 0.98,
+    "equations": 0.95,
+    "training": 0.95,
+    "evaluation": 0.98
+  },
+  "assumptions": [
+    "Fixed input 224×224 (or multiples thereof)",
+    "Channel counts: 64→128→256→512→512 following Table 1",
+    "All weights initialized from random normal, biases from zero",
+    "LRN not used (found to not improve performance; we exclude per paper)"
+  ],
+  "ambiguities": [
+    "Exact number of training epochs with LR decay schedule not fully specified",
+    "Multi-scale testing details (Section 4.2) involve heuristic averaging"
+  ]
+}
