@@ -1,0 +1,21 @@
+name: lattice
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.10
+  - pytorch=2.2.2
+  - cpuonly
+  - numpy=1.26.4
+  - scikit-learn=1.4.2
+  - scipy=1.13.0
+  - pyyaml=6.0.1
+  - pandas=2.2.2
+  - matplotlib=3.8.4
+  - networkx=3.3
+  - python-igraph=0.11.5
+  - leidenalg=0.10.2
+  - tqdm=4.66.4
+  - pip
+  - pip:
+      - torch-geometric==2.5.3

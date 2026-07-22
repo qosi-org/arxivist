@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../configs:/workspace/configs
+      - ../checkpoints:/workspace/checkpoints
+      - ../results:/workspace/results
+      - ../data:/workspace/data
+    command: ["python", "train.py", "--config", "configs/config.yaml"]
+
+  notebook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../notebooks:/workspace/notebooks
+      - ../checkpoints:/workspace/checkpoints
+      - ../results:/workspace/results
+    command:
+      [
+        "jupyter", "notebook",
+        "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root",
+        "--NotebookApp.token=''"
+      ]
