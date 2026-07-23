@@ -1,0 +1,56 @@
+{
+  "paper_id": "arxiv_2607_14410",
+  "title": "LATTICE: Graph Self-Supervised Learning for Multimodal Spatial Omics Integration",
+  "authors": [
+    "Jagan Mohan Reddy Dwarampudi",
+    "Veena Kochat",
+    "Suresh Satpati",
+    "Hien Van Nguyen",
+    "Kunal Rai",
+    "Tania Banerjee"
+  ],
+  "domain": "Multimodal",
+  "arxiv_id": "2607.14410",
+  "version": 1,
+  "created_at": "2026-07-21T09:58:13Z",
+  "last_updated": "2026-07-22T09:00:00Z",
+  "sir_confidence": 0.77,
+  "stages_with_data": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2607_14410/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-21T09:58:13Z",
+      "reason": "initial commit (Stage 1 Paper Parser output)",
+      "changed_sections": [
+        "all"
+      ]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-22T08:10:00Z",
+      "reason": "Stage 3-5 complete: architecture plan, full repo, and notebooks generated + validated end-to-end",
+      "changed_sections": [
+        "architecture_plan",
+        "repo",
+        "notebooks"
+      ]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-22T09:00:00Z",
+      "reason": "Stage 6 complete: comparison report run against synthetic-data reproduction (reproducibility_score=0.070, low confidence, dominated by synthetic-vs-real data mismatch, not implementation errors)",
+      "changed_sections": [
+        "comparison"
+      ]
+    }
+  ]
+}

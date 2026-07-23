@@ -1,0 +1,23 @@
+{
+  "paper_id": "arxiv_2607_14410",
+  "comparison_date": "2026-07-22T09:00:00Z",
+  "reproducibility_score": 0.07,
+  "score_confidence": "low",
+  "metrics_compared": 5,
+  "metrics_matched": 4,
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 4,
+    "unmatched": 1
+  },
+  "hallucination_count": {
+    "structural": 1,
+    "parametric": 4,
+    "omission": 1
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": true
+}

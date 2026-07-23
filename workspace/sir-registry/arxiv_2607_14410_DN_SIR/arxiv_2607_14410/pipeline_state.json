@@ -1,0 +1,53 @@
+{
+  "paper_id": "arxiv_2607_14410",
+  "paper_title": "LATTICE: Graph Self-Supervised Learning for Multimodal Spatial Omics Integration",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "stage_timestamps": {
+    "1": "2026-07-21T09:58:13Z",
+    "2": "2026-07-21T09:58:13Z",
+    "3": "2026-07-22T08:10:00Z",
+    "4": "2026-07-22T08:10:00Z",
+    "5": "2026-07-22T08:10:00Z",
+    "6": "2026-07-22T09:00:00Z"
+  },
+  "stage_confidence": {
+    "1": 0.77,
+    "2": 1.0,
+    "3": 0.8,
+    "4": 0.85,
+    "5": 0.85,
+    "6": 0.4
+  },
+  "sir_path": "sir-registry/arxiv_2607_14410/sir.json",
+  "repo_path": "paper-repos/arxiv_2607_14410/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2607_14410/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2607_14410/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2607_14410/notebooks/reproduce_arxiv_2607_14410.ipynb",
+    "comparison_report": "paper-repos/arxiv_2607_14410/comparison/full_comparison_report.json"
+  },
+  "confidence_flags": {
+    "implementation_assumptions": 0.58
+  },
+  "human_review_required": true,
+  "human_review_reasons": [
+    "implementation_assumptions confidence (0.58) is below the 0.65 stage-quality bar due to unresolved paper-internal inconsistencies (Eq.6 vs Appendix H loss form; alignment modality-pair scope) and undisclosed details (SARSIM cluster K).",
+    "Private, non-releasable dataset (11-sample melanoma cohort, 54,912 spots) has no public substitute at this exact 5-modality resolution -- numeric reproduction of Table 2/3 will not be possible; only architecture/training-mechanics reproduction on synthetic data is feasible.",
+    "6 unresolved ambiguities recorded, several affecting core loss functions used in Stage 4 code generation.",
+    "Stage 6 (Results Comparator) has not been run: no real cohort results are available to compare against Table 2/3, since the private dataset cannot be released. Repo has been validated end-to-end (train/evaluate/inference + both notebooks execute cleanly) on the synthetic data generator instead."
+  ],
+  "loop_count": 0,
+  "retry_history": [],
+  "created_at": "2026-07-21T09:58:13Z",
+  "last_updated": "2026-07-22T09:00:00Z",
+  "pipeline_complete": true
+}
