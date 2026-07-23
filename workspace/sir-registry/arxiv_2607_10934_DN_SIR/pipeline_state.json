@@ -1,0 +1,14 @@
+{
+  "paper_id": "arxiv_2607_10934",
+  "current_stage": 6,
+  "stage_status": {
+    "stage1_paper_parser": "complete",
+    "stage2_sir_registry": "complete",
+    "stage3_architecture_planner": "complete",
+    "stage4_code_generator": "complete",
+    "stage5_notebook_generator": "complete",
+    "stage6_results_comparator": "complete"
+  },
+  "human_review_required": true,
+  "last_updated": "2026-07-15T18:40:05Z"
+}

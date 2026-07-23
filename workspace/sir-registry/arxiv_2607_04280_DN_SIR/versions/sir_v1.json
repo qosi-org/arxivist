@@ -1,0 +1,473 @@
+{
+  "paper_id": "arxiv_2607_04280",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Order Splitting and Liquidity Replenishment Are Jointly Necessary for the Square-Root Law of Market Impact: A Counterfactual Dissection",
+    "authors": ["Yang Zhou", "Jianwen Chen", "Ruipeng Wei"],
+    "affiliations": [
+      "Institute of Natural Sciences, Westlake Institute for Advanced Study, Hangzhou 310024, China",
+      "Department of Physics, School of Science and Research Center for Industries of the Future, Westlake University, Hangzhou 310030, China",
+      "Greatwall Cigar Factory of China Tobacco Sichuan Industrial Co., Ltd., Sichuan, China",
+      "Southwestern University of Finance and Economics, Chengdu, Sichuan, China"
+    ],
+    "arxiv_id": "2607.04280",
+    "doi": null,
+    "submission_date": "2026-07-05",
+    "abstract": "Three quantitative predictions have been advanced for the square-root law (SRL) of market impact: GGPS, FGLW, and LOB walking. Using a minimal limit-order-book model with heterogeneous interacting agents calibrated against the Tokyo Stock Exchange benchmark, we test all three on identical simulated data and find none matches per-stock measured delta. Removing order splitting collapses delta from 0.549 to 0.324; removing liquidity replenishment drops it to 0.386. Splitting and replenishment are jointly necessary.",
+    "domain": "Other",
+    "key_claims": [
+      "A minimal 4-agent-type limit-order-book ABM reproduces the square-root law of market impact (mean delta = 0.539 +/- 0.048 across 2000 stocks vs. 0.489 empirically on TSE)",
+      "None of the three leading quantitative predictions for delta (GGPS: delta=beta-1, FGLW: delta=alpha-1, LOB walking: delta=1/(1+gamma)) matches the model's measured per-stock delta",
+      "Counterfactual ablation shows removing order splitting collapses delta from 0.549 to 0.324, and removing market-maker liquidity replenishment drops it to 0.386",
+      "Perturbations that leave splitting and replenishment intact (momentum trading, price limits, splitting-rule changes, background liquidity level) change delta by less than 10%",
+      "Order splitting and liquidity replenishment are jointly identified as the causally necessary mechanisms for the SRL within this model"
+    ],
+    "parsed_at": "2026-07-10T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "baseline_4_agent_LOB_ABM",
+    "modules": [
+      {
+        "name": "LimitOrderBook",
+        "operation_type": "market_microstructure_engine",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {
+          "tick_size": "1 basis point of initial price",
+          "order_types": ["market", "limit"]
+        },
+        "paper_section": "2.1",
+        "confidence": 0.85,
+        "notes": "Continuous double-auction LOB. Tick size fixed at 1 bp of initial price. Exact matching-engine data structures (price-time priority book, cancellation handling) are not fully specified in the paper text."
+      },
+      {
+        "name": "InstitutionalAgent",
+        "operation_type": "agent_class",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {
+          "count": 20,
+          "pareto_shape_xi": "Uniform[1.5, 3.5]",
+          "child_order_count_range": [5, 50],
+          "poisson_gap_lambda_ticks": 3,
+          "splitting_rule_default": "Dirichlet",
+          "qmin_log_spaced": "1 to 2000 across agents"
+        },
+        "paper_section": "2.2",
+        "confidence": 0.9,
+        "notes": "Sole source of metaorders. Draws total order size Q from a Pareto distribution, splits into Nc child orders as a Poisson arrival process."
+      },
+      {
+        "name": "HFTMarketMakerAgent",
+        "operation_type": "agent_class",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {
+          "count_range": [3, 10],
+          "quote_levels": 50,
+          "replenish_probability": 0.9,
+          "spread": "adaptive"
+        },
+        "paper_section": "2.2",
+        "confidence": 0.85,
+        "notes": "Posts two-sided limit orders at 50 price levels with adaptive spread; replenishes after each fill with probability 0.9. Exact adaptive-spread rule is not fully specified (flagged in ambiguities)."
+      },
+      {
+        "name": "RetailAgent",
+        "operation_type": "agent_class",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {
+          "count_range": [100, 400],
+          "order_size_range": [1, 10],
+          "direction": "random"
+        },
+        "paper_section": "2.2",
+        "confidence": 0.9,
+        "notes": "Noise traders providing background turnover via small randomly-directed market orders."
+      },
+      {
+        "name": "NewsAgent",
+        "operation_type": "agent_class",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {
+          "count": 3
+        },
+        "paper_section": "2.2",
+        "confidence": 0.65,
+        "notes": "Occasionally injects large market orders to generate exogenous volatility spikes. Trigger frequency/size distribution not explicitly specified in the text (flagged in ambiguities)."
+      },
+      {
+        "name": "MetaorderReconstructor",
+        "operation_type": "post_processing",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {
+          "delta_t_ticks": 10,
+          "grouping_rule": "consecutive same-agent, same-direction trades"
+        },
+        "paper_section": "2.5",
+        "confidence": 0.9,
+        "notes": "Reconstructs metaorders ex post by grouping consecutive same-agent same-direction trades separated by <= 10 ticks with no direction flip."
+      },
+      {
+        "name": "ImpactCurveFitter",
+        "operation_type": "analysis",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {
+          "log_bins": 20,
+          "min_points_per_bin": 30,
+          "min_qnorm_threshold_pct": 0.01
+        },
+        "paper_section": "3.1-3.2",
+        "confidence": 0.9,
+        "notes": "Normalizes (Q, I) by per-day volume/range, log-bins, and fits I = c * Q^delta via relative least squares (Eq. 3)."
+      },
+      {
+        "name": "CounterfactualAblationHarness",
+        "operation_type": "experiment_controller",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {
+          "scenarios": ["Baseline", "No splitting", "No HFT", "Price limits", "Low liquidity", "Momentum", "Uniform split", "Front-loaded"],
+          "stocks_per_scenario": 20
+        },
+        "paper_section": "4.3",
+        "confidence": 0.9,
+        "notes": "Runs the baseline model with each of 7 single-component perturbations/ablations and records fitted delta, c, and theory-exponent estimates."
+      },
+      {
+        "name": "TheoryPredictorGGPS",
+        "operation_type": "analysis",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {"formula": "delta = beta - 1"},
+        "paper_section": "4.4, 5.2",
+        "confidence": 0.9,
+        "notes": "beta estimated via Hill estimator on the metaorder size tail."
+      },
+      {
+        "name": "TheoryPredictorFGLW",
+        "operation_type": "analysis",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {"formula": "delta = alpha - 1"},
+        "paper_section": "4.4, 5.2",
+        "confidence": 0.9,
+        "notes": "alpha estimated via Hill estimator on the child-order count tail."
+      },
+      {
+        "name": "TheoryPredictorLOBWalking",
+        "operation_type": "analysis",
+        "input_shape": null,
+        "output_shape": null,
+        "parameters": {"formula": "delta = 1 / (1 + gamma)"},
+        "paper_section": "4.4, 5.2",
+        "confidence": 0.9,
+        "notes": "gamma estimated from the fitted cumulative-depth profile V(q) ~ q^(1+gamma)."
+      }
+    ],
+    "connections": [
+      {"from": "InstitutionalAgent", "to": "LimitOrderBook", "tensor_name": "child_order_stream"},
+      {"from": "HFTMarketMakerAgent", "to": "LimitOrderBook", "tensor_name": "two_sided_quotes"},
+      {"from": "RetailAgent", "to": "LimitOrderBook", "tensor_name": "noise_market_orders"},
+      {"from": "NewsAgent", "to": "LimitOrderBook", "tensor_name": "large_market_orders"},
+      {"from": "LimitOrderBook", "to": "MetaorderReconstructor", "tensor_name": "trade_tape"},
+      {"from": "MetaorderReconstructor", "to": "ImpactCurveFitter", "tensor_name": "normalized_Q_I_pairs"},
+      {"from": "ImpactCurveFitter", "to": "TheoryPredictorGGPS", "tensor_name": "fitted_delta_per_stock"},
+      {"from": "ImpactCurveFitter", "to": "TheoryPredictorFGLW", "tensor_name": "fitted_delta_per_stock"},
+      {"from": "ImpactCurveFitter", "to": "TheoryPredictorLOBWalking", "tensor_name": "fitted_delta_per_stock"},
+      {"from": "LimitOrderBook", "to": "CounterfactualAblationHarness", "tensor_name": "scenario_market_state"}
+    ],
+    "variants": [
+      {
+        "name": "Baseline (Dirichlet splitting, HFT active)",
+        "differences": {"splitting_rule": "Dirichlet", "HFT_active": true}
+      },
+      {
+        "name": "No splitting",
+        "differences": {"splitting_rule": "disabled - single unsplit market order per metaorder"}
+      },
+      {
+        "name": "No HFT",
+        "differences": {"HFT_active": false}
+      },
+      {
+        "name": "Price limits",
+        "differences": {"price_limit_mechanism": "enabled"}
+      },
+      {
+        "name": "Low liquidity",
+        "differences": {"background_liquidity": "reduced"}
+      },
+      {
+        "name": "Momentum",
+        "differences": {"momentum_traders": "added"}
+      },
+      {
+        "name": "Uniform split",
+        "differences": {"splitting_rule": "uniform (equal child sizes)"}
+      },
+      {
+        "name": "Front-loaded",
+        "differences": {"splitting_rule": "front-loaded (larger early child orders)"}
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Square-root law of market impact",
+      "latex": "\\frac{I}{\\sigma_D} = c \\left(\\frac{Q}{V_D}\\right)^{\\delta}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["c", "delta"],
+      "undefined_symbols": [],
+      "paper_section": "1, Eq. 1",
+      "confidence": 0.95
+    },
+    {
+      "name": "Per-day normalization",
+      "latex": "Q_{norm} = \\frac{Q}{V_D^{(d)}}, \\quad I_{norm} = \\frac{sign \\times I}{\\sigma_D^{(d)}}",
+      "role": "normalization",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "3.1, Eq. 2",
+      "confidence": 0.95
+    },
+    {
+      "name": "Relative least-squares fit for delta",
+      "latex": "\\min_{c,\\delta} \\sum_i \\left( \\frac{y_i - c x_i^{\\delta}}{y_i} \\right)^2",
+      "role": "objective",
+      "used_in": "inference",
+      "hyperparameters": ["c", "delta"],
+      "undefined_symbols": [],
+      "paper_section": "3.2, Eq. 3",
+      "confidence": 0.9
+    },
+    {
+      "name": "GGPS prediction",
+      "latex": "\\frac{I}{\\sigma_D} = \\left(\\frac{Q}{V_D}\\right)^{1} V_D^{1-1/\\beta}, \\quad \\delta = \\beta - 1",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["beta"],
+      "undefined_symbols": [],
+      "paper_section": "4, 5.2, Eq. 4",
+      "confidence": 0.9
+    },
+    {
+      "name": "LOB walking prediction",
+      "latex": "I \\sim q^{\\star} \\sim Q^{1/(1+\\gamma)}, \\quad \\delta = \\frac{1}{1+\\gamma}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["gamma"],
+      "undefined_symbols": [],
+      "paper_section": "4, 5.2, Eq. 5",
+      "confidence": 0.9
+    },
+    {
+      "name": "FGLW prediction",
+      "latex": "\\delta = \\alpha - 1, \\quad \\text{where } P(N_c > n) \\sim n^{-\\alpha},\\ I \\sim N_c \\Delta p",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["alpha"],
+      "undefined_symbols": [],
+      "paper_section": "5.2",
+      "confidence": 0.85
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "metaorder_size_Q",
+      "shape_notation": "[N_metaorders]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "InstitutionalAgent",
+      "confidence": 0.85
+    },
+    {
+      "name": "normalized_impact_pairs",
+      "shape_notation": "[N_metaorders, 2]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "ImpactCurveFitter",
+      "confidence": 0.85
+    },
+    {
+      "name": "per_stock_delta",
+      "shape_notation": "[N_stocks]",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "ImpactCurveFitter",
+      "confidence": 0.9
+    },
+    {
+      "name": "lob_state",
+      "shape_notation": "[n_price_levels, 2]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "LimitOrderBook",
+      "confidence": 0.6
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": null,
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.95
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.95
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": 1000000,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.85,
+    "notes": "This is not a gradient-trained model; 'training_pipeline' here maps to the discrete-event simulation protocol: T = 1e6 steps per stock preceded by a 5e4-step warmup, one uniformly-random agent acts per step, 2000 independent stocks with independently drawn parameters (20 stocks used for counterfactual experiments). Convergence checked by comparing delta on first/second half of trajectory (agreement within +/-0.01)."
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {
+        "name": "Simulated LOB market (2000 independently parameterised stocks)",
+        "split": "full simulation, no train/test split (unsupervised statistical model)",
+        "size": 2000,
+        "publicly_available": false
+      },
+      {
+        "name": "Tokyo Stock Exchange (TSE) empirical benchmark [Sato & Kanazawa 2025]",
+        "split": "external benchmark, not re-collected in this paper",
+        "size": null,
+        "publicly_available": true
+      }
+    ],
+    "metrics": ["fitted delta (impact exponent)", "fitted c (impact coefficient)", "beta (Hill tail exponent, metaorder size)", "alpha (Hill tail exponent, child-order count)", "gamma (LOB depth-profile exponent)"],
+    "reported_results": [
+      {"metric": "delta", "dataset": "Baseline (pooled)", "split": "full", "value": 0.549, "is_primary": true},
+      {"metric": "delta_mean_2000_stocks", "dataset": "Baseline (2000 stocks)", "split": "full", "value": 0.539, "is_primary": true},
+      {"metric": "delta_std_2000_stocks", "dataset": "Baseline (2000 stocks)", "split": "full", "value": 0.048, "is_primary": false},
+      {"metric": "delta_TSE_benchmark", "dataset": "Tokyo Stock Exchange", "split": "empirical", "value": 0.489, "is_primary": true},
+      {"metric": "delta_no_splitting", "dataset": "Ablation: No splitting", "split": "20 stocks", "value": 0.324, "is_primary": true},
+      {"metric": "delta_no_HFT", "dataset": "Ablation: No HFT", "split": "20 stocks", "value": 0.386, "is_primary": true},
+      {"metric": "delta_price_limits", "dataset": "Ablation: Price limits", "split": "20 stocks", "value": 0.529, "is_primary": false},
+      {"metric": "delta_low_liquidity", "dataset": "Ablation: Low liquidity", "split": "20 stocks", "value": 0.543, "is_primary": false},
+      {"metric": "delta_momentum", "dataset": "Ablation: Momentum", "split": "20 stocks", "value": 0.549, "is_primary": false},
+      {"metric": "delta_uniform_split", "dataset": "Ablation: Uniform split", "split": "20 stocks", "value": 0.547, "is_primary": false},
+      {"metric": "delta_front_loaded", "dataset": "Ablation: Front-loaded", "split": "20 stocks", "value": 0.502, "is_primary": false},
+      {"metric": "beta_GGPS_mean", "dataset": "Baseline (2000 stocks)", "split": "full", "value": 1.16, "is_primary": false},
+      {"metric": "alpha_FGLW_mean", "dataset": "Baseline (2000 stocks)", "split": "full", "value": 2.00, "is_primary": false},
+      {"metric": "gamma_LOB_walking_mean_delta_pred", "dataset": "Baseline (2000 stocks)", "split": "full", "value": 0.36, "is_primary": false}
+    ],
+    "baselines": ["GGPS (delta = beta - 1)", "FGLW (delta = alpha - 1)", "LOB walking (delta = 1/(1+gamma))", "Toth et al. 2011 ABM", "Mastromatteo et al. 2014 ABM", "Donier et al. 2015 latent-liquidity theory"],
+    "compute": "40-core Xeon E5-2698 v4 server; ~3 hours wall-clock for the full 2000-stock baseline (embarrassingly parallel across stocks)",
+    "special_conditions": [
+      "Metaorders with Q/V_D < 0.01% are dropped from fitting (spread-dominated regime)",
+      "Counterfactual experiments use only 20 independent stocks per scenario (not 2000), for compute reasons",
+      "delta estimated separately on first and second half of each trajectory to confirm convergence"
+    ],
+    "confidence": 0.9
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Order book matching engine uses standard price-time priority with a discrete tick grid; cancellations are not modeled explicitly beyond HFT replenishment/quote updates.",
+      "basis": "common practice for minimal LOB ABMs",
+      "confidence": 0.6,
+      "alternatives": ["pro-rata matching", "explicit order-cancellation process for all agent types"],
+      "affects_section": "architecture.LimitOrderBook"
+    },
+    {
+      "assumption": "HFT adaptive spread rule: spread widens with recent volatility / inventory risk (standard market-making heuristic), quote sizes are symmetric.",
+      "basis": "inferred from results (Figure 9 shows near-constant spread across scenarios); no explicit formula given in the paper",
+      "confidence": 0.4,
+      "alternatives": ["fixed spread with random jitter", "Avellaneda-Stoikov style inventory-based spread"],
+      "affects_section": "architecture.HFTMarketMakerAgent"
+    },
+    {
+      "assumption": "News agent trigger process is Poisson with a size distribution large enough to generate heavy-tailed return kurtosis (kappa=29.5) but low frequency so as not to dominate volume.",
+      "basis": "inferred from stated purpose (generate exogenous volatility spikes) and reported kurtosis",
+      "confidence": 0.35,
+      "alternatives": ["fixed periodic injection", "size drawn from the same Pareto family as institutional metaorders"],
+      "affects_section": "architecture.NewsAgent"
+    },
+    {
+      "assumption": "Dirichlet child-order splitting parameterization: child sizes drawn from a symmetric Dirichlet distribution over Nc parts scaled to sum to Q.",
+      "basis": "literature default for 'Dirichlet splitting rule' terminology in market-microstructure ABMs",
+      "confidence": 0.55,
+      "alternatives": ["Dirichlet with a concentration parameter tuned per institution", "log-normal child sizes normalized to sum to Q"],
+      "affects_section": "architecture.InstitutionalAgent"
+    },
+    {
+      "assumption": "Price-limit mechanism (ablation scenario) is a simple daily +/-X% band around the previous close, halting trading if breached.",
+      "basis": "common practice for equity market circuit breakers; not specified in text",
+      "confidence": 0.4,
+      "alternatives": ["dynamic/no-halt soft limit that only widens spread", "intraday rolling limit"],
+      "affects_section": "architecture.CounterfactualAblationHarness"
+    },
+    {
+      "assumption": "Momentum-trader scenario adds a fifth agent type that buys after positive recent returns and sells after negative ones, with a lookback window on the order of tens of ticks.",
+      "basis": "standard momentum-trader specification in agent-based market models; not detailed in the paper text",
+      "confidence": 0.4,
+      "alternatives": ["momentum applied to existing retail agents rather than a new agent type", "different lookback window"],
+      "affects_section": "architecture.CounterfactualAblationHarness"
+    },
+    {
+      "assumption": "Random seeding: each of the 2000 stocks uses an independent random seed; no shared seed across stocks is implied.",
+      "basis": "explicit statement that stocks are independent with separate random seeds",
+      "confidence": 0.9,
+      "alternatives": [],
+      "affects_section": "training_pipeline"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 2.2, HFT agents",
+      "description": "The exact functional form of the 'adaptive spread' for market-maker agents is not given; only that they post at 50 levels and replenish with probability 0.9 after a fill.",
+      "primary_assumption": "Volatility/inventory-based spread widening heuristic",
+      "alternatives": ["Fixed spread with small random jitter", "Avellaneda-Stoikov inventory model"],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 2.2, News agents",
+      "description": "Trigger frequency and size distribution for news-agent large market orders are not specified quantitatively.",
+      "primary_assumption": "Low-frequency Poisson trigger with size drawn from a heavier-tailed distribution than retail orders",
+      "alternatives": ["Periodic fixed-size injections", "Same Pareto family as institutional metaorders but with a fixed multiplier"],
+      "confidence": 0.35
+    },
+    {
+      "location": "Section 4.3, Table 1 counterfactual scenarios",
+      "description": "'Price limits', 'Momentum', and 'Low liquidity' scenarios are named but their exact parameter changes (e.g. band width for price limits, lookback window for momentum, magnitude of liquidity reduction) are not given numerically.",
+      "primary_assumption": "Reasonable literature-standard values (e.g. +/-10% daily price limit; momentum lookback ~20-50 ticks; liquidity halved by reducing HFT depth or retail count)",
+      "alternatives": ["Narrower/wider price bands", "Different momentum lookback windows", "Liquidity reduced via fewer HFT agents vs. shallower quote depth"],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 2.2, splitting rule 'Uniform' and 'Front-loaded' variants",
+      "description": "Precise mathematical definitions of the 'Uniform split' and 'Front-loaded' child-order size rules (beyond their descriptive names) are not given.",
+      "primary_assumption": "Uniform = all Nc child orders equal size Q/Nc; Front-loaded = child sizes decay geometrically from an initial large fraction of Q",
+      "alternatives": ["Front-loaded defined via a different decay schedule (e.g. linear decay)"],
+      "confidence": 0.5
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.8,
+    "mathematical_spec": 0.91,
+    "tensor_semantics": 0.75,
+    "training_pipeline": 0.85,
+    "evaluation_protocol": 0.9,
+    "implementation_assumptions": 0.55,
+    "overall_sir_confidence": 0.79
+  }
+}

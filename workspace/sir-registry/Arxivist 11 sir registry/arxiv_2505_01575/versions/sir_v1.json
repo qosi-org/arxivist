@@ -1,0 +1,445 @@
+{
+  "paper_id": "arxiv_2505_01575",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Asset Pricing in Pre-trained Transformers",
+    "authors": ["Shanyan Lai"],
+    "affiliations": ["Department of Economics and Related Studies, University of York, Heslington, York, YO10 5DD, UK"],
+    "arxiv_id": "2505.01575v3",
+    "doi": "10.5281/zenodo.15348807",
+    "submission_date": "2026-06-21",
+    "abstract": "This paper proposes an innovative Transformer model, Single-directional representative from Transformer (SERT), for US large capital stock pricing. It also innovatively applies pre-trained Transformer models under the stock pricing and factor investment context, compared with standard Transformer and encoder-only Transformer models across three periods covering COVID-19.",
+    "domain": "Tabular",
+    "key_claims": [
+      "Proposed SERT and MLP-autoencoder pre-trained Transformer models achieve the highest out-of-sample R2 (11.94% and 11.47%) during extreme market fluctuations, outperforming standard/encoder-only Transformer benchmarks",
+      "Trend-following strategies built on the proposed models achieve Sortino ratios ~47% (equal-weighted) and ~28% (value-weighted) higher than buy-and-hold during the pandemic period",
+      "Softmax trading-signal filtering removes cross-model performance differences without improving strategy-wise performance",
+      "Increasing attention heads improves performance only marginally, and layer-normalization-first (LNF) does not improve performance in this setting"
+    ],
+    "parsed_at": "2026-07-12T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "P_Trans_H3 (pre-trained Transformer, 3 attention heads)",
+    "modules": [
+      {
+        "name": "InputEmbedding",
+        "operation_type": "linear_embedding",
+        "input_shape": "[B, T, F_in]",
+        "output_shape": "[B, T, d_model]",
+        "parameters": {"F_in": 182, "d_model": 420},
+        "paper_section": "4.1, 4.2",
+        "confidence": 0.85,
+        "notes": "Linear embedding substitutes Word2Vec-style embedding for numeric factor inputs."
+      },
+      {
+        "name": "MLPAutoencoderPretrain",
+        "operation_type": "mlp_autoencoder_dimension_projection",
+        "input_shape": "[B, T, 182]",
+        "output_shape": "[B, T, 420]",
+        "parameters": {"input_dim": 182, "output_dim": 420, "role": "denoise + dimension-expand to align with decoder/cross-attn dim"},
+        "paper_section": "4.2",
+        "confidence": 0.8,
+        "notes": "Pre-training MLP autoencoder projects 182 sorted-portfolio factors to 420-dim latent space (aligned to number of stocks / cross-attention output dim), analogous to a generalized non-linear PCA. Present only in Pre-trained Transformer (Group 2) and SERT (Group 2) models, absent from Group 3 standard benchmarks."
+      },
+      {
+        "name": "SinusoidalPositionalEncoding",
+        "operation_type": "positional_encoding",
+        "input_shape": "[T, d_model]",
+        "output_shape": "[T, d_model]",
+        "parameters": {"formula": "PE(pos,2i)=sin(pos/10000^(2i/d_model)); PE(pos,2i+1)=cos(pos/10000^(2i/d_model))"},
+        "paper_section": "4.1.1, Eq. 1-2",
+        "confidence": 0.95,
+        "notes": "Standard SPE, added (not concatenated) to embedded input: X' = X + PE."
+      },
+      {
+        "name": "MultiHeadSelfAttentionEncoder",
+        "operation_type": "masked_multi_head_self_attention",
+        "input_shape": "[B, T, d_model]",
+        "output_shape": "[B, T, d_model]",
+        "parameters": {"heads_examined": [1,2,3,4,6,7], "causal_mask": true},
+        "paper_section": "4.1.3, Eq. 3-9",
+        "confidence": 0.95,
+        "notes": "Causal mask (upper-triangular -inf) enforced to prevent look-ahead/future leakage; Q,K,V derived via learned linear projections; scaled dot-product attention with mask add before softmax."
+      },
+      {
+        "name": "FeedForwardAutoencoder",
+        "operation_type": "mlp_autoencoder_block",
+        "input_shape": "[B, T, d_model]",
+        "output_shape": "[B, T, d_model]",
+        "parameters": {"latent_dim_ratio": 0.7, "activation": "ReLU (assumed)"},
+        "paper_section": "4.1.2, 4.1.4",
+        "confidence": 0.75,
+        "notes": "Latent-layer neuron count = 70% of input dimension (main-body FFN autoencoder); LNF variant uses 20% of input dimension for the FFN latent size."
+      },
+      {
+        "name": "AddAndLayerNorm",
+        "operation_type": "residual_add_layernorm",
+        "input_shape": "[B, T, d_model]",
+        "output_shape": "[B, T, d_model]",
+        "parameters": {"lnf_variant_order": "norm-then-add (pre-LN)", "standard_order": "add-then-norm (post-LN)"},
+        "paper_section": "4.1.4, Eq. 12-13",
+        "confidence": 0.9,
+        "notes": "Standard Transformer/pre-trained/SERT groups use post-LN (Add & LayerNorm); LNF variants use pre-LN (LayerNorm first, then Add), per Liu et al. 2020."
+      },
+      {
+        "name": "CrossAttention",
+        "operation_type": "masked_multi_head_cross_attention",
+        "input_shape": "Q:[B,T,d_H] (decoder), K/V:[B,T,d_H] (encoder)",
+        "output_shape": "[B, T, d_H]",
+        "parameters": {"present_in": "full Transformer (Pre-trained Transformer, LNF Pre-trained Transformer, standard C_Trans benchmarks) only; absent in encoder-only SERT/En_Trans"},
+        "paper_section": "4.1.3, Eq. 10-11",
+        "confidence": 0.9,
+        "notes": "Q from decoder output, K/V from encoder output; bridges encoder-decoder; masked cross-attention with M_cross mask."
+      },
+      {
+        "name": "OutputDenseLayer",
+        "operation_type": "linear_projection",
+        "input_shape": "[B, T, d_model]",
+        "output_shape": "[B, T, 1]",
+        "parameters": {"activation": "none (linear, replaces original softmax layer for direct OOS return regression)"},
+        "paper_section": "4.4",
+        "confidence": 0.9,
+        "notes": "This study replaces the standard Transformer's terminal softmax classification layer with a linear dense layer for direct OOS return regression; softmax is instead reused separately as a post-hoc trading-signal filter."
+      },
+      {
+        "name": "SERT_Encoder",
+        "operation_type": "encoder_only_transformer",
+        "input_shape": "[B, T, 182]",
+        "output_shape": "[B, T, 1]",
+        "parameters": {"decoder_present": false, "cross_attention_present": false, "pretrain_module": true},
+        "paper_section": "4.3, Fig. 8",
+        "confidence": 0.85,
+        "notes": "SERT = BERT-style encoder-only Transformer, but (a) causal-masked self-attention instead of bidirectional, and (b) MLP-autoencoder pre-training module instead of random-masking pretraining. Feedforward autoencoder of encoder connects directly (linearly) to output dense layer -- no decoder/cross-attention block."
+      }
+    ],
+    "connections": [
+      {"from": "raw_factor_input", "to": "MLPAutoencoderPretrain", "tensor_name": "X_raw [B,T,182]"},
+      {"from": "MLPAutoencoderPretrain", "to": "InputEmbedding", "tensor_name": "X_projected [B,T,420]"},
+      {"from": "InputEmbedding", "to": "SinusoidalPositionalEncoding", "tensor_name": "X_embed [B,T,420]"},
+      {"from": "SinusoidalPositionalEncoding", "to": "MultiHeadSelfAttentionEncoder", "tensor_name": "X'=X+PE"},
+      {"from": "MultiHeadSelfAttentionEncoder", "to": "AddAndLayerNorm", "tensor_name": "AttnOut"},
+      {"from": "AddAndLayerNorm", "to": "FeedForwardAutoencoder", "tensor_name": "Normed"},
+      {"from": "FeedForwardAutoencoder", "to": "AddAndLayerNorm", "tensor_name": "FFNOut"},
+      {"from": "AddAndLayerNorm", "to": "CrossAttention", "tensor_name": "EncoderOut (Pre-trained Transformer path only)"},
+      {"from": "CrossAttention", "to": "OutputDenseLayer", "tensor_name": "DecoderOut (Pre-trained Transformer path only)"},
+      {"from": "AddAndLayerNorm", "to": "OutputDenseLayer", "tensor_name": "EncoderOut (SERT / encoder-only path)"}
+    ],
+    "variants": [
+      {"name": "P_Trans_LNF", "differences": {"group": 1, "heads": 1, "lnf": true, "pretrain": true, "decoder": true}},
+      {"name": "P_Trans_H1..H7 (excl. H5)", "differences": {"group": 2, "heads": "1,2,3,4,6,7", "lnf": false, "pretrain": true, "decoder": true}},
+      {"name": "C_Trans_H1/H2/H4", "differences": {"group": 3, "heads": "1,2,4", "lnf": false, "pretrain": false, "decoder": true, "role": "benchmark, no pre-training module"}},
+      {"name": "SERT_LNF", "differences": {"group": 1, "heads": 1, "lnf": true, "pretrain": true, "decoder": false}},
+      {"name": "SERT_H1..H7 (excl. H5)", "differences": {"group": 2, "heads": "1,2,3,4,6,7", "lnf": false, "pretrain": true, "decoder": false}},
+      {"name": "En_Trans_H1/H2/H4", "differences": {"group": 3, "heads": "1,2,4", "lnf": false, "pretrain": false, "decoder": false, "role": "benchmark encoder-only, no pre-training module"}}
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Sinusoidal Positional Encoding",
+      "latex": "PE_{(pos,2i)}=\\sin\\left(\\frac{pos}{10000^{2i/d_{model}}}\\right),\\quad PE_{(pos,2i+1)}=\\cos\\left(\\frac{pos}{10000^{2i/d_{model}}}\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["d_model"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 1-2",
+      "confidence": 0.95
+    },
+    {
+      "name": "QKV projection",
+      "latex": "Q = W^Q X,\\quad K = W^K X,\\quad V = W^V X",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": ["W^Q", "W^K", "W^V"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 3",
+      "confidence": 0.95
+    },
+    {
+      "name": "Scaled attention score",
+      "latex": "\\text{Attention Score} = \\frac{QK^\\top}{\\sqrt{d_{model}}}",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": ["d_model"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 4",
+      "confidence": 0.95
+    },
+    {
+      "name": "Causal mask",
+      "latex": "M_{ij} = \\begin{cases} 0 & i<j \\\\ -\\infty & i>j \\end{cases}",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 5-6",
+      "confidence": 0.9
+    },
+    {
+      "name": "Masked single-head attention",
+      "latex": "\\text{Masked Attention}(Q,K,V) = \\text{Softmax}\\left(\\frac{QK^\\top}{\\sqrt{d_{model}}} + M\\right)V",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 7",
+      "confidence": 0.95
+    },
+    {
+      "name": "Masked multi-head attention (per head)",
+      "latex": "\\text{Head}_i(Q_i,K_i,V_i) = \\text{Softmax}\\left(\\frac{Q_iK_i^\\top}{\\sqrt{d_k}} + M_i\\right)V_i,\\ i\\in\\{1,\\dots,h\\}",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": ["h", "d_k = d_model/h"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 8",
+      "confidence": 0.95
+    },
+    {
+      "name": "Masked multi-head attention (concat)",
+      "latex": "\\text{Masked MultiHead}(Q,K,V) = \\text{Concat}(\\text{Head}_1,\\dots,\\text{Head}_h)W^O",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": ["W^O"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 9",
+      "confidence": 0.95
+    },
+    {
+      "name": "Cross-attention QKV",
+      "latex": "Q_{de} = H_{de}W^Q,\\quad K_{en} = H_{en}W^K,\\quad V_{en} = H_{en}W^V",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 10",
+      "confidence": 0.9
+    },
+    {
+      "name": "Masked cross-attention",
+      "latex": "\\text{Masked Cross Attention}(Q_{de},K_{en},V_{en}) = \\text{Softmax}\\left(\\frac{Q_{de}K_{en}^\\top}{\\sqrt{d_H}} + M_{cross}\\right)V_{en}",
+      "role": "attention",
+      "used_in": "both",
+      "hyperparameters": ["d_H"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 11",
+      "confidence": 0.9
+    },
+    {
+      "name": "Add & LayerNorm (post-LN, standard)",
+      "latex": "X' = \\text{LayerNorm}(X + \\text{Masked Attention}(Q,K,V))",
+      "role": "normalization",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 12",
+      "confidence": 0.9
+    },
+    {
+      "name": "LayerNorm-First residual (LNF variant)",
+      "latex": "X' = X + \\text{sublayer}(\\text{LayerNorm}(X))",
+      "role": "normalization",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 13",
+      "confidence": 0.9
+    },
+    {
+      "name": "Training loss (MSE + L1 regularization)",
+      "latex": "L = \\frac{1}{N}\\sum_{i=1}^N (y_i-\\hat y_i)^2 + \\lambda\\sum |\\theta|",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["lambda (L1 coeff, value not specified in text)"],
+      "undefined_symbols": ["lambda value"],
+      "paper_section": "4.1.5",
+      "confidence": 0.55
+    },
+    {
+      "name": "Output linear layer gradient",
+      "latex": "\\hat y_i = W_{out}h_{L,i} + b_{out}",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["W_out", "b_out"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A, Eq. A3",
+      "confidence": 0.9
+    },
+    {
+      "name": "Out-of-sample R2 (corrected)",
+      "latex": "R^2_{OOS} = 1 - \\frac{\\sum_i (y_i-\\hat y_i)^2}{\\sum_i (y_i-\\bar y_{train+val})^2}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Appendix E, corrected in v3",
+      "confidence": 0.9
+    },
+    {
+      "name": "Adam optimizer update",
+      "latex": "m_l=\\beta_1 m_{l-1}+(1-\\beta_1)g_l;\\ v_l=\\beta_2 v_{l-1}+(1-\\beta_2)g_l\\odot g_l;\\ \\hat m_l=m_l/(1-\\beta_1^l);\\ \\hat v_l=v_l/(1-\\beta_2^l);\\ \\theta_l=\\theta_{l-1}-\\eta \\hat m_l/(\\sqrt{\\hat v_l}+\\epsilon)",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["eta=0.001", "beta1=0.9", "beta2=0.999", "epsilon=1e-8"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A, Algorithm 1",
+      "confidence": 0.95
+    }
+  ],
+  "tensor_semantics": [
+    {"name": "X_raw", "shape_notation": "[B, T, 182]", "dtype": "float32", "tensor_type": "input", "module": "MLPAutoencoderPretrain", "confidence": 0.9},
+    {"name": "X_projected", "shape_notation": "[B, T, 420]", "dtype": "float32", "tensor_type": "intermediate", "module": "MLPAutoencoderPretrain", "confidence": 0.8},
+    {"name": "PE", "shape_notation": "[T, 420]", "dtype": "float32", "tensor_type": "intermediate", "module": "SinusoidalPositionalEncoding", "confidence": 0.95},
+    {"name": "Q,K,V", "shape_notation": "[B, T, d_k] per head, d_k=d_model/h", "dtype": "float32", "tensor_type": "intermediate", "module": "MultiHeadSelfAttentionEncoder", "confidence": 0.9},
+    {"name": "AttentionWeights", "shape_notation": "[B, T, T]", "dtype": "float32", "tensor_type": "intermediate", "module": "MultiHeadSelfAttentionEncoder", "confidence": 0.9},
+    {"name": "y_hat", "shape_notation": "[B, T, 1]", "dtype": "float32", "tensor_type": "output", "module": "OutputDenseLayer", "confidence": 0.9},
+    {"name": "y_true", "shape_notation": "[B, T, 1]", "dtype": "float32", "tensor_type": "input", "module": null, "confidence": 0.9}
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Adam",
+      "learning_rate": 0.001,
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "weight_decay": null,
+      "confidence": 0.85
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.3
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "Rolling-window re-estimation: 102-month training window, 30-month validation window (30% of training), model parameters re-estimated every 12 months (step size 12).",
+    "confidence": 0.75
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "182 firm-characteristic sorted-portfolio factors (Andrew Y.; Zimmermann 2020, Open Source Cross-Sectional Asset Pricing)", "split": "full sample Jan 1957 - Dec 2022", "size": null, "publicly_available": true},
+      {"name": "420 large-capital U.S. stocks excess returns", "split": "in-sample: Jan1957-Dec2012 (672 obs); OOS '1911': Jan2013-Nov2019 (83 obs); OOS '2112': Jan2013-Dec2021 (108 obs); OOS '2212': Jan2013-Dec2022 (120 obs)", "size": 420, "publicly_available": false}
+    ],
+    "metrics": ["Out-of-sample R2 (OOS R2)", "MSE", "mean alpha (residual, monthly)", "annualized alpha", "alpha t-statistic", "Sharpe ratio", "Sortino ratio", "annualized Sharpe/Sortino", "maximum drawdown", "annualized return", "Diebold-Mariano test with HAC estimator"],
+    "reported_results": [
+      {"metric": "OOS_R2", "dataset": "P_Trans_H3, period 2112 (COVID-inclusive)", "split": "test", "value": 0.1113, "is_primary": true},
+      {"metric": "OOS_R2", "dataset": "SERT_H7, period 2112 (COVID-inclusive)", "split": "test", "value": 0.1194, "is_primary": true},
+      {"metric": "OOS_R2", "dataset": "SERT_H4, period 2212 (post-COVID+1yr)", "split": "test", "value": 0.1147, "is_primary": true},
+      {"metric": "Annualized_Sortino_uplift_vs_buyhold_EW_pct", "dataset": "SERT_H4/P_Trans_H6 vs BHE, period 2112", "split": "test", "value": 47.0, "is_primary": true},
+      {"metric": "Annualized_Sortino_uplift_vs_buyhold_VW_pct", "dataset": "SERT_H1/P_Trans_H2 vs BHV, period 2112", "split": "test", "value": 28.0, "is_primary": false}
+    ],
+    "baselines": ["C_Trans_H1/H2/H4 (standard Transformer, no pretraining)", "En_Trans_H1/H2/H4 (standard encoder-only Transformer, no pretraining)", "Buy-and-hold equal-weighted (BHE)", "Buy-and-hold value-weighted (BHV)"],
+    "compute": "NVIDIA GeForce RTX 3070 GPU; PyTorch nn.Transformer; feasible on CPU-only laptop for limited data size",
+    "special_conditions": ["static transaction cost 50bps", "dynamic transaction cost = turnover rate x 20bps for large-cap stocks", "softmax trading-signal filter removes worst 50% of monthly trading signals across 420 stocks"],
+    "confidence": 0.85
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "L1 regularization coefficient (lambda) value not given; use small default 1e-5",
+      "basis": "literature default for light L1 regularization on financial NN models",
+      "confidence": 0.4,
+      "alternatives": ["1e-4", "1e-3", "0 (no L1)"],
+      "affects_section": "training_pipeline / loss"
+    },
+    {
+      "assumption": "Activation function inside MLP autoencoder FFN blocks is ReLU",
+      "basis": "common practice for Transformer FFN blocks; paper does not explicitly name activation",
+      "confidence": 0.6,
+      "alternatives": ["GELU", "Tanh"],
+      "affects_section": "architecture / FeedForwardAutoencoder"
+    },
+    {
+      "assumption": "Batch size not specified; assume full-batch (all 420 stocks) per training step given monthly-frequency, small-N-per-T panel structure",
+      "basis": "typical practice in monthly asset-pricing factor-model literature (e.g., Gu et al. 2020) which trains on the full cross-section each period",
+      "confidence": 0.5,
+      "alternatives": ["mini-batch of 32/64 stocks"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Learning-rate schedule: constant LR=0.001 (Adam default from Appendix A), no explicit warmup/decay described",
+      "basis": "Appendix Algorithm 1 gives fixed eta with no schedule mentioned elsewhere",
+      "confidence": 0.6,
+      "alternatives": ["cosine decay", "step decay"],
+      "affects_section": "training_pipeline / lr_schedule"
+    },
+    {
+      "assumption": "Early stopping patience parameter p not numerically specified; assume p=10 epochs",
+      "basis": "Appendix Algorithm 2 defines early stopping mechanism but not the patience value",
+      "confidence": 0.4,
+      "alternatives": ["p=5", "p=20"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Number of training epochs/max iterations not specified; assume max 200 epochs with early stopping",
+      "basis": "standard practice for small tabular/panel Transformer models",
+      "confidence": 0.4,
+      "alternatives": ["100 epochs", "500 epochs"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Number of encoder/decoder blocks N* = 1 for all examined models (explicitly stated: 'the N is configured to 1')",
+      "basis": "explicit paper statement in Section 4",
+      "confidence": 0.95,
+      "alternatives": [],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "d_model = 420 (equal to number of stocks, aligning cross-attention/output dimension)",
+      "basis": "explicit statement: pre-train module projects dimensionality from 182 to 420, 'aligning with the output dimension for the cross-attention layer'",
+      "confidence": 0.8,
+      "alternatives": ["d_model = 182 (no projection)"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Framework/library: PyTorch nn.Transformer, Python 3.8 (explicitly stated)",
+      "basis": "explicit paper statement, Section 4.4",
+      "confidence": 0.95,
+      "alternatives": [],
+      "affects_section": "framework"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 4.2, MLP autoencoder pre-training module",
+      "description": "Exact layer count / hidden dims of the pre-training MLP autoencoder that projects 182->420 dims is not given numerically, only described qualitatively.",
+      "primary_assumption": "single hidden layer MLP autoencoder with hidden dim = 70% of max(input,output) dim, consistent with main-body FFN sizing convention",
+      "alternatives": ["2-layer MLP autoencoder", "linear-only projection (no hidden layer)"],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 4.1.5 / Appendix A, loss function",
+      "description": "L1 regularization coefficient lambda is mentioned ('with an L1 regularization term') but its numeric value is never given in the text or appendix.",
+      "primary_assumption": 1e-05,
+      "alternatives": [1e-04, 1e-03, 0],
+      "confidence": 0.35
+    },
+    {
+      "location": "Section 3, Data description",
+      "description": "Exact list/identity of the 420 large-cap U.S. stocks (tickers) used is not enumerated in the paper text provided.",
+      "primary_assumption": "S&P 500 large-cap constituents subset filtered to 420 stocks with sufficient factor coverage",
+      "alternatives": ["CRSP largest-420-by-market-cap universe"],
+      "confidence": 0.3
+    },
+    {
+      "location": "Table 2 model naming",
+      "description": "'P Trans H5' and 'SERT H5' (5-head variants) are absent from all tables; groups jump from H4 to H6. Not explained whether 5-head was excluded intentionally or omitted.",
+      "primary_assumption": "5-head variant intentionally excluded from the head-count sweep (no explanation given)",
+      "alternatives": ["typo/omission, 5-head variant exists but unreported"],
+      "confidence": 0.5
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.85,
+    "mathematical_spec": 0.88,
+    "tensor_semantics": 0.8,
+    "training_pipeline": 0.55,
+    "evaluation_protocol": 0.85,
+    "implementation_assumptions": 0.55,
+    "overall_sir_confidence": 0.75
+  }
+}

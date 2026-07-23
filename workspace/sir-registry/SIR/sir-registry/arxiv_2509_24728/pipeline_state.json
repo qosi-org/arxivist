@@ -1,0 +1,50 @@
+{
+  "paper_id": "arxiv_2509_24728",
+  "paper_title": "Beyond Softmax: A Natural Parameterization for Categorical Random Variables",
+  "current_stage": 6,
+  "stages_completed": [1, 2, 3, 4, 5, 6],
+  "sir_path": "sir-registry/arxiv_2509_24728/sir.json",
+  "repo_path": "paper-repos/arxiv_2509_24728/",
+  "artifacts": {
+    "sir":                    "sir-registry/arxiv_2509_24728/sir.json",
+    "architecture_plan":      "sir-registry/arxiv_2509_24728/architecture_plan.json",
+    "repo_initialized":       true,
+    "notebook_reproduce":     "paper-repos/arxiv_2509_24728/notebooks/reproduce_arxiv_2509_24728.ipynb",
+    "notebook_explore":       "paper-repos/arxiv_2509_24728/notebooks/explore_arxiv_2509_24728.ipynb",
+    "benchmark_comparison":   "paper-repos/arxiv_2509_24728/comparison/benchmark_comparison.md",
+    "hallucination_report":   "paper-repos/arxiv_2509_24728/comparison/hallucination_report.md",
+    "reproducibility_score":  "paper-repos/arxiv_2509_24728/comparison/reproducibility_score.json",
+    "verification_log":       "paper-repos/arxiv_2509_24728/comparison/verification_log.json"
+  },
+  "integrity": {
+    "stage4_code_checks":         20,
+    "stage5_notebook_checks":      9,
+    "stage6_verification_checks": 47,
+    "checks_passed":              38,
+    "checks_pending":              9,
+    "checks_failed":               0,
+    "python_files":               37,
+    "notebooks":                   2,
+    "total_files":                55,
+    "total_loc_python":         5728
+  },
+  "risk_resolutions": {
+    "RISK-01": "DESIGN_DECISION — K power-of-2 enforced; RL pads to next power",
+    "RISK-02": "RESOLVED — Gumbel at leaf log-probs confirmed canonical (conf 0.65->0.92)",
+    "RISK-03": "RESOLVED — VAE conv [32,64,64] k=4 s=2 patched; shapes verified live",
+    "RISK-04": "RESOLVED — Log-space forward throughout",
+    "RISK-05": "DESIGN_DECISION — GNN hidden=64, all dims in config",
+    "RISK-06": "MITIGATED — 160-trial Optuna TPE implemented in scripts/run_rl_tpe.py",
+    "RISK-07": "RESOLVED — NoFrameskip-v4 matches Huang et al. 2022 PPO reference",
+    "RISK-08": "RESOLVED — Vectorized broadcasting; M=32 fine on GPU"
+  },
+  "hallucinations": {
+    "total": 10, "resolved": 1, "open": 7, "design_decision": 2,
+    "critical": 0, "significant": 2, "moderate": 3, "minor": 5
+  },
+  "reproducibility_score": null,
+  "reproducibility_mode": "PRE_RUN",
+  "implementation_fidelity_score": 0.81,
+  "pipeline_complete": true,
+  "last_updated": "2026-07-16T00:03:00Z"
+}

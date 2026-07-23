@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  detect:
+    build: ..
+    volumes:
+      - ../data:/app/data
+      - ../results:/app/results
+    command: python detect.py --buyers data/pumpfun_buyers.jsonl --config configs/config.yaml
+
+  pipeline:
+    build: ..
+    volumes:
+      - ../data:/app/data
+      - ../results:/app/results
+    command: python run_all.py --buyers data/pumpfun_buyers.jsonl --launches data/pumpfun_launches.jsonl
+
+  notebook:
+    build: ..
+    volumes:
+      - ../notebooks:/app/notebooks
+      - ../data:/app/data
+      - ../results:/app/results
+    ports:
+      - "8888:8888"
+    command: jupyter notebook --ip=0.0.0.0 --no-browser --allow-root --notebook-dir=/app/notebooks

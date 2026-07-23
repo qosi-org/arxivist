@@ -1,0 +1,9 @@
+model: vgg16
+num_classes: 1000
+batch_size: 256
+lr: 0.01
+momentum: 0.9
+weight_decay: 5e-4
+epochs: 370
+dropout_rate: 0.5
+input_size: 224

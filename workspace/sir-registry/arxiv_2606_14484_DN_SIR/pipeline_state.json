@@ -1,0 +1,53 @@
+{
+  "paper_id": "arxiv_2606_14484",
+  "paper_title": "Quantum Horizon: An evaluation of quantum computing as a threat to Bitcoin and Ethereum",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "stage_timestamps": {
+    "1": "2026-07-19T04:08:30Z",
+    "2": "2026-07-19T04:08:30Z",
+    "3": "2026-07-21T10:12:16Z",
+    "4": "2026-07-21T10:12:16Z",
+    "5": "2026-07-21T10:12:16Z",
+    "6": "2026-07-21T15:20:37Z"
+  },
+  "stage_confidence": {
+    "1": 0.64,
+    "2": 1.0,
+    "3": 0.7,
+    "4": 0.75,
+    "5": 0.8,
+    "6": 0.83
+  },
+  "sir_path": "sir-registry/arxiv_2606_14484/sir.json",
+  "repo_path": "paper-repos/arxiv_2606_14484/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2606_14484/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2606_14484/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2606_14484/notebooks/reproduce_arxiv_2606_14484.ipynb",
+    "comparison_report": "paper-repos/arxiv_2606_14484/comparison/"
+  },
+  "confidence_flags": {
+    "architecture": 0.6,
+    "mathematical_spec": 0.6,
+    "implementation_assumptions": 0.48
+  },
+  "human_review_required": true,
+  "human_review_reasons": [
+    "overall_sir_confidence (0.64) is below the 0.65 comfortable-confidence threshold",
+    "several core sub-models (Monte-Carlo sampling procedure, mempool-race timing model, exposure-model reconciliation methods) are described narratively in the paper without explicit reproducible formulas -- see ambiguities"
+  ],
+  "loop_count": 0,
+  "retry_history": [],
+  "created_at": "2026-07-19T04:08:30Z",
+  "last_updated": "2026-07-21T15:20:37Z",
+  "pipeline_complete": true
+}

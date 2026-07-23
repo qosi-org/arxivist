@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  ews_kalman:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../results:/workspace/results
+      - ../data:/workspace/data
+    command: ["python", "run_all.py", "--config", "configs/config.yaml"]

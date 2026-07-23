@@ -1,0 +1,17 @@
+{
+  "index_version": 1,
+  "total_papers": 1,
+  "papers": [
+    {
+      "paper_id": "arxiv_2507_06345",
+      "title": "Reinforcement Learning for Trade Execution with Market and Limit Orders",
+      "domain": "RL",
+      "sir_version": 1,
+      "sir_confidence": 0.83,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": false,
+      "last_updated": "2026-07-08T00:00:00Z"
+    }
+  ]
+}

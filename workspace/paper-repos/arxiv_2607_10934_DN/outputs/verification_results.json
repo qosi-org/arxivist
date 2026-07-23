@@ -1,0 +1,30 @@
+{
+  "kyle1985": {
+    "case": "kyle1985",
+    "terminal_covariance_identity_residual": 2.0000000000575113e-06,
+    "terminal_price_error": 0.020993625523455295,
+    "min_eig_M_along_path": 1.0,
+    "inconspicuous": true
+  },
+  "back_pedersen1998": {
+    "case": "back_pedersen1998",
+    "terminal_covariance_identity_residual": 1.7777807077568042e-06,
+    "terminal_price_error": 0.01970344251670131,
+    "min_eig_M_along_path": 1.0606601717798212
+  },
+  "cdf2016": {
+    "case": "collin_dufresne_fos2016",
+    "terminal_covariance_identity_mc_mean": 0.9999999191670597,
+    "terminal_covariance_identity_target": 1.0,
+    "terminal_covariance_identity_mc_abs_error": 8.083294034122446e-08,
+    "n_mc_paths": 50
+  },
+  "common_eigenbasis": {
+    "case": "common_eigenbasis_bcel2020",
+    "n_assets": 3,
+    "eigen_vs_direct_abs_error_mean": 1.0639637319324417e-16,
+    "eigen_vs_direct_abs_error_max": 3.3306690738754696e-16,
+    "eigen_vs_direct_rel_error_mean": 6.425020690745373e-16,
+    "eigen_vs_direct_rel_error_max": 1.910945807426764e-15
+  }
+}

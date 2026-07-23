@@ -1,0 +1,22 @@
+{
+  "paper_id": "arxiv_2507_06345",
+  "paper_title": "Reinforcement Learning for Trade Execution with Market and Limit Orders",
+  "current_stage": 5,
+  "stages_completed": [1, 2, 3, 4, 5],
+  "sir_path": "sir-registry/arxiv_2507_06345/sir.json",
+  "repo_path": "paper-repos/arxiv_2507_06345/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2507_06345/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2507_06345/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2507_06345/notebooks/reproduce.ipynb",
+    "comparison_report": null
+  },
+  "confidence_flags": {
+    "implementation_assumptions": 0.68
+  },
+  "human_review_required": false,
+  "loop_count": 0,
+  "created_at": "2026-07-08T00:00:00Z",
+  "last_updated": "2026-07-08T00:00:00Z"
+}

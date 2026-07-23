@@ -1,0 +1,380 @@
+{
+  "paper_id": "arxiv_2607_04280",
+  "plan_version": 1,
+  "created_at": "2026-07-10T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "This paper describes a discrete-event, agent-based limit-order-book simulation, not a gradient-trained neural network — there is no 'training' in the deep-learning sense. We nonetheless select PyTorch as the numerical backend (rather than pure NumPy) purely for its vectorized tensor ops, which let the LOB depth arrays and per-stock batches of agent state be updated on CPU or GPU with the same code path, and for its RNG/seeding utilities that are reused across the ArXivist repo template. No autograd, layers, or optimizers are used. Plain YAML (no Hydra/OmegaConf) is sufficient since the config is a flat set of simulation parameters."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/sqrt_law_abm/__init__.py",
+      "description": "Package init, version string.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/sqrt_law_abm/models/lob.py",
+      "description": "Core limit-order-book engine: price-time-priority book, order matching, tick grid.",
+      "sir_modules_mapped": ["LimitOrderBook"],
+      "classes": [
+        {
+          "name": "LimitOrderBook",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "submit_limit_order", "signature": "(self, side: str, price: float, size: float, agent_id: int, t: int) -> int", "returns": "order_id"},
+            {"name": "submit_market_order", "signature": "(self, side: str, size: float, agent_id: int, t: int) -> list[Trade]", "returns": "list of executed trades"},
+            {"name": "cancel_order", "signature": "(self, order_id: int) -> bool", "returns": "success flag"},
+            {"name": "best_bid_ask", "signature": "(self) -> tuple[float, float]", "returns": "(best_bid, best_ask)"},
+            {"name": "mid_price", "signature": "(self) -> float", "returns": "mid price"},
+            {"name": "depth_profile", "signature": "(self, side: str, n_levels: int) -> np.ndarray", "returns": "cumulative depth V(q) array"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/sqrt_law_abm/models/agents.py",
+      "description": "The four heterogeneous agent types (institutional, HFT/market-maker, retail, news) plus optional momentum agent for the ablation study.",
+      "sir_modules_mapped": ["InstitutionalAgent", "HFTMarketMakerAgent", "RetailAgent", "NewsAgent"],
+      "classes": [
+        {
+          "name": "InstitutionalAgent",
+          "base_class": "BaseAgent",
+          "public_methods": [
+            {"name": "generate_metaorder", "signature": "(self, rng: np.random.Generator) -> Metaorder", "returns": "a Metaorder with total size Q"},
+            {"name": "split_into_children", "signature": "(self, metaorder: Metaorder, rule: str, rng: np.random.Generator) -> list[ChildOrder]", "returns": "list of child orders (Dirichlet / uniform / front-loaded)"},
+            {"name": "act", "signature": "(self, lob: LimitOrderBook, t: int, rng: np.random.Generator) -> None", "returns": "None (submits due child orders to the book)"}
+          ]
+        },
+        {
+          "name": "HFTMarketMakerAgent",
+          "base_class": "BaseAgent",
+          "public_methods": [
+            {"name": "quote", "signature": "(self, lob: LimitOrderBook, t: int, rng: np.random.Generator) -> None", "returns": "None (posts two-sided quotes at up to 50 levels)"},
+            {"name": "on_fill", "signature": "(self, lob: LimitOrderBook, filled_order, rng: np.random.Generator) -> None", "returns": "None (replenishes with probability p=0.9)"}
+          ]
+        },
+        {
+          "name": "RetailAgent",
+          "base_class": "BaseAgent",
+          "public_methods": [
+            {"name": "act", "signature": "(self, lob: LimitOrderBook, t: int, rng: np.random.Generator) -> None", "returns": "None (submits a small random-direction market order)"}
+          ]
+        },
+        {
+          "name": "NewsAgent",
+          "base_class": "BaseAgent",
+          "public_methods": [
+            {"name": "act", "signature": "(self, lob: LimitOrderBook, t: int, rng: np.random.Generator) -> None", "returns": "None (occasionally submits a large market order)"}
+          ]
+        },
+        {
+          "name": "MomentumAgent",
+          "base_class": "BaseAgent",
+          "public_methods": [
+            {"name": "act", "signature": "(self, lob: LimitOrderBook, price_history: list[float], t: int, rng: np.random.Generator) -> None", "returns": "None (buys/sells with recent-return sign; ablation-scenario only)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/sqrt_law_abm/models/market.py",
+      "description": "Wires agents + LOB together into one full-stock simulation loop (the 'model' in the ABM sense).",
+      "sir_modules_mapped": ["LimitOrderBook", "InstitutionalAgent", "HFTMarketMakerAgent", "RetailAgent", "NewsAgent"],
+      "classes": [
+        {
+          "name": "StockMarketSimulation",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "run", "signature": "(self, n_steps: int, warmup_steps: int, rng: np.random.Generator) -> SimulationResult", "returns": "trade tape, price series, per-day volume/range"},
+            {"name": "step", "signature": "(self, t: int, rng: np.random.Generator) -> None", "returns": "None (advances one discrete event)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/sqrt_law_abm/data/dataset.py",
+      "description": "Stock-parameter sampler: draws the per-stock random configuration (initial price, N_retail, N_HFT, Pareto xi) used to generate the 2000-stock cross-sectional dataset.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "StockParameterSampler",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "sample", "signature": "(self, n_stocks: int, seed: int) -> list[StockConfig]", "returns": "list of per-stock parameter dicts"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/sqrt_law_abm/data/transforms.py",
+      "description": "Metaorder reconstruction and per-day normalization (Eq. 2).",
+      "sir_modules_mapped": ["MetaorderReconstructor"],
+      "classes": [
+        {
+          "name": "MetaorderReconstructor",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "reconstruct", "signature": "(self, trade_tape: list[Trade], delta_t_ticks: int = 10) -> list[Metaorder]", "returns": "list of reconstructed metaorders"},
+            {"name": "normalize", "signature": "(self, metaorders: list[Metaorder], daily_volume: dict, daily_range: dict) -> np.ndarray", "returns": "array of (Q_norm, I_norm) pairs"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/sqrt_law_abm/training/trainer.py",
+      "description": "'Trainer' in the ArXivist template maps here to the batch simulation runner: iterates over N stocks (optionally parallel), running each StockMarketSimulation and collecting results. No gradient descent occurs.",
+      "sir_modules_mapped": ["CounterfactualAblationHarness"],
+      "classes": [
+        {
+          "name": "BatchSimulationRunner",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "run_all_stocks", "signature": "(self, stock_configs: list[StockConfig], scenario: str, n_jobs: int = -1) -> list[SimulationResult]", "returns": "one SimulationResult per stock"},
+            {"name": "run_counterfactual_suite", "signature": "(self, stock_configs: list[StockConfig], scenarios: list[str]) -> dict[str, list[SimulationResult]]", "returns": "results keyed by scenario name"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/sqrt_law_abm/training/losses.py",
+      "description": "Not applicable to a gradient-trained model. Repurposed to hold the impact-curve fitting objective (Eq. 3, relative least squares) since that is the paper's only 'loss'.",
+      "sir_modules_mapped": ["ImpactCurveFitter"],
+      "classes": [
+        {
+          "name": "RelativeLeastSquaresFit",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "fit", "signature": "(self, x: np.ndarray, y: np.ndarray) -> tuple[float, float]", "returns": "(c, delta)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/sqrt_law_abm/evaluation/metrics.py",
+      "description": "Impact-curve fitting, Hill-estimator tail exponents (beta, alpha), LOB depth-profile exponent (gamma), and the three theory predictors.",
+      "sir_modules_mapped": ["ImpactCurveFitter", "TheoryPredictorGGPS", "TheoryPredictorFGLW", "TheoryPredictorLOBWalking"],
+      "classes": [
+        {
+          "name": "ImpactCurveFitter",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "log_bin_and_fit", "signature": "(self, q_norm: np.ndarray, i_norm: np.ndarray, n_bins: int = 20, min_pts: int = 30) -> dict", "returns": "{'c':.., 'delta':.., 'n_meta':..}"}
+          ]
+        },
+        {
+          "name": "TailExponentEstimator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "hill_estimator", "signature": "(self, values: np.ndarray, tail_fraction: float = 0.1) -> float", "returns": "estimated tail exponent"}
+          ]
+        },
+        {
+          "name": "TheoryPredictors",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "ggps_delta", "signature": "(self, beta: float) -> float", "returns": "beta - 1"},
+            {"name": "fglw_delta", "signature": "(self, alpha: float) -> float", "returns": "alpha - 1"},
+            {"name": "lob_walking_delta", "signature": "(self, gamma: float) -> float", "returns": "1 / (1 + gamma)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/sqrt_law_abm/utils/config.py",
+      "description": "YAML config loading, validation, and global seeding (Python/NumPy/PyTorch) for reproducibility.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "Config",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "load", "signature": "(cls, path: str) -> 'Config'", "returns": "validated Config instance"},
+            {"name": "set_global_seed", "signature": "(seed: int, deterministic: bool = False) -> None", "returns": "None"}
+          ]
+        }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "Single-stock simulation loop",
+      "input": {"name": "stock_config", "shape": "dict of scalars (P0, N_retail, N_HFT, xi, seed)", "dtype": "python object"},
+      "output": {"name": "SimulationResult", "shape": "trade_tape: list[Trade], daily_ohlcv: [n_days, 5]", "dtype": "float64 / structured"},
+      "steps": [
+        "Initialize LimitOrderBook at mid-price P0 with tick_size = 1bp * P0",
+        "Instantiate 20 InstitutionalAgent, N_HFT HFTMarketMakerAgent, N_retail RetailAgent, 3 NewsAgent",
+        "for t in range(warmup_steps + n_steps): pick one agent uniformly at random; agent.act(lob, t, rng)",
+        "Record every executed trade to trade_tape (post-warmup only)",
+        "Aggregate trade_tape into daily OHLCV (volume V_D, range sigma_D) for normalization"
+      ]
+    },
+    {
+      "name": "Impact-curve estimation (per stock)",
+      "input": {"name": "trade_tape", "shape": "list[Trade]", "dtype": "structured"},
+      "output": {"name": "fitted_delta_c", "shape": "scalar, scalar", "dtype": "float64"},
+      "steps": [
+        "MetaorderReconstructor.reconstruct(trade_tape, delta_t_ticks=10) -> list[Metaorder]",
+        "Drop metaorders with Q/V_D < 0.01%",
+        "MetaorderReconstructor.normalize(...) -> (Q_norm, I_norm) pairs (Eq. 2)",
+        "ImpactCurveFitter.log_bin_and_fit(Q_norm, I_norm, n_bins=20, min_pts=30) -> (c, delta) via Eq. 3",
+        "TailExponentEstimator.hill_estimator on metaorder sizes -> beta; on child-order counts -> alpha",
+        "Fit LOB depth profile V(q) ~ q^(1+gamma) -> gamma",
+        "TheoryPredictors.{ggps,fglw,lob_walking}_delta(...) -> predicted delta for comparison against measured delta"
+      ]
+    },
+    {
+      "name": "Counterfactual ablation suite",
+      "input": {"name": "stock_configs (20 stocks) + scenario list", "shape": "list[dict], list[str]", "dtype": "python object"},
+      "output": {"name": "per_scenario_delta_table", "shape": "[n_scenarios, n_stocks]", "dtype": "float64"},
+      "steps": [
+        "For each scenario in [Baseline, No splitting, No HFT, Price limits, Low liquidity, Momentum, Uniform split, Front-loaded]:",
+        "  Apply the scenario's single-component override to the base StockMarketSimulation config",
+        "  BatchSimulationRunner.run_all_stocks(stock_configs, scenario) -> 20 SimulationResults",
+        "  Fit delta per stock as above; aggregate mean +/- SE across the 20 stocks",
+        "Assemble Table 1 (delta, c, N_meta, delta_GGPS, delta_FGLW, delta_LOB, gamma per scenario)"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "n_institutional": "20  # explicit in paper (Sec 2.2)",
+      "n_hft_range": "[3, 10]  # per stock, explicit",
+      "n_retail_range": "[100, 400]  # per stock, explicit",
+      "n_news": "3  # explicit",
+      "pareto_xi_range": "[1.5, 3.5]  # explicit",
+      "child_count_range": "[5, 50]  # explicit (Fig. 8 caption / Sec 4.4)",
+      "poisson_gap_lambda_ticks": "3  # explicit",
+      "hft_quote_levels": "50  # explicit",
+      "hft_replenish_prob": "0.9  # explicit",
+      "hft_adaptive_spread_rule": "volatility_scaled  # ASSUMED: exact rule not specified in paper (SIR confidence 0.4)",
+      "news_trigger_rate": "0.001  # ASSUMED: low-frequency Poisson trigger, not specified (SIR confidence 0.35)",
+      "splitting_rule_default": "dirichlet  # explicit name; exact distribution shape ASSUMED (SIR confidence 0.55)",
+      "qmin_log_space": "[1, 2000]  # explicit"
+    },
+    "training": {
+      "n_steps": "1000000  # explicit (T = 1e6)",
+      "warmup_steps": "50000  # explicit (5e4)",
+      "n_stocks_full": "2000  # explicit",
+      "n_stocks_counterfactual": "20  # explicit",
+      "tick_size_bp": "1  # explicit",
+      "convergence_check": "compare delta on first vs second half of trajectory, tolerance 0.01  # explicit"
+    },
+    "data": {
+      "metaorder_delta_t_ticks": "10  # explicit",
+      "min_qnorm_threshold_pct": "0.01  # explicit",
+      "log_bins": "20  # explicit",
+      "min_points_per_bin": "30  # explicit"
+    },
+    "evaluation": {
+      "tse_benchmark_mean_delta": "0.489  # explicit, from Sato & Kanazawa 2025",
+      "scenarios": "[baseline, no_splitting, no_hft, price_limits, low_liquidity, momentum, uniform_split, front_loaded]"
+    },
+    "hardware": {
+      "device": "cpu  # default; GPU optional via torch, not required",
+      "num_workers": "-1  # use all cores for embarrassingly-parallel per-stock runs",
+      "precision": "float64  # simulation uses double precision for price/volume accumulation"
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "numpy", "version": "1.26.4", "reason": "core array math, RNG (Generator API) for the ABM"},
+      {"package": "torch", "version": "2.2.2", "reason": "optional vectorized/GPU array backend for batched stock simulation and global seeding utility, per ArXivist repo template"},
+      {"package": "pandas", "version": "2.2.1", "reason": "daily OHLCV aggregation, per-stock results tables"},
+      {"package": "scipy", "version": "1.12.0", "reason": "curve_fit for the relative-least-squares delta fit (Eq. 3), Hill estimator support"},
+      {"package": "matplotlib", "version": "3.8.3", "reason": "impact-curve and ablation bar-chart figures (Figures 3-7 style plots)"},
+      {"package": "pyyaml", "version": "6.0.1", "reason": "config.yaml loading"},
+      {"package": "joblib", "version": "1.3.2", "reason": "embarrassingly-parallel per-stock simulation runs (paper reports 40-core wall-clock time)"},
+      {"package": "tqdm", "version": "4.66.2", "reason": "progress bars over 2000-stock batch runs"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": "8.1.1"},
+      {"package": "black", "version": "24.3.0"},
+      {"package": "ruff", "version": "0.3.4"},
+      {"package": "jupyter", "version": "1.0.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Run the full batch simulation (baseline or a named counterfactual scenario) across N stocks and write raw trade tapes + fitted delta/c per stock.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--resume", "type": "str", "required": false, "default": null, "help": "Path to a partially-completed results checkpoint to resume from"},
+        {"flag": "--scenario", "type": "str", "required": false, "default": "baseline", "help": "One of the 8 scenarios in config_schema.evaluation.scenarios"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "Global random seed override"},
+        {"flag": "--debug", "type": "flag", "required": false, "default": false, "help": "Reduce n_stocks to 4 and n_steps to 5000 for a fast local smoke test"},
+        {"flag": "--dry-run", "type": "flag", "required": false, "default": false, "help": "Build all components and validate config without running the simulation"}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Load saved per-stock results (from train.py), fit impact curves, compute theory predictions, and reproduce Table 1 / Figures 3-7.",
+      "cli_args": [
+        {"flag": "--results-dir", "type": "str", "required": true, "default": null, "help": "Directory containing train.py outputs"},
+        {"flag": "--scenario", "type": "str", "required": false, "default": "baseline", "help": "Which scenario's results to evaluate"},
+        {"flag": "--out", "type": "str", "required": false, "default": "results/", "help": "Where to write summary tables and figures"}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Run a single-stock simulation (one seed, one scenario) end-to-end and print its fitted delta/c — the fastest way to sanity-check a config change.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--scenario", "type": "str", "required": false, "default": "baseline", "help": "Scenario name"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 0, "help": "Seed for this single stock"}
+      ]
+    },
+    {
+      "filename": "run_counterfactual_suite.py",
+      "purpose": "Paper-specific script: runs all 8 scenarios across the 20 counterfactual stocks and reproduces Table 1 and Figure 7 directly.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--out", "type": "str", "required": false, "default": "results/counterfactual/", "help": "Output directory for Table 1 and Figure 7"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime",
+    "system_deps": ["git", "wget"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "HFT adaptive-spread rule and news-agent trigger process are not quantitatively specified in the paper (SIR confidence 0.4 / 0.35). An incorrect guess here directly affects the fitted gamma and the no-HFT ablation delta (0.386), which is one of the paper's two headline numbers.",
+      "source": "SIR implementation_assumptions[1], [2]",
+      "mitigation": "Implement both as config-swappable strategies behind a small strategy interface (e.g. `spread_rule: 'volatility_scaled' | 'fixed_jitter'`) so a user can try alternatives without code changes; flagged clearly in README's Reproducibility Notes."
+    },
+    {
+      "severity": "Medium",
+      "description": "Exact parameter values for the 'Price limits', 'Momentum', and 'Low liquidity' ablation scenarios are named but not numerically specified.",
+      "source": "SIR ambiguities[2]",
+      "mitigation": "Expose each as explicit config fields with literature-standard defaults (e.g. 10% daily price band, 30-tick momentum lookback, HFT count halved for low liquidity) and comment them as ASSUMED in config.yaml."
+    },
+    {
+      "severity": "Medium",
+      "description": "'Dirichlet', 'Uniform', and 'Front-loaded' child-order splitting rules are named but not mathematically defined beyond their descriptive names.",
+      "source": "SIR ambiguities[3], implementation_assumptions[3]",
+      "mitigation": "Implement all three as swappable strategies in InstitutionalAgent.split_into_children with the most standard interpretation of each name, documented inline with the ambiguity noted."
+    },
+    {
+      "severity": "Low",
+      "description": "This is a stochastic simulation with no ground-truth loss to minimize; 'convergence' means the fitted delta stabilizes across trajectory halves, which is a much weaker guarantee than typical ML train/val convergence and can hide slow-moving bias.",
+      "source": "SIR training_pipeline.notes",
+      "mitigation": "Reproduce the paper's own convergence check (compare delta on first vs. second half of each 1e6-step trajectory) as an automated assertion in evaluate.py, not just a one-off manual check."
+    },
+    {
+      "severity": "Low",
+      "description": "The exact price-time-priority matching engine internals (cancellation policy beyond HFT replenishment, tie-breaking) are common practice but not stated, which could shift the fine details of the depth profile gamma.",
+      "source": "SIR implementation_assumptions[0]",
+      "mitigation": "Use a standard FIFO price-time-priority book (documented in lob.py docstring) and report gamma as an emergent, not hard-coded, quantity so any matching-engine sensitivity is visible in results rather than silently baked in."
+    }
+  ]
+}

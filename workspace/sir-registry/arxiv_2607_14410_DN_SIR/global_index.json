@@ -1,0 +1,17 @@
+{
+  "index_version": 1,
+  "total_papers": 1,
+  "papers": [
+    {
+      "paper_id": "arxiv_2607_14410",
+      "title": "LATTICE: Graph Self-Supervised Learning for Multimodal Spatial Omics Integration",
+      "domain": "Multimodal",
+      "sir_version": 1,
+      "sir_confidence": 0.77,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": true,
+      "last_updated": "2026-07-22T09:00:00Z"
+    }
+  ]
+}

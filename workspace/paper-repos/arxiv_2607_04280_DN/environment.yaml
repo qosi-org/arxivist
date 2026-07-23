@@ -1,0 +1,21 @@
+name: sqrt-law-abm
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy=1.26.4
+  - pandas=2.2.1
+  - scipy=1.12.0
+  - matplotlib=3.8.3
+  - pyyaml=6.0.1
+  - joblib=1.3.2
+  - tqdm=4.66.2
+  - pytorch=2.2.2
+  - pip
+  - pip:
+      - pytest==8.1.1
+      - black==24.3.0
+      - ruff==0.3.4
+      - jupyter==1.0.0

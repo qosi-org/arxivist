@@ -1,0 +1,587 @@
+{
+  "paper_id": "arxiv_2607_12990",
+  "sir_version": 1,
+  "provenance": {
+    "title": "A Noise-Aware Quantum Algorithm for Credit Valuation Adjustments on Real Quantum Hardware",
+    "authors": [
+      "Guillem Borràs Espert",
+      "Francisco Gómez Casanova",
+      "Luis de Pedro Sánchez",
+      "Senaida Hernández Santana",
+      "Pablo Serrano Molinero"
+    ],
+    "affiliations": [
+      "Universitat de València, València, Spain",
+      "BBVA Corporate & Investment Banking, Madrid, Spain",
+      "Universidad Autónoma de Madrid, Madrid, Spain",
+      "BBVA Quantum, Madrid, Spain"
+    ],
+    "arxiv_id": "2607.12990",
+    "doi": null,
+    "submission_date": "2026-07-14",
+    "abstract": "Credit Valuation Adjustment (CVA) requires repeated risk-neutral expectation estimation, making it a natural test bed for quantum amplitude estimation. We develop an end-to-end, noise-aware quantum workflow for CVA, covering market calibration, discretisation, oracle construction, hardware execution and error-budget analysis, introducing contrast-aware Bayesian iterative QAE (CABIQAE).",
+    "domain": "Other",
+    "key_claims": [
+      "Develops an end-to-end noise-aware quantum CVA workflow spanning market calibration, discretisation, oracle construction, hardware execution and error-budget analysis for a correlated two-asset netting set",
+      "Introduces contrast-aware Bayesian iterative quantum amplitude estimation (CABIQAE), which folds experimentally calibrated Grover-contrast decay into the Bayesian likelihood and Grover-depth scheduler",
+      "Shows CABIQAE matches BAE's hardware-replay accuracy while using shallower amplified circuits and far lower classical post-processing runtime (1.25s vs 45.72s median)",
+      "Formally decomposes total CVA pipeline error into finite-grid/truncation, quantum-encoding/training, and amplitude-estimation contributions, showing discretisation and encoding dominate (>65%) while AE residual is secondary (<4%)",
+      "Validates the full pipeline on real IBM Quantum hardware (ibm_basquecountry, Heron r2) via a hardware-replay methodology using Q-CTRL Performance Management error mitigation"
+    ],
+    "parsed_at": "2026-07-16T08:01:33Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "Six-qubit two-asset CVA quantum encoding circuit (m=2 time qubits, n=4 asset qubits, 3 ancillas) with CABIQAE amplitude-estimation post-processing loop",
+    "modules": [
+      {
+        "name": "G_P / G_theta (QCBM state-preparation unitary)",
+        "operation_type": "quantum_state_preparation (Quantum Circuit Born Machine)",
+        "input_shape": "|0>^{⊗(m+n)} (6 qubits: 2 time + 4 asset)",
+        "output_shape": "sum_{i,j} sqrt(P_i,j) |i>_T |j>_S (entangled joint time-market superposition)",
+        "parameters": {
+          "layers_L": 6,
+          "trainable_params": 51,
+          "single_qubit_gates": 51,
+          "two_qubit_gates_CNOT_equiv": 30,
+          "logical_depth": 33,
+          "gate_types": ["RX", "RZ", "RZZ (parametrised ZZ entangler)"],
+          "connectivity": "sparse heavy-hex-compatible entangler graph, max degree 3, zero SWAP embedding"
+        },
+        "paper_section": "3.2.3, Figure 3",
+        "confidence": 0.95,
+        "notes": "Trained via cross-entropy minimisation between Born distribution P_theta and target finite-grid joint probability tensor P_target; statevector-trained circuit selected over noisy-trained circuit (Figure 8)."
+      },
+      {
+        "name": "R_v (exposure controlled-rotation ansatz, CRCA)",
+        "operation_type": "controlled_rotation_ansatz (CRCA, 'snake' topology)",
+        "input_shape": "time-market register (6 qubits) + 1 exposure ancilla |0>_{a_v}",
+        "output_shape": "sqrt(1-F_phi(x))|0> + sqrt(F_phi(x))|1> on ancilla a_v, conditioned on full (i,j) register",
+        "parameters": {
+          "layers_L": 2,
+          "trainable_params": 40,
+          "single_qubit_gates": 98,
+          "two_qubit_gates_CNOT_equiv": 86,
+          "logical_depth": 184,
+          "topology": "alternating outward/inward snake layers over 7-qubit patch (6 register + 1 ancilla), max physical degree 3"
+        },
+        "paper_section": "3.2.3, Figure 5",
+        "confidence": 0.9,
+        "notes": "Most demanding controlled-rotation block because positive exposure V+_{i,j} is non-linear and non-separable across time and asset coordinates. Trained by MSE loss against target v~_{i,j} = V+_{i,j}/C_v."
+      },
+      {
+        "name": "R_p (discount-factor CRCA)",
+        "operation_type": "controlled_rotation_ansatz (CRCA, native-tree topology)",
+        "input_shape": "time register (2 qubits) + 1 discount ancilla |0>_{a_p}",
+        "output_shape": "sqrt(1-F_phi_p(i))|0> + sqrt(F_phi_p(i))|1>, conditioned only on time register i",
+        "parameters": {
+          "layers_L": 1,
+          "trainable_params": 6,
+          "single_qubit_gates": 6,
+          "two_qubit_gates_CNOT_equiv": 4,
+          "logical_depth": 10,
+          "topology": "native-tree (3-node path t0-ancilla-t1)"
+        },
+        "paper_section": "3.2.3, Figure 4",
+        "confidence": 0.95,
+        "notes": "Target function p~_i = D(0,t_i)/C_p; deterministic function of monitoring date only."
+      },
+      {
+        "name": "R_q (default-probability CRCA)",
+        "operation_type": "controlled_rotation_ansatz (CRCA, native-tree topology)",
+        "input_shape": "time register (2 qubits) + 1 default ancilla |0>_{a_q}",
+        "output_shape": "sqrt(1-F_phi_q(i))|0> + sqrt(F_phi_q(i))|1>, conditioned only on time register i",
+        "parameters": {
+          "layers_L": 1,
+          "trainable_params": 6,
+          "single_qubit_gates": 6,
+          "two_qubit_gates_CNOT_equiv": 4,
+          "logical_depth": 10,
+          "topology": "native-tree (3-node path t0-ancilla-t1)"
+        },
+        "paper_section": "3.2.3, Figure 4",
+        "confidence": 0.95,
+        "notes": "Target function q~_i = Delta q(t_i)/C_q; deterministic function of monitoring date only."
+      },
+      {
+        "name": "A_Theta (full CVA encoding unitary)",
+        "operation_type": "composite_quantum_circuit",
+        "input_shape": "|0>^{⊗(m+n+3)} (9 qubits total: 6 register + 3 ancillas)",
+        "output_shape": "|xi> = A|0>^{⊗9}, marked subspace amplitude a_CVA = <xi|Pi_111|xi>",
+        "parameters": {
+          "total_trainable_params": 103,
+          "single_qubit_gates": 161,
+          "two_qubit_gates_CNOT_equiv": 124,
+          "logical_depth": 213,
+          "ISA_two_qubit_gates_k0": 117,
+          "ISA_depth_k0": 322
+        },
+        "paper_section": "2.2.1, Eq. 33-37, Figure 1",
+        "confidence": 0.95,
+        "notes": "A = R_q(phi_q*) R_p(phi_p*) R_v(phi_v*) G_theta*. Composition order matters: state prep first, then exposure, discount, default rotations."
+      },
+      {
+        "name": "Pi_111 (marked-subspace projector / readout)",
+        "operation_type": "projective_measurement",
+        "input_shape": "3 ancilla qubits (a_v, a_p, a_q)",
+        "output_shape": "scalar success probability a_CVA in [0,1]",
+        "parameters": {},
+        "paper_section": "2.2.1, Eq. 35-36",
+        "confidence": 0.95,
+        "notes": "Pi_111 = I ⊗ |111><111|; marked subspace spanned by all |i>|j>|111>, not a single basis state of the full register."
+      },
+      {
+        "name": "Q (Grover iterate / amplitude amplification operator)",
+        "operation_type": "quantum_amplification_operator",
+        "input_shape": "state A|0> in 2D good/bad invariant subspace",
+        "output_shape": "Q^k A|0> = cos((2k+1)theta)|Psi0> + sin((2k+1)theta)|Psi1>",
+        "parameters": {
+          "definition": "Q = -A S0 A^dagger Sf",
+          "S0": "I - 2|0><0| (reflection about all-zero state)",
+          "Sf": "I - 2*Pi_good (reflection about marked/good subspace)"
+        },
+        "paper_section": "Appendix B, Eq. 71-72",
+        "confidence": 0.9,
+        "notes": "Standard Grover/amplitude-amplification construction (Brassard et al. 2002); K := 2k+1 counts oracle queries per amplified circuit."
+      },
+      {
+        "name": "CABIQAE classical estimator (Bayesian post-processing loop)",
+        "operation_type": "classical_adaptive_bayesian_estimator",
+        "input_shape": "measurement counts (successes/shots) from Q^{k_t}A circuits across adaptive stages t",
+        "output_shape": "point estimate a_hat and credible interval [a_l, a_u] for the marked amplitude a_CVA",
+        "parameters": {
+          "submodules": ["BayesianUpdate", "ComputeCRI", "FindNextK", "PreparePrior"],
+          "prior_family": "Beta distribution over observed success probability p_t (not over ideal sin^2(K*theta))",
+          "noise_model": "p_obs(theta,k) = b + c(k)(sin^2(K theta)-b), c(k)=c0*exp(-(2k+1)/tau_c)"
+        },
+        "paper_section": "2.2.2, Appendix A.3, Algorithm 1",
+        "confidence": 0.9,
+        "notes": "Extends Beta-BIQAE (Li et al. 2026) by replacing the ideal amplified-observation likelihood with a hardware-calibrated contrast-decay model, and by biasing the Grover-depth scheduler (FindNextK) toward posterior-Fisher-informative depths rather than maximal depth."
+      }
+    ],
+    "connections": [
+      {"from": "time+asset registers |0>", "to": "G_P / G_theta", "tensor_name": "computational basis state x=(i,j)"},
+      {"from": "G_P / G_theta", "to": "R_v", "tensor_name": "joint time-market superposition"},
+      {"from": "R_v", "to": "R_p", "tensor_name": "state with exposure ancilla entangled"},
+      {"from": "R_p", "to": "R_q", "tensor_name": "state with discount ancilla entangled"},
+      {"from": "R_q", "to": "Pi_111 (projector)", "tensor_name": "|xi> full 9-qubit state"},
+      {"from": "A_Theta", "to": "Q (Grover iterate)", "tensor_name": "A used to build Q = -A S0 A^dagger Sf"},
+      {"from": "Q (Grover iterate)", "to": "CABIQAE classical estimator", "tensor_name": "measurement counts from Q^k A|0>"},
+      {"from": "CABIQAE classical estimator", "to": "CVA_AE(Theta) monetary output", "tensor_name": "a_hat_AE rescaled by M(1-R_CVA)C_v C_p C_q"}
+    ],
+    "variants": [
+      {
+        "name": "Full six-qubit two-asset CVA instance (A_Theta)",
+        "differences": {"qubits": "m=2 time + n=4 asset (2 per underlying) + 3 ancillas = 9 total", "purpose": "primary end-to-end CVA experiment (Section 4.3-4.5)"}
+      },
+      {
+        "name": "Reduced three-qubit validation circuit (A_test)",
+        "differences": {"qubits": 3, "purpose": "isolated amplitude-estimation-algorithm validation (Section 3.2.2, 4.1); free final rotation angle phi generates multiple target amplitudes for benchmarking BAE/BIQAE/CABIQAE/DCS"}
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Discount factor",
+      "latex": "D(t,u) := \\exp[-r(u-t)], \\quad 0 \\le t \\le u \\le T",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["r (flat continuously compounded risk-free rate)"],
+      "undefined_symbols": [],
+      "paper_section": "2.1.1, Eq. 1",
+      "confidence": 0.95
+    },
+    {
+      "name": "Credit Valuation Adjustment (continuous definition)",
+      "latex": "CVA(t) = 1_{\\{\\tau>t\\}}(1-R_{CVA})\\, \\mathbb{E}^Q_t\\left[D(t,\\tau) V^+(\\tau) 1_{\\{t<\\tau\\le T\\}}\\right]",
+      "role": "objective",
+      "used_in": "inference",
+      "hyperparameters": ["R_CVA (recovery rate)"],
+      "undefined_symbols": [],
+      "paper_section": "2.1.3, Eq. 21",
+      "confidence": 0.95
+    },
+    {
+      "name": "Discretised CVA (finite time grid)",
+      "latex": "CVA(t) \\approx 1_{\\{\\tau>t\\}}(1-R_{CVA}) \\sum_{i=1}^{M} D(t,t_i)\\, EE(t,t_i)\\, \\Delta q(t_i)",
+      "role": "objective",
+      "used_in": "inference",
+      "hyperparameters": ["M (number of monitoring dates)"],
+      "undefined_symbols": [],
+      "paper_section": "2.1.3, Eq. 28",
+      "confidence": 0.95
+    },
+    {
+      "name": "Discretised CVA (finite time-market grid)",
+      "latex": "CVA_\\Delta = (1-R_{CVA}) \\sum_{i=1}^{M} D(0,t_i)\\, \\Delta q(t_i) \\sum_j Q_D(S_{t_i}\\in B_j)\\, V^+_{i,j}",
+      "role": "objective",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "2.2.1, Eq. 31",
+      "confidence": 0.95
+    },
+    {
+      "name": "Joint time-market probability tensor",
+      "latex": "P_{i,j} := \\frac{1}{M Z_i} \\int_{B_j} f_{S_{t_i}}(s)\\, ds, \\qquad \\sum_{i=1}^{M}\\sum_j P_{i,j} = 1",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["M (uniform time marginal 1/M)"],
+      "undefined_symbols": [],
+      "paper_section": "2.2.1, Eq. 32",
+      "confidence": 0.95
+    },
+    {
+      "name": "State-preparation unitary action",
+      "latex": "G_P|0\\rangle^{\\otimes(m+n)} = \\sum_{i=1}^{M}\\sum_j \\sqrt{P_{i,j}}\\,|i\\rangle_T|j_1\\rangle_{S_1}\\cdots|j_d\\rangle_{S_d}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "2.2.1, Eq. 33",
+      "confidence": 0.95
+    },
+    {
+      "name": "Marked-subspace amplitude (encoded CVA)",
+      "latex": "a_{CVA} := \\langle\\xi|\\Pi_{111}|\\xi\\rangle = \\sum_{i=1}^{M}\\sum_j P_{i,j}\\,\\tilde v_{i,j}\\,\\tilde p_i\\,\\tilde q_i",
+      "role": "objective",
+      "used_in": "inference",
+      "hyperparameters": ["C_v, C_p, C_q (rescaling constants)"],
+      "undefined_symbols": [],
+      "paper_section": "2.2.1, Eq. 36-37",
+      "confidence": 0.95
+    },
+    {
+      "name": "QCBM Born distribution",
+      "latex": "P_\\theta(x) := \\left|\\langle x|G_\\theta|0\\rangle^{\\otimes(m+n)}\\right|^2",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["theta (variational parameters)"],
+      "undefined_symbols": [],
+      "paper_section": "3.2.3",
+      "confidence": 0.95
+    },
+    {
+      "name": "QCBM regularised cross-entropy training loss",
+      "latex": "\\mathcal{L}_{QCBM}(\\theta) = -\\sum_{x\\in\\mathcal{X}} P_{target}(x)\\log\\!\\left(P_\\theta(x)+\\epsilon_{num}\\right)",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["epsilon_num (numerical floor)"],
+      "undefined_symbols": [],
+      "paper_section": "3.2.3",
+      "confidence": 0.95
+    },
+    {
+      "name": "KL divergence diagnostic (QCBM quality metric, not training loss)",
+      "latex": "KL_\\epsilon(P_{target}\\|P_\\theta) = \\sum_{x:P_{target}(x)>0} P_{target}(x)\\log\\!\\left(\\frac{P_{target}(x)}{P_\\theta(x)+\\epsilon_{num}}\\right)",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["epsilon_num"],
+      "undefined_symbols": [],
+      "paper_section": "3.2.3",
+      "confidence": 0.9
+    },
+    {
+      "name": "CRCA controlled-rotation MSE training loss",
+      "latex": "\\mathcal{L}_f(\\phi) = \\frac{1}{|\\mathcal{X}_f|}\\sum_{x\\in\\mathcal{X}_f} \\left(F_\\phi(x)-f_{target}(x)\\right)^2",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["phi (per-block variational parameters)"],
+      "undefined_symbols": [],
+      "paper_section": "3.2.3",
+      "confidence": 0.95
+    },
+    {
+      "name": "Ideal Grover-amplified success probability",
+      "latex": "q(\\vartheta,k) = \\sin^2(K\\vartheta), \\qquad K=2k+1,\\ \\vartheta=\\arcsin\\sqrt{a}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["k (Grover power)"],
+      "undefined_symbols": [],
+      "paper_section": "2.2.2, Eq. 38-39; Appendix B, Eq. 72",
+      "confidence": 0.95
+    },
+    {
+      "name": "CABIQAE noise-aware observation model (contrast-decay likelihood)",
+      "latex": "p_{obs}(\\vartheta,k) = b + c(k)\\left(q(\\vartheta,k)-b\\right), \\qquad c(k)=c_0\\exp\\!\\left(-\\frac{2k+1}{\\tau_c}\\right)",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["b (asymptotic baseline)", "c0 (initial contrast prefactor)", "tau_c (contrast-decay scale)"],
+      "undefined_symbols": [],
+      "paper_section": "2.2.2, Eq. 40",
+      "confidence": 0.95
+    },
+    {
+      "name": "Beta-conjugate Bayesian posterior update",
+      "latex": "p_t\\,|\\,Y_t \\sim \\mathrm{Beta}(\\alpha_{post,t},\\beta_{post,t}), \\quad \\alpha_{post,t}=\\alpha_{0,t}+Y_t,\\ \\beta_{post,t}=\\beta_{0,t}+N_t-Y_t",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["alpha_0,t, beta_0,t (prior params)"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.3, Eq. 59",
+      "confidence": 0.9
+    },
+    {
+      "name": "Posterior pullback to latent-angle credible interval",
+      "latex": "I_t^{new} = [\\vartheta_l,\\vartheta_u] = \\left[F_t^{-1}(\\alpha/2), F_t^{-1}(1-\\alpha/2)\\right], \\qquad [a_l,a_u]=[\\sin^2\\vartheta_l,\\sin^2\\vartheta_u]",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["alpha (failure probability)"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.3, Eq. 60-62",
+      "confidence": 0.9
+    },
+    {
+      "name": "Posterior-averaged Fisher-information scheduling score",
+      "latex": "S_t(k) = \\frac{1}{K}\\int_{I_t^{new}} I_k(\\vartheta)\\,\\pi_t(\\vartheta)\\,d\\vartheta, \\qquad I_k(\\vartheta)=\\frac{c_k^2K^2\\sin^2(2K\\vartheta)}{p_k(\\vartheta)(1-p_k(\\vartheta))}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["rho_min (minimum stage-growth ratio)"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.3, Eq. 64-66",
+      "confidence": 0.9
+    },
+    {
+      "name": "Ideal QAE additive error bound (Brassard et al. 2002)",
+      "latex": "|\\tilde a - a| \\le \\frac{2\\pi\\sqrt{a(1-a)}}{M} + \\frac{\\pi^2}{M^2}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["M (Fourier register order)"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix B, Eq. 73",
+      "confidence": 0.9
+    },
+    {
+      "name": "CDS bootstrap par-spread condition (default curve calibration)",
+      "latex": "s(0,T_{CDS})\\sum_{i=1}^n \\Delta_i D(0,t_i)P(0,t_i) = (1-R_{CDS})\\sum_{i=1}^n D(0,t_i)\\left(P(0,t_{i-1})-P(0,t_i)\\right)",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["R_CDS (CDS-market recovery rate)"],
+      "undefined_symbols": [],
+      "paper_section": "2.1.3, Eq. 26",
+      "confidence": 0.9
+    },
+    {
+      "name": "End-to-end pipeline error decomposition (triangle-inequality bound)",
+      "latex": "\\varepsilon_{tot} := \\frac{\\left|\\widehat{CVA}_{AE}(\\Theta)-\\widehat{CVA}^{cont}_{MC}\\right|}{\\widehat{CVA}^{cont}_{MC}} \\le \\varepsilon_{grid} + \\alpha_n\\,\\varepsilon_{enc} + \\beta_\\Theta\\,\\varepsilon_{AE}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["alpha_n, beta_Theta (scale factors)"],
+      "undefined_symbols": [],
+      "paper_section": "4.5, Eq. 51-52",
+      "confidence": 0.92
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "time register |i>_T",
+      "shape_notation": "[m] qubits, m=2 (M=2^m=4 monitoring dates)",
+      "dtype": "quantum computational basis (complex amplitude)",
+      "tensor_type": "input",
+      "module": "G_P / G_theta",
+      "confidence": 0.95
+    },
+    {
+      "name": "asset registers |j>_S = |j1>_S1 ... |jd>_Sd",
+      "shape_notation": "[n] qubits, n=4 total (n1=n2=2 per underlying, d=2 underlyings, N1=N2=4 price bins each)",
+      "dtype": "quantum computational basis (complex amplitude)",
+      "tensor_type": "input",
+      "module": "G_P / G_theta",
+      "confidence": 0.95
+    },
+    {
+      "name": "ancilla qubits (a_v, a_p, a_q)",
+      "shape_notation": "[3] qubits",
+      "dtype": "quantum computational basis (complex amplitude)",
+      "tensor_type": "intermediate",
+      "module": "R_v, R_p, R_q",
+      "confidence": 0.95
+    },
+    {
+      "name": "joint probability tensor P_{i,j}",
+      "shape_notation": "[M, N1, N2] = [4, 4, 4] (64 entries)",
+      "dtype": "float64 (classical probability values, pre-encoded)",
+      "tensor_type": "parameter",
+      "module": "G_P / G_theta (training target)",
+      "confidence": 0.9
+    },
+    {
+      "name": "positive exposure tensor V+_{i,j}",
+      "shape_notation": "[M, N1, N2] = [4, 4, 4] (64 entries)",
+      "dtype": "float64",
+      "tensor_type": "parameter",
+      "module": "R_v (training target)",
+      "confidence": 0.9
+    },
+    {
+      "name": "discount vector D(0,t_i)",
+      "shape_notation": "[M] = [4]",
+      "dtype": "float64",
+      "tensor_type": "parameter",
+      "module": "R_p (training target)",
+      "confidence": 0.95
+    },
+    {
+      "name": "default-probability increment vector Delta q(t_i)",
+      "shape_notation": "[M] = [4]",
+      "dtype": "float64",
+      "tensor_type": "parameter",
+      "module": "R_q (training target)",
+      "confidence": 0.95
+    },
+    {
+      "name": "full encoded state |xi>",
+      "shape_notation": "[2^(m+n+3)] = [2^9] = [512] complex amplitudes",
+      "dtype": "complex128 (statevector) or measurement counts (finite-shot)",
+      "tensor_type": "output",
+      "module": "A_Theta",
+      "confidence": 0.9
+    },
+    {
+      "name": "marked amplitude a_CVA / a_hat_AE",
+      "shape_notation": "scalar in [0,1]",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "Pi_111 / CABIQAE classical estimator",
+      "confidence": 0.95
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": null,
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.3
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.2
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "Layer-depth (L) sweep performed per block (QCBM L=2..16; CRCA depth comparisons) with statevector-vs-noisy-training comparison (Figure 8) used to select final L per block (Table 5): L=6 for G_theta, L=1 for R_p/R_q, L=2 for R_v",
+    "confidence": 0.55
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "LSEG Workspace market data (EURO STOXX 50 & SMI equity closes/dividends, implied-vol surfaces, EUR OIS curve, Iberdrola CDS par-spread curve)", "split": "calibration inputs (not train/val/test)", "size": null, "publicly_available": false},
+      {"name": "Synthetic two-asset CVA netting set (1 EURO STOXX 50 call + 1 SMI put, Table 3)", "split": "single evaluation instance", "size": null, "publicly_available": true}
+    ],
+    "metrics": [
+      "relative CVA / relative amplitude error (median across R=300 trajectories)",
+      "query cost N_q (number of oracle calls to A/Q)",
+      "classical post-processing wall-clock runtime",
+      "coverage probability (fraction of runs where true amplitude lies in returned credible interval)",
+      "maximum Grover amplification factor K reached",
+      "KL divergence (KL_epsilon) between target and QCBM-generated distribution",
+      "log-log query-scaling exponent beta (fit of log(error) vs log(N_q))",
+      "contrast-model calibration R^2 and tau_c"
+    ],
+    "reported_results": [
+      {"metric": "CVA value (continuous Monte Carlo benchmark)", "dataset": "two-asset CVA instance", "split": "N/A", "value": 1.091, "is_primary": true},
+      {"metric": "CVA value (finite-grid tabulated benchmark, n=4)", "dataset": "two-asset CVA instance", "split": "N/A", "value": 0.522, "is_primary": true},
+      {"metric": "CVA value (trained quantum circuit, statevector)", "dataset": "two-asset CVA instance", "split": "N/A", "value": 0.670, "is_primary": true},
+      {"metric": "relative finite-grid+truncation error", "dataset": "two-asset CVA instance", "split": "N/A", "value": 52.15, "is_primary": true},
+      {"metric": "relative encoding/training error", "dataset": "two-asset CVA instance", "split": "N/A", "value": 28.35, "is_primary": false},
+      {"metric": "CABIQAE median relative CVA error (noiseless)", "dataset": "six-qubit CVA circuit", "split": "N/A", "value": 0.000227, "is_primary": true},
+      {"metric": "CABIQAE median relative CVA error (hardware-replay)", "dataset": "six-qubit CVA circuit", "split": "N/A", "value": 0.0515, "is_primary": true},
+      {"metric": "BIQAE median relative CVA error (noiseless)", "dataset": "six-qubit CVA circuit", "split": "N/A", "value": 0.000242, "is_primary": false},
+      {"metric": "BIQAE median relative CVA error (hardware-replay)", "dataset": "six-qubit CVA circuit", "split": "N/A", "value": 0.892, "is_primary": false},
+      {"metric": "CABIQAE median classical runtime, seconds (hardware-replay, validation circuit)", "dataset": "reduced 3-qubit validation circuit", "split": "N/A", "value": 1.25, "is_primary": true},
+      {"metric": "BAE median classical runtime, seconds (hardware-replay, validation circuit)", "dataset": "reduced 3-qubit validation circuit", "split": "N/A", "value": 45.72, "is_primary": true},
+      {"metric": "contrast-decay scale tau_c (validation circuit)", "dataset": "reduced 3-qubit validation circuit", "split": "N/A", "value": 33.96, "is_primary": false},
+      {"metric": "contrast-decay scale tau_c (full CVA circuit)", "dataset": "six-qubit CVA circuit", "split": "N/A", "value": 2.2, "is_primary": false}
+    ],
+    "baselines": [
+      "BIQAE (Bayesian Iterative Quantum Amplitude Estimation, Li et al. 2026)",
+      "BAE (Bayesian Amplitude Estimation, Ramôa & Santos 2025)",
+      "DCS (Direct Circuit Sampling, unamplified k=0 baseline)"
+    ],
+    "compute": "IBM Quantum ibm_basquecountry (156-qubit Heron r2 superconducting processor, heavy-hex topology), accessed via Basque Quantum (BasQ); Q-CTRL Performance Management Qiskit Function used for hardware error suppression; statevector/noisy simulations via Qiskit Statevector and Aer simulators",
+    "special_conditions": [
+      "Hardware-replay methodology: hardware measures amplified circuit responses once per Grover power on real backend, then R=300 independent adaptive trajectories are statistically replayed from that empirical response rather than each running live on the QPU",
+      "Readout error mitigation applied via calibration circuits (r0, r1, affine correction)",
+      "Contrast-decay model tau_c fitted per circuit family via supervised (oracle-assisted) calibration using known ideal amplitude, not blind",
+      "BAE omitted from final six-qubit CVA comparison due to prohibitive classical runtime over hundreds of trajectories"
+    ],
+    "confidence": 0.88
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Classical optimizer used to train QCBM (G_theta) and CRCA (R_v, R_p, R_q) parameters is not explicitly named in the paper; a standard gradient-based or gradient-free variational optimizer (e.g. Adam, L-BFGS, or COBYLA/SPSA as commonly used for QCBM training per Liu et al. 2018) is assumed.",
+      "basis": "literature default / common practice for QCBM and variational quantum circuit training",
+      "confidence": 0.4,
+      "alternatives": ["Adam", "L-BFGS", "COBYLA", "SPSA", "Nesterov-accelerated gradient descent"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Exact learning-rate values and per-iteration schedule for each variational block are not given numerically in the main text; approximate iteration counts (e.g. ~1100 for QCBM, ~4000 for R_v) are read off training-curve figures (Figure 8, Figure 9) rather than stated directly.",
+      "basis": "inferred from figure axes",
+      "confidence": 0.5,
+      "alternatives": ["exact hyperparameters may be available in project code repository (Borràs, 2026) not reproduced in the paper text"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Random seeds for quantum statevector/finite-shot simulation and for CABIQAE/BIQAE/BAE trajectory sampling are not stated (only the classical Monte Carlo benchmark seed, 10^5, is given).",
+      "basis": "inferred absence of documentation",
+      "confidence": 0.5,
+      "alternatives": ["seeds may be fixed in the released code repository"],
+      "affects_section": "evaluation_protocol"
+    },
+    {
+      "assumption": "The internal transpilation, layout, routing and error-suppression steps performed by Q-CTRL's Performance Management Qiskit Function are proprietary/managed and not disclosed; they are treated as a black-box hardware-execution layer, and ISA depth/2Q-gate counts reported for Q-CTRL-managed circuits are only approximated via a separate hardware-aware proxy transpilation.",
+      "basis": "explicitly stated by the authors as an internal, non-observable process",
+      "confidence": 0.3,
+      "alternatives": ["assume proxy metrics in Table 16 exactly equal internally-managed circuit resources (less likely per the authors' own caveat)"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Software framework is Qiskit (IBM Quantum ecosystem), based on explicit citations to Qiskit Statevector/Aer simulators and IBM Quantum backend documentation.",
+      "basis": "explicit citations in the paper",
+      "confidence": 0.85,
+      "alternatives": ["a custom simulation layer built on top of Qiskit primitives"],
+      "affects_section": "architecture"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 3.2.2 and Table 10 (Appendix A.1)",
+      "description": "The ideal-regime validation trajectories cover 8 distinct target amplitudes (from varying phi), while the hardware-replay regime uses a single hardware-calibrated amplitude (a_true=0.36027). The precise correspondence between the listed phi values and which specific trajectories appear in which panel of Figure 6/13 is not made fully explicit in the main text.",
+      "primary_assumption": "Single amplitude a_true=0.36027 used throughout hardware-replay; all 8 listed amplitudes pooled together for the ideal-regime aggregate curves in Figure 6 (top) and Table 2",
+      "alternatives": ["each amplitude might be plotted/fit separately in supplementary material not shown"],
+      "confidence": 0.6
+    },
+    {
+      "location": "Appendix A.2 (Q-CTRL Performance Management) and Table 16",
+      "description": "Because Q-CTRL's managed workflow does not expose its final compiled circuit, the ISA depth/2Q-gate-count figures reported for the actual hardware-executed CVA circuits cannot be independently verified against Table 16, which is stated to be a proxy/projection rather than the exact executed circuit.",
+      "primary_assumption": "Table 16 metrics are representative structural proxies; true Q-CTRL-managed circuit resources may differ",
+      "alternatives": [],
+      "confidence": 0.5
+    },
+    {
+      "location": "Section 3.2.3 (layer-depth selection for QCBM/CRCA blocks) and Figure 8",
+      "description": "Final layer depths (L=6 for G_theta, L=1 for R_p/R_q, L=2 for R_v, Table 5) are justified by a qualitative expressivity/trainability/depth trade-off discussion rather than a fully specified quantitative selection rule or stopping criterion applicable beyond this instance.",
+      "primary_assumption": "Reported L values in Table 5 are the final fixed choices used for all downstream six-qubit CVA experiments",
+      "alternatives": ["other L values tested during the sweep in Figure 8/9 could plausibly have been chosen under a different selection criterion"],
+      "confidence": 0.75
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.85,
+    "mathematical_spec": 0.92,
+    "tensor_semantics": 0.75,
+    "training_pipeline": 0.5,
+    "evaluation_protocol": 0.88,
+    "implementation_assumptions": 0.55,
+    "overall_sir_confidence": 0.76
+  }
+}

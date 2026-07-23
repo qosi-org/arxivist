@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../:/workspace/rlte
+    command: ["python", "train.py", "--config", "configs/noise_20lots.yaml"]
+
+  notebook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../:/workspace/rlte
+    ports:
+      - "8888:8888"
+    command: >
+      bash -c "pip install --no-cache-dir jupyterlab &&
+               jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+               --notebook-dir=/workspace/rlte/notebooks"

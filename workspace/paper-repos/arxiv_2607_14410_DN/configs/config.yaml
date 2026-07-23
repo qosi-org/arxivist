@@ -1,0 +1,77 @@
+# LATTICE config
+# Values are taken from the SIR (arxiv_2607_14410/sir.json). Any value with
+# SIR confidence < 0.7 is marked `# ASSUMED: <basis>` below — see the paper's
+# Appendix H and the SIR's `implementation_assumptions` / `ambiguities` for
+# full detail.
+
+model:
+  hidden_dim: 128                # confidence 0.95 (Appendix H, encoder architecture)
+  num_modality_blocks: 5          # confidence 0.95 (Section 3.1, M=5)
+  graph_encoder:
+    num_layers: 3                 # confidence 0.95
+    num_heads: 4                   # confidence 0.95
+    dropout: 0.1                    # confidence 0.95
+    activation: relu                # confidence 0.95
+    normalization: layer_norm         # confidence 0.95
+  decoder:
+    hidden_width: 256               # confidence 0.9 (= 2 * hidden_dim, Appendix H)
+  projection_head:
+    output_dim: 64                   # confidence 0.8
+    hidden_width: 64                  # confidence 0.8
+    aligned_modality_pair: [0, 1]      # ASSUMED: Appendix H names only this one pair
+                                        # (Visium RNA, spatial ATAC); confidence 0.55.
+                                        # See SIR ambiguities[1]. Set to a list of
+                                        # [a, b] pairs to align more than one pair.
+
+training:
+  optimizer: adamw                  # confidence 0.85
+  learning_rate: 0.001                # confidence 0.85
+  weight_decay: 0.0001                 # confidence 0.85
+  beta1: 0.9                            # ASSUMED: PyTorch AdamW default, not stated in paper. confidence 0.6
+  beta2: 0.999                           # ASSUMED: PyTorch AdamW default, not stated in paper. confidence 0.6
+  lr_schedule: constant                   # ASSUMED: no schedule described in paper. confidence 0.3
+  num_epochs: 100                          # confidence 0.9 (early stopping enabled)
+  early_stopping_patience: 20               # confidence 0.9
+  gradient_clip_norm: 1.0                     # confidence 0.9
+  masking_ratio: 0.15                          # confidence 0.9
+  recon_loss: huber                             # ASSUMED resolution of Eq.6 (MSE) vs Appendix H (Huber)
+                                                  # inconsistency; Appendix H implementation detail wins.
+                                                  # confidence 0.6. Set to "mse" to use Eq.6's literal form.
+  recon_loss_delta: 1.0                           # confidence 0.9 (if recon_loss: huber)
+  alignment_temperature: 0.1                       # confidence 0.9
+  lambda_rec: 1.0                                   # confidence 0.95
+  lambda_align: 0.5                                  # confidence 0.95
+  lambda_spatial: 0.1                                 # confidence 0.95
+  seed: 42                                             # confidence 0.9 (single-sample runs; paper uses seed 7
+                                                         # + {7,11,19,23,29,31,37,41,43,47,53} for joint/stability runs)
+  mixed_precision: false                                # confidence 0.9 (explicitly disabled in paper)
+  device: cpu                                            # confidence 0.95 (paper trained CPU-only)
+
+data:
+  knn_k: 6                          # confidence 0.9
+  knn_symmetrization: union           # confidence 0.85
+  edge_weight_mode: uniform             # ASSUMED: Gaussian kernel sigma (Eq.3) never given a numeric
+                                          # value in the paper; default to unweighted kNN graph. confidence 0.5.
+                                          # Set to "gaussian" to enable Eq.3's kernel (sigma auto-set to the
+                                          # median pairwise spatial distance unless overridden below).
+  gaussian_sigma: null                    # only used if edge_weight_mode: gaussian
+  num_synthetic_samples: 11                # matches paper's retained cohort size (Table 1)
+  spots_per_sample: 4992                     # matches paper's per-slide spot count (Table 1)
+  gene_count_range: [129, 322]                 # matches paper's reported final intersected gene range
+  # NOTE: the real cohort (11 private melanoma samples, 54,912 total spots, 5 modality
+  # blocks) cannot be publicly released (SIR ambiguity: data availability, confidence 0.8;
+  # see data/README_data.md). This config drives a SYNTHETIC data generator with matching
+  # shapes so the pipeline is fully runnable; results will NOT numerically match Table 2/3.
+  val_fraction: 0.1                             # confidence 0.85
+
+evaluation:
+  metrics: [ari, nmi, spatial_contiguity, silhouette, mus]
+  leiden_resolution_sweep: [0.1, 0.3, 0.5, 0.8, 1.0, 1.2, 1.5, 2.0]
+  # ASSUMED: paper imports its Leiden target K from the companion SARSIM paper's
+  # (unpublished) clustering metadata; we instead sweep resolutions and pick K via
+  # silhouette score. confidence 0.5. See SIR ambiguities[4].
+
+hardware:
+  device: cpu
+  num_workers: 0
+  precision: float32

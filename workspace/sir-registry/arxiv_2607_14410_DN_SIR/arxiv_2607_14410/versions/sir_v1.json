@@ -1,0 +1,1047 @@
+{
+  "paper_id": "arxiv_2607_14410",
+  "sir_version": 1,
+  "provenance": {
+    "title": "LATTICE: Graph Self-Supervised Learning for Multimodal Spatial Omics Integration",
+    "authors": [
+      "Jagan Mohan Reddy Dwarampudi",
+      "Veena Kochat",
+      "Suresh Satpati",
+      "Hien Van Nguyen",
+      "Kunal Rai",
+      "Tania Banerjee"
+    ],
+    "affiliations": [
+      "University of Houston",
+      "MD Anderson Cancer Center"
+    ],
+    "arxiv_id": "2607.14410",
+    "doi": null,
+    "submission_date": "2026-07-19",
+    "abstract": "LATTICE is a graph-based self-supervised framework learning spot-level representations from harmonized multimodal spatial features: Visium RNA, scMultiome RNA, scMultiome ATAC, spatial ATAC, and spatial CUT&Tag. It builds a spatial neighborhood graph and trains a TransformerConv encoder via masked reconstruction, cross-modal alignment, and spatial smoothness objectives. On an 11-sample melanoma cohort (54,912 spots), adding scMultiome RNA substantially improved concordance with reference clus...",
+    "domain": "Multimodal",
+    "key_claims": [
+      "Introduces LATTICE, a graph self-supervised learning framework for multimodal spatial omics representation learning.",
+      "Proposes a combined objective of masked reconstruction, cross-modal alignment, and spatial regularization.",
+      "Provides an end-to-end implementation harmonizing five modality blocks at spot resolution with reproducible artifacts.",
+      "Quantifies modality-ladder (M1-M5) behavior across 11 cohort runs, showing gains and trade-offs as modalities are added."
+    ],
+    "parsed_at": "2026-07-21T09:58:13Z",
+    "arxivist_version": "0.1"
+  },
+  "architecture": {
+    "primary_variant": "M5 (full 5-modality input: Visium RNA + scMultiome RNA + scMultiome ATAC gene scores + spatial ATAC + spatial CUT&Tag)",
+    "modules": [
+      {
+        "name": "spatial_knn_graph_builder",
+        "operation_type": "graph_construction",
+        "input_shape": "S in R[N,2] (spatial coordinates)",
+        "output_shape": "G=(V,E), |V|=N, edges from k=6 nearest neighbors (union-symmetrized)",
+        "parameters": {
+          "k": 6,
+          "symmetrization": "union",
+          "edge_weight_mode": "optional Gaussian kernel (sigma unspecified) or unweighted"
+        },
+        "paper_section": "3.2, Appendix H (Graph construction)",
+        "confidence": 0.85,
+        "notes": "k=6 and union symmetrization explicit; whether Gaussian kernel weights (Eq.3) are actually enabled in reported runs is not confirmed (see ambiguities)."
+      },
+      {
+        "name": "modality_input_adapters",
+        "operation_type": "linear_projection",
+        "input_shape": "X^(b) in R[N, d_b] for b=1..5 (five modality blocks)",
+        "output_shape": "R[N, d_h], d_h=128 per modality",
+        "parameters": {
+          "hidden_dim": 128,
+          "count": 5,
+          "type": "modality-specific linear adapter"
+        },
+        "paper_section": "3.3, Appendix H (Encoder architecture)",
+        "confidence": 0.8,
+        "notes": "Existence and hidden dim explicit; exact layer form (single linear vs linear+activation) not fully specified."
+      },
+      {
+        "name": "modality_aware_fusion",
+        "operation_type": "weighted_mean_pooling",
+        "input_shape": "5 x R[N,128] modality-adapted representations",
+        "output_shape": "R[N,128] fused representation",
+        "parameters": {
+          "pooling": "mean, weighted by observed-modality-presence mask per spot"
+        },
+        "paper_section": "3.3, Appendix H (Encoder architecture)",
+        "confidence": 0.7,
+        "notes": "Described as 'modality-aware mean pooling weighted by observed modality presence per spot'; exact weighting formula not given (flagged as ambiguity/assumption)."
+      },
+      {
+        "name": "transformer_conv_encoder_stack",
+        "operation_type": "graph_attention_message_passing",
+        "input_shape": "Fused node features R[N,128] + graph G",
+        "output_shape": "Z in R[N,128] (node embeddings)",
+        "parameters": {
+          "num_layers": 3,
+          "num_heads": 4,
+          "hidden_dim_per_layer": 128,
+          "dropout": 0.1,
+          "activation": "ReLU",
+          "normalization": "LayerNorm",
+          "layer_type": "TransformerConv (PyTorch Geometric)"
+        },
+        "paper_section": "3.3, Appendix H (Encoder architecture)",
+        "confidence": 0.95,
+        "notes": "Fully explicit list of hyperparameters in Appendix H."
+      },
+      {
+        "name": "reconstruction_decoder",
+        "operation_type": "feedforward_decoder",
+        "input_shape": "Z in R[N,128]",
+        "output_shape": "X_hat in R[N,D] (D = sum of modality feature dims)",
+        "parameters": {
+          "hidden_layers": 1,
+          "hidden_width": 256,
+          "output_layer": "linear"
+        },
+        "paper_section": "3.3 Eq.5, Appendix H (Decoder architecture)",
+        "confidence": 0.9,
+        "notes": "One hidden layer of width 2d=256 then linear output to D; explicit."
+      },
+      {
+        "name": "cross_modal_projection_heads",
+        "operation_type": "mlp_projection",
+        "input_shape": "modality-specific latent branch z^(m) after graph refinement",
+        "output_shape": "h^(m) in R[N, d_c], d_c=64",
+        "parameters": {
+          "layers": 2,
+          "hidden_width": 64,
+          "output_dim": 64,
+          "used_modality_pair": "indices 0 and 1 (Visium RNA, spatial ATAC) in reported config"
+        },
+        "paper_section": "3.3 Eq.7, Appendix H (Cross-modal alignment)",
+        "confidence": 0.65,
+        "notes": "General formula (Eq.7-8) implies alignment could apply to arbitrary modality pairs, but Appendix H states only one pair (indices 0,1) is aligned in the reported runs \u2014 flagged as ambiguity."
+      }
+    ],
+    "connections": [
+      {
+        "from": "raw_modality_blocks_X",
+        "to": "modality_input_adapters",
+        "tensor_name": "X^(b)"
+      },
+      {
+        "from": "modality_input_adapters",
+        "to": "modality_aware_fusion",
+        "tensor_name": "adapted_modality_reps"
+      },
+      {
+        "from": "modality_aware_fusion",
+        "to": "transformer_conv_encoder_stack",
+        "tensor_name": "fused_node_features"
+      },
+      {
+        "from": "spatial_knn_graph_builder",
+        "to": "transformer_conv_encoder_stack",
+        "tensor_name": "graph_G"
+      },
+      {
+        "from": "transformer_conv_encoder_stack",
+        "to": "reconstruction_decoder",
+        "tensor_name": "Z"
+      },
+      {
+        "from": "transformer_conv_encoder_stack",
+        "to": "cross_modal_projection_heads",
+        "tensor_name": "Z (modality-specific branch)"
+      },
+      {
+        "from": "reconstruction_decoder",
+        "to": "masked_reconstruction_loss",
+        "tensor_name": "X_hat"
+      },
+      {
+        "from": "cross_modal_projection_heads",
+        "to": "cross_modal_alignment_loss",
+        "tensor_name": "h^(a), h^(b)"
+      },
+      {
+        "from": "transformer_conv_encoder_stack",
+        "to": "spatial_smoothness_loss",
+        "tensor_name": "Z"
+      }
+    ],
+    "variants": [
+      {
+        "name": "M1",
+        "differences": {
+          "modalities": [
+            "Visium RNA"
+          ],
+          "description": "Visium RNA only"
+        }
+      },
+      {
+        "name": "M2",
+        "differences": {
+          "modalities": [
+            "Visium RNA",
+            "scMultiome RNA (projected)"
+          ],
+          "description": "M1 plus projected scMultiome RNA"
+        }
+      },
+      {
+        "name": "M3",
+        "differences": {
+          "modalities": [
+            "Visium RNA",
+            "scMultiome RNA",
+            "scMultiome ATAC gene scores"
+          ],
+          "description": "M2 plus projected scMultiome ATAC gene scores"
+        }
+      },
+      {
+        "name": "M4",
+        "differences": {
+          "modalities": [
+            "Visium RNA",
+            "scMultiome RNA",
+            "scMultiome ATAC",
+            "spatial ATAC"
+          ],
+          "description": "M3 plus spatial ATAC"
+        }
+      },
+      {
+        "name": "M5",
+        "differences": {
+          "modalities": [
+            "Visium RNA",
+            "scMultiome RNA",
+            "scMultiome ATAC",
+            "spatial ATAC",
+            "spatial CUT&Tag"
+          ],
+          "description": "M4 plus spatial CUT&Tag (full input tensor)"
+        }
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "concatenated multimodal feature matrix",
+      "latex": "X = [X^{(1)}, X^{(2)}, \\ldots, X^{(B)}] \\in \\mathbb{R}^{N\\times D}, \\quad D=\\sum_{b=1}^{B} d_b",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [
+        "B=5 (modality blocks)"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "3.1 Eq.1",
+      "confidence": 0.95
+    },
+    {
+      "name": "spatial kNN neighborhood",
+      "latex": "\\mathcal{N}(i) = \\mathrm{kNN}(s_i)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [
+        "k=6"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "3.2 Eq.2",
+      "confidence": 0.9
+    },
+    {
+      "name": "Gaussian kernel edge weight (optional)",
+      "latex": "w_{ij} = \\exp\\left(-\\frac{\\lVert s_i-s_j\\rVert^2}{2\\sigma^2}\\right)",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": [
+        "sigma (unspecified)"
+      ],
+      "undefined_symbols": [
+        "sigma value not given numerically"
+      ],
+      "paper_section": "3.2 Eq.3",
+      "confidence": 0.55
+    },
+    {
+      "name": "masked input construction",
+      "latex": "\\tilde{X} = (1-\\Omega)\\odot X",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": [
+        "masking ratio rho=0.15"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "3.3 Eq.4, Appendix H",
+      "confidence": 0.9
+    },
+    {
+      "name": "decoder reconstruction",
+      "latex": "\\hat{X} = g_\\phi(Z)",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "3.3 Eq.5",
+      "confidence": 0.9
+    },
+    {
+      "name": "masked reconstruction loss",
+      "latex": "\\mathcal{L}_{rec} = \\frac{1}{|\\Omega|}\\sum_{i,j}\\Omega_{ij}(X_{ij}-\\hat{X}_{ij})^2",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": [
+        "masking ratio rho=0.15",
+        "Huber delta=1.0 (Appendix H implementation, conflicts with squared-error form shown here)"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "3.3 Eq.6; Appendix H states Huber loss with delta=1.0 is actually used",
+      "confidence": 0.6
+    },
+    {
+      "name": "modality projection",
+      "latex": "h_i^{(m)} = p_m(z_i^{(m)})",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": [
+        "projection output dim d_c=64",
+        "2-layer MLP hidden width 64"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "3.3 Eq.7, Appendix H",
+      "confidence": 0.75
+    },
+    {
+      "name": "cross-modal alignment loss (NCE-style)",
+      "latex": "\\mathcal{L}_{align} = -\\sum_{i=1}^{N} \\log \\frac{\\exp(\\mathrm{sim}(h_i^{(a)},h_i^{(b)})/\\tau)}{\\sum_{j=1}^{N}\\exp(\\mathrm{sim}(h_i^{(a)},h_j^{(b)})/\\tau)}",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": [
+        "temperature tau=0.1",
+        "modality pair (a,b) = (Visium RNA index 0, spatial ATAC index 1) in reported runs"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "3.3 Eq.8, Appendix H",
+      "confidence": 0.7
+    },
+    {
+      "name": "spatial smoothness loss",
+      "latex": "\\mathcal{L}_{spatial} = \\sum_{(i,j)\\in E} w_{ij}\\lVert z_i - z_j\\rVert_2^2",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": [
+        "edge weights w_ij from spatial kNN graph"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "3.3 Eq.9",
+      "confidence": 0.85
+    },
+    {
+      "name": "total training objective",
+      "latex": "\\mathcal{L} = \\lambda_1 \\mathcal{L}_{rec} + \\lambda_2 \\mathcal{L}_{align} + \\lambda_3 \\mathcal{L}_{spatial}",
+      "role": "objective",
+      "used_in": "training",
+      "hyperparameters": [
+        "lambda1=1.0",
+        "lambda2=0.5",
+        "lambda3=0.1"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "3.3 Eq.10, Appendix H",
+      "confidence": 0.95
+    },
+    {
+      "name": "graph Laplacian form of spatial loss",
+      "latex": "\\mathcal{L}_{spatial} = \\mathrm{Tr}(Z^\\top L Z), \\quad L=D-W",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Appendix I.2 Lemma I.1",
+      "confidence": 0.85
+    },
+    {
+      "name": "multimodal utility score (MUS)",
+      "latex": "\\mathrm{MUS}_v = \\frac{1}{4}\\left(\\mathrm{SpotCut}^{norm}_v + \\mathrm{Silhouette}^{norm}_v + \\mathrm{BioKNN}^{norm}_v + \\mathrm{BioJaccard}^{norm}_v\\right)",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [
+        "min-max normalization across all methods/ladder rows in the evaluation pool"
+      ],
+      "undefined_symbols": [],
+      "paper_section": "4.1 Eq.11, Appendix A.2",
+      "confidence": 0.85
+    },
+    {
+      "name": "marker gene enrichment score",
+      "latex": "\\Delta_{g,c} = \\bar{x}^{in}_g - \\bar{x}^{out}_g; \\; \\mathrm{Score}_c = \\frac{1}{|G_c|}\\sum_{g\\in G_c}\\Delta_{g,c}; \\; \\mathrm{MarkerScore} = \\frac{1}{C}\\sum_{c=1}^{C}\\mathrm{Score}_c",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.2",
+      "confidence": 0.85
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "X",
+      "shape_notation": "[N, D]",
+      "dtype": null,
+      "tensor_type": "input",
+      "module": "modality_input_adapters",
+      "confidence": 0.9
+    },
+    {
+      "name": "X^(b)",
+      "shape_notation": "[N, d_b] for b in 1..5",
+      "dtype": null,
+      "tensor_type": "input",
+      "module": "modality_input_adapters",
+      "confidence": 0.9
+    },
+    {
+      "name": "S",
+      "shape_notation": "[N, 2]",
+      "dtype": null,
+      "tensor_type": "input",
+      "module": "spatial_knn_graph_builder",
+      "confidence": 0.9
+    },
+    {
+      "name": "Omega",
+      "shape_notation": "[N, D]",
+      "dtype": "binary {0,1}",
+      "tensor_type": "intermediate",
+      "module": "masking",
+      "confidence": 0.85
+    },
+    {
+      "name": "X_tilde (masked input)",
+      "shape_notation": "[N, D]",
+      "dtype": null,
+      "tensor_type": "intermediate",
+      "module": "masking",
+      "confidence": 0.85
+    },
+    {
+      "name": "Z (node embeddings)",
+      "shape_notation": "[N, d], d=128",
+      "dtype": null,
+      "tensor_type": "output",
+      "module": "transformer_conv_encoder_stack",
+      "confidence": 0.95
+    },
+    {
+      "name": "X_hat (reconstruction)",
+      "shape_notation": "[N, D]",
+      "dtype": null,
+      "tensor_type": "output",
+      "module": "reconstruction_decoder",
+      "confidence": 0.9
+    },
+    {
+      "name": "h^(m) (modality projection)",
+      "shape_notation": "[N, d_c], d_c=64",
+      "dtype": null,
+      "tensor_type": "intermediate",
+      "module": "cross_modal_projection_heads",
+      "confidence": 0.8
+    },
+    {
+      "name": "W (adjacency / edge weights)",
+      "shape_notation": "[N, N] sparse, k=6 neighbors per node",
+      "dtype": null,
+      "tensor_type": "intermediate",
+      "module": "spatial_knn_graph_builder",
+      "confidence": 0.8
+    },
+    {
+      "name": "L (graph Laplacian)",
+      "shape_notation": "[N, N] sparse, L = D - W",
+      "dtype": null,
+      "tensor_type": "intermediate",
+      "module": "spatial_smoothness_loss",
+      "confidence": 0.8
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.001,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": 0.0001,
+      "confidence": 0.85
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.3
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": 100,
+    "mixed_precision": "disabled",
+    "gradient_clipping": 1.0,
+    "data_augmentation": [
+      "random modality-block masking at feature level, ratio rho=0.15 (used as a masked-reconstruction pretext, not classic augmentation)"
+    ],
+    "curriculum": null,
+    "confidence": 0.75
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {
+        "name": "Private 11-sample melanoma multimodal cohort (anonymized clinical collaborator)",
+        "split": "all 11 samples used for evaluation; 3 have paired pre/post-treatment",
+        "size": 54912,
+        "publicly_available": false
+      }
+    ],
+    "metrics": [
+      "ARI (adjusted Rand index)",
+      "NMI (normalized mutual information)",
+      "spatial contiguity",
+      "silhouette",
+      "MUS (multimodal utility score)"
+    ],
+    "reported_results": [
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort",
+        "split": "cohort mean+-std, N=11",
+        "value": 0.423,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (GraphST, M1)",
+        "split": "cohort",
+        "value": 0.536,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (GraphST, M1)",
+        "split": "cohort",
+        "value": 0.837,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (GraphST, M1)",
+        "split": "cohort",
+        "value": 0.055,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (GraphST, M1)",
+        "split": "cohort",
+        "value": 0.666,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (STAGATE, M1)",
+        "split": "cohort",
+        "value": 0.308,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (STAGATE, M1)",
+        "split": "cohort",
+        "value": 0.42,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (STAGATE, M1)",
+        "split": "cohort",
+        "value": 0.825,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (STAGATE, M1)",
+        "split": "cohort",
+        "value": 0.005,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (STAGATE, M1)",
+        "split": "cohort",
+        "value": 0.657,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (SpaGCN, M1+histology)",
+        "split": "cohort",
+        "value": 0.408,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (SpaGCN, M1+histology)",
+        "split": "cohort",
+        "value": 0.553,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (SpaGCN, M1+histology)",
+        "split": "cohort",
+        "value": 0.707,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (SpaGCN, M1+histology)",
+        "split": "cohort",
+        "value": 0.426,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (SpaGCN, M1+histology)",
+        "split": "cohort",
+        "value": 0.387,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (SIMO, M1)",
+        "split": "cohort",
+        "value": 0.358,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (SIMO, M1)",
+        "split": "cohort",
+        "value": 0.457,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (SIMO, M1)",
+        "split": "cohort",
+        "value": 0.697,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (SIMO, M1)",
+        "split": "cohort",
+        "value": 0.064,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (SIMO, M1)",
+        "split": "cohort",
+        "value": 0.139,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (MaxFuse, scRNA+spatial ATAC)",
+        "split": "cohort",
+        "value": 0.278,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (MaxFuse, scRNA+spatial ATAC)",
+        "split": "cohort",
+        "value": 0.442,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (MaxFuse, scRNA+spatial ATAC)",
+        "split": "cohort",
+        "value": 0.794,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (MaxFuse, scRNA+spatial ATAC)",
+        "split": "cohort",
+        "value": 0.199,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (MaxFuse, scRNA+spatial ATAC)",
+        "split": "cohort",
+        "value": 0.493,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (LATTICE, M1)",
+        "split": "cohort",
+        "value": 0.269,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (LATTICE, M1)",
+        "split": "cohort",
+        "value": 0.364,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (LATTICE, M1)",
+        "split": "cohort",
+        "value": 0.653,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (LATTICE, M1)",
+        "split": "cohort",
+        "value": 0.147,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (LATTICE, M1)",
+        "split": "cohort",
+        "value": 0.111,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (LATTICE, M2)",
+        "split": "cohort",
+        "value": 0.426,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (LATTICE, M2)",
+        "split": "cohort",
+        "value": 0.507,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (LATTICE, M2)",
+        "split": "cohort",
+        "value": 0.827,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (LATTICE, M2)",
+        "split": "cohort",
+        "value": 0.44,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (LATTICE, M2)",
+        "split": "cohort",
+        "value": 0.733,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (LATTICE, M3)",
+        "split": "cohort",
+        "value": 0.417,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (LATTICE, M3)",
+        "split": "cohort",
+        "value": 0.493,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (LATTICE, M3)",
+        "split": "cohort",
+        "value": 0.824,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (LATTICE, M3)",
+        "split": "cohort",
+        "value": 0.426,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (LATTICE, M3)",
+        "split": "cohort",
+        "value": 0.718,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (LATTICE, M4)",
+        "split": "cohort",
+        "value": 0.343,
+        "is_primary": false
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (LATTICE, M4)",
+        "split": "cohort",
+        "value": 0.462,
+        "is_primary": false
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (LATTICE, M4)",
+        "split": "cohort",
+        "value": 0.844,
+        "is_primary": false
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (LATTICE, M4)",
+        "split": "cohort",
+        "value": 0.453,
+        "is_primary": false
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (LATTICE, M4)",
+        "split": "cohort",
+        "value": 0.801,
+        "is_primary": false
+      },
+      {
+        "metric": "ARI",
+        "dataset": "melanoma cohort (LATTICE, M5)",
+        "split": "cohort",
+        "value": 0.329,
+        "is_primary": true
+      },
+      {
+        "metric": "NMI",
+        "dataset": "melanoma cohort (LATTICE, M5)",
+        "split": "cohort",
+        "value": 0.45,
+        "is_primary": true
+      },
+      {
+        "metric": "spatial_contiguity",
+        "dataset": "melanoma cohort (LATTICE, M5)",
+        "split": "cohort",
+        "value": 0.85,
+        "is_primary": true
+      },
+      {
+        "metric": "silhouette",
+        "dataset": "melanoma cohort (LATTICE, M5)",
+        "split": "cohort",
+        "value": 0.417,
+        "is_primary": true
+      },
+      {
+        "metric": "MUS",
+        "dataset": "melanoma cohort (LATTICE, M5)",
+        "split": "cohort",
+        "value": 0.803,
+        "is_primary": true
+      }
+    ],
+    "baselines": [
+      "GraphST",
+      "STAGATE",
+      "SpaGCN",
+      "SIMO",
+      "MaxFuse"
+    ],
+    "compute": "CPU-only (device=cpu); per-sample LATTICE training on 1 node with 16 CPU cores + 128GB RAM; ReCAST harmonization on 1 node with 8 cores + 64GB RAM; ~8 min wall clock per full per-sample run; early stopping spans 36-63 epochs (mean 45.2) across the retained cohort.",
+    "special_conditions": [
+      "Test-time modality withholding: model trained on full M5 evaluated with spatial ATAC or CUT&Tag withheld at inference (Table 3)",
+      "Ablations removing spatial regularization or masking (Table 3)",
+      "Paired pre/post-treatment joint PCA analysis for 3 patients (Figure 3)",
+      "Leave-one-patient-out (LOPO) analysis for treatment-shift generalization",
+      "Stability assessed across 11 analysis seeds: {7,11,19,23,29,31,37,41,43,47,53} for joint multisample runs; single-sample runs use seed 42",
+      "Downstream Leiden clustering resolution swept to match target K imported from companion SARSIM clustering metadata"
+    ],
+    "confidence": 0.9
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "AdamW beta1/beta2 use PyTorch defaults (0.9, 0.999) since not stated in the paper.",
+      "basis": "literature default / common practice",
+      "confidence": 0.6,
+      "alternatives": [
+        "beta1=0.9, beta2=0.98 (common in transformer literature)",
+        "beta1=0.95, beta2=0.999"
+      ],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "No explicit LR schedule is used; a constant learning rate of 1e-3 is applied throughout, relying on early stopping (patience=20) rather than decay.",
+      "basis": "inferred from results / absence of schedule description",
+      "confidence": 0.5,
+      "alternatives": [
+        "Cosine decay to a small final LR",
+        "Step decay at fixed epoch milestones"
+      ],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Training uses full-graph optimization per sample (no mini-batching / neighbor sampling), consistent with 'batch size: full graph' in Appendix H, so batch_size/effective_batch_size are not classical integers.",
+      "basis": "explicitly stated in paper",
+      "confidence": 0.9,
+      "alternatives": [
+        "Neighbor-sampled mini-batches (implemented in codebase per paper but not used in reported runs)"
+      ],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "The masked reconstruction loss actually optimized in the reported experiments is Huber loss (delta=1.0) as stated in Appendix H, not the squared-error form written in Eq. 6 of the main text.",
+      "basis": "inferred from results / paper internal inconsistency (Appendix H overrides main-text equation)",
+      "confidence": 0.6,
+      "alternatives": [
+        "Squared-error (MSE) masked reconstruction exactly as in Eq. 6"
+      ],
+      "affects_section": "mathematical_spec"
+    },
+    {
+      "assumption": "Cross-modal alignment (Eq. 8) is applied to only a single modality pair (Visium RNA, spatial ATAC; indices 0 and 1) in the reported M5 runs, not to all pairwise combinations of the 5 modality blocks.",
+      "basis": "explicitly stated in Appendix H, though Eq.7-8 are written generically for 'modality pairs'",
+      "confidence": 0.55,
+      "alternatives": [
+        "All C(5,2)=10 pairwise modality alignments summed",
+        "Alignment of each modality to a single shared anchor modality"
+      ],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Spatial loss edge weights w_ij are unweighted/binary (from the unweighted kNN adjacency) rather than the optional Gaussian kernel of Eq. 3, since sigma is never given a numeric value and Appendix H does not confirm the kernel was enabled.",
+      "basis": "inferred from absence of a stated sigma value",
+      "confidence": 0.5,
+      "alternatives": [
+        "Gaussian kernel weights with sigma tuned per-sample (undisclosed)",
+        "Gaussian kernel with a fixed default sigma (e.g., median pairwise distance)"
+      ],
+      "affects_section": "mathematical_spec"
+    },
+    {
+      "assumption": "Missing/absent modality signal at a given spot (e.g., spots without multiome cells mapped, per Table 1 variability) is handled via zero-imputation plus a presence indicator consumed by the modality-aware pooling weights.",
+      "basis": "common practice for modality-dropout robust fusion; not explicitly described",
+      "confidence": 0.5,
+      "alternatives": [
+        "Mean-imputation per modality block",
+        "Learned per-modality 'missing' embedding token"
+      ],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Because the private 11-sample melanoma cohort (54,912 spots) cannot be publicly released and has no public five-modality substitute at this resolution, a faithful code reproduction must run on a synthetic/simulated dataset matching the described shapes (N=4,992 spots/sample, 5 modality blocks, D=5G with G in [129,322]) rather than reproducing the exact reported numbers.",
+      "basis": "explicitly stated data-availability restriction in the paper (Section 4.1, Appendix G.1)",
+      "confidence": 0.85,
+      "alternatives": [
+        "Substitute a public Visium dataset for the RNA block and simulate the remaining 4 epigenomic/multiome blocks",
+        "Reproduce only the architecture/training mechanics on fully synthetic data without claiming to match Table 2/3 numbers"
+      ],
+      "affects_section": "evaluation_protocol"
+    },
+    {
+      "assumption": "Framework is PyTorch + PyTorch Geometric (TransformerConv), as explicitly stated; no JAX/TensorFlow equivalent is considered.",
+      "basis": "explicitly stated in paper",
+      "confidence": 0.95,
+      "alternatives": [],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Leiden clustering target K per sample is approximated via a standard resolution sweep (rather than the undisclosed SARSIM-derived K referenced in Appendix H), since SARSIM's clustering metadata is not published in this paper.",
+      "basis": "inferred from missing companion-paper artifact",
+      "confidence": 0.5,
+      "alternatives": [
+        "Fix a single representative K across all samples",
+        "Treat K as a free hyperparameter to sweep and report sensitivity"
+      ],
+      "affects_section": "evaluation_protocol"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 3.3 Eq.6 (main text) vs Appendix H 'Masked reconstruction'",
+      "description": "The main text defines the masked reconstruction loss as squared error, but Appendix H states the implementation actually uses Huber loss with delta=1.0. These are inconsistent within the paper itself.",
+      "primary_assumption": "Huber loss (delta=1.0), per Appendix H implementation details",
+      "alternatives": [
+        "Squared-error (MSE) per Eq. 6"
+      ],
+      "confidence": 0.6
+    },
+    {
+      "location": "Section 3.3 Eq.7-8 vs Appendix H 'Cross-modal alignment'",
+      "description": "Eq.7-8 are written generically for arbitrary modality pairs (a,b), but Appendix H specifies only one concrete pair (indices 0 and 1: Visium RNA and spatial ATAC) is aligned in the reported M5 configuration. It is unclear whether other modality pairs are aligned but unreported, or genuinely unused.",
+      "primary_assumption": "Only the (Visium RNA, spatial ATAC) pair is aligned; other pairs are not used in the reported runs",
+      "alternatives": [
+        "All pairwise combinations of the 5 modalities are aligned and summed",
+        "All modalities are aligned to a single shared anchor modality"
+      ],
+      "confidence": 0.55
+    },
+    {
+      "location": "Eq.3 (Gaussian kernel edge weight), Eq.9 (spatial loss), Appendix H (spatial regularization)",
+      "description": "Eq.3 introduces an optional Gaussian-kernel edge weight with an unspecified sigma, but it is never confirmed whether this kernel was actually enabled for the spatial smoothness loss in the reported experiments, versus a simple unweighted kNN adjacency.",
+      "primary_assumption": "Unweighted/binary edge weights (w_ij=1) from the unweighted kNN graph are used",
+      "alternatives": [
+        "Gaussian kernel weights with an undisclosed sigma value"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "location": "Section 3.1, Table 1, Section 4.1 (modality-block construction)",
+      "description": "Table 1 shows highly variable multiome cell counts and signal levels per sample, implying some spots may lack full coverage in one or more modality blocks, but the paper never specifies how such missing per-spot modality entries are represented in the concatenated feature matrix X.",
+      "primary_assumption": "Zero-imputation with an accompanying per-modality presence mask consumed by the fusion module",
+      "alternatives": [
+        "Per-modality mean imputation",
+        "Learned missing-modality embedding token"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "location": "Appendix H, 'Downstream analysis' (Leiden clustering target K)",
+      "description": "The paper states the target cluster count K for Leiden clustering is 'imported from SARSIM clustering metadata', but SARSIM is a separate, not-fully-public companion bioRxiv paper/pipeline (reference [4]); the actual K values per sample are not disclosed in this paper.",
+      "primary_assumption": "Approximate K per sample via an independent standard Leiden resolution sweep",
+      "alternatives": [
+        "Use a single fixed K across the whole cohort",
+        "Treat K as unknown and report results across a range of K"
+      ],
+      "confidence": 0.5
+    },
+    {
+      "location": "Section 4.1 / Appendix G.1 (data availability)",
+      "description": "The 54,912-spot / 11-sample melanoma cohort with five aligned modality blocks cannot be publicly released, and no public dataset exists at this exact resolution and modality combination, which blocks numeric-fidelity reproduction (only architecture/training-mechanics reproduction is possible on substitute/synthetic data).",
+      "primary_assumption": "Downstream code reproduction targets architecture and training-loop fidelity on synthetic data, not numeric replication of Table 2/3",
+      "alternatives": [
+        "Attempt partial reproduction using a public single-modality Visium dataset as a stand-in for the RNA block only"
+      ],
+      "confidence": 0.8
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.78,
+    "mathematical_spec": 0.8,
+    "tensor_semantics": 0.82,
+    "training_pipeline": 0.72,
+    "evaluation_protocol": 0.9,
+    "implementation_assumptions": 0.58,
+    "overall_sir_confidence": 0.77
+  }
+}

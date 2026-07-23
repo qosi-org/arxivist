@@ -1,0 +1,397 @@
+{
+  "paper_id": "arxiv_2606_11859",
+  "plan_version": 1,
+  "created_at": "2026-07-14T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "This paper describes statistical/econometric scenario-generation methods (block resampling, VAR(1) estimation, Nelson-Siegel curve fitting) with no neural network components. The natural implementation stack is numpy/pandas/scipy/statsmodels, not a deep-learning framework. PyTorch is nonetheless declared as the nominal 'framework' field (required by schema enum) and is used narrowly and optionally: batching the 10^4 Monte Carlo trajectory simulations as vectorized tensor operations can benefit from PyTorch's batched linear algebra and optional GPU acceleration for the VAR(1) recursions across many simulated paths. All statistical estimation (OLS for VAR(1), least-squares Nelson-Siegel fitting, KDE, KL divergence) is implemented with numpy/scipy/statsmodels; PyTorch is not required to run any script and every module has a pure-numpy fallback path (config flag 'engine: numpy|torch')."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/arxivist_bootstrap/__init__.py",
+      "description": "Package init, version, and top-level exports of the three scenario generators.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/arxivist_bootstrap/data/loaders.py",
+      "description": "Loads and prepares the three historical series (Equity EUR, 1y Italian rate / BOT proxy, HICP ex-tobacco inflation) and the full Italian yield curve panel, at daily and monthly frequency.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "SeriesLoader",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "load_price_series", "signature": "load_price_series(path: str, freq: str) -> pandas.Series", "returns": "level series P_t" },
+            { "name": "load_rate_series", "signature": "load_rate_series(path: str, freq: str) -> pandas.Series", "returns": "level series y_t (rates/inflation)" },
+            { "name": "load_yield_curve", "signature": "load_yield_curve(path: str, maturities: list[str], freq: str) -> pandas.DataFrame", "returns": "DataFrame [T, M] of curve levels y_t(tau)" },
+            { "name": "align_panel", "signature": "align_panel(series: dict[str, pandas.Series]) -> pandas.DataFrame", "returns": "aligned multivariate panel [T, n]" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/data/transforms.py",
+      "description": "Return/difference transforms (Section 2) used to build the state vectors z_t and x_t.",
+      "sir_modules_mapped": ["StationaryBootstrap", "VARBootstrap"],
+      "classes": [
+        {
+          "name": "FactorTransforms",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "to_returns", "signature": "to_returns(levels: np.ndarray) -> np.ndarray", "returns": "r_t = (P_t - P_{t-1})/P_{t-1}" },
+            { "name": "to_differences", "signature": "to_differences(levels: np.ndarray) -> np.ndarray", "returns": "delta_y_t = y_t - y_{t-1}" },
+            { "name": "reconstruct_price_levels", "signature": "reconstruct_price_levels(returns: np.ndarray, p0: np.ndarray) -> np.ndarray", "returns": "P_hat_t = (1+r*_t) * P_hat_{t-1}" },
+            { "name": "reconstruct_rate_levels", "signature": "reconstruct_rate_levels(diffs: np.ndarray, y0: np.ndarray) -> np.ndarray", "returns": "y_hat_t = y_hat_{t-1} + delta_y*_t" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/models/stationary_bootstrap.py",
+      "description": "Nonparametric geometric block (stationary) bootstrap, Section 2.",
+      "sir_modules_mapped": ["StationaryBootstrap"],
+      "classes": [
+        {
+          "name": "StationaryBootstrap",
+          "base_class": "BaseScenarioGenerator",
+          "public_methods": [
+            { "name": "fit", "signature": "fit(self, z_hist: np.ndarray) -> None", "returns": "stores historical z_t sample" },
+            { "name": "simulate", "signature": "simulate(self, n_paths: int, horizon: int, mean_block_length: float, seed: int | None = None) -> np.ndarray", "returns": "simulated z* paths, shape [n_paths, horizon, n]" },
+            { "name": "simulate_levels", "signature": "simulate_levels(self, n_paths: int, horizon: int, p0: np.ndarray, y0: np.ndarray, mean_block_length: float) -> dict", "returns": "dict with 'price_levels' and 'rate_levels' arrays" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/models/var_bootstrap.py",
+      "description": "Semiparametric VAR(1) + nonparametric residual resampling, Section 3.",
+      "sir_modules_mapped": ["VARBootstrap"],
+      "classes": [
+        {
+          "name": "VARBootstrap",
+          "base_class": "BaseScenarioGenerator",
+          "public_methods": [
+            { "name": "fit", "signature": "fit(self, x_hist: np.ndarray) -> None", "returns": "estimates a0, A1 via OLS and stores residuals eta_hat" },
+            { "name": "spectral_radius", "signature": "spectral_radius(self) -> float", "returns": "rho(A1)" },
+            { "name": "invariant_mean", "signature": "invariant_mean(self) -> np.ndarray", "returns": "mu = (I - A1)^-1 a0" },
+            { "name": "simulate", "signature": "simulate(self, n_paths: int, horizon: int, x0: np.ndarray, resample_block_length: int = 1, seed: int | None = None) -> np.ndarray", "returns": "simulated x_hat paths, shape [n_paths, horizon, n]" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/models/nelson_siegel.py",
+      "description": "Static and dynamic Nelson-Siegel factor extraction and curve reconstruction, Section 4.",
+      "sir_modules_mapped": ["NelsonSiegelFactorExtraction"],
+      "classes": [
+        {
+          "name": "NelsonSiegelModel",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "loadings", "signature": "loadings(self, tau: np.ndarray, lam: float) -> np.ndarray", "returns": "[M, 3] matrix ell(tau) = [1, L1(tau), L2(tau)]" },
+            { "name": "calibrate_lambda", "signature": "calibrate_lambda(self, curve_panel: np.ndarray, tau: np.ndarray, tau_max_years: float = 5.0) -> float", "returns": "lambda minimizing MSE across history" },
+            { "name": "fit_factors", "signature": "fit_factors(self, curve_panel: np.ndarray, tau: np.ndarray, lam: float) -> tuple[np.ndarray, np.ndarray]", "returns": "(beta_t [T,3], residuals epsilon_t(tau) [T,M]) via per-date least squares" },
+            { "name": "reconstruct_curve", "signature": "reconstruct_curve(self, beta: np.ndarray, tau: np.ndarray, lam: float) -> np.ndarray", "returns": "y_hat(tau) = ell(tau) @ beta" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/models/ns_var_bootstrap.py",
+      "description": "Nelson-Siegel VAR-Bootstrap: VAR(1) on latent factors + curve reconstruction, Section 5.",
+      "sir_modules_mapped": ["NelsonSiegelVARBootstrap"],
+      "classes": [
+        {
+          "name": "NelsonSiegelVARBootstrap",
+          "base_class": "VARBootstrap",
+          "public_methods": [
+            { "name": "fit", "signature": "fit(self, beta_hist: np.ndarray, extra_factors: np.ndarray | None = None) -> None", "returns": "fits VAR(1) on [beta_t] or [beta_t, r_t, y_t] joint state" },
+            { "name": "simulate_curves", "signature": "simulate_curves(self, n_paths: int, horizon: int, beta0: np.ndarray, tau: np.ndarray, lam: float, ns_model: 'NelsonSiegelModel') -> np.ndarray", "returns": "simulated curves y_hat_t(tau), shape [n_paths, horizon, M]" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/models/base.py",
+      "description": "Abstract base class shared by all three scenario generators, enabling config-driven swapping between methodologies.",
+      "sir_modules_mapped": ["StationaryBootstrap", "VARBootstrap", "NelsonSiegelVARBootstrap"],
+      "classes": [
+        {
+          "name": "BaseScenarioGenerator",
+          "base_class": "abc.ABC",
+          "public_methods": [
+            { "name": "fit", "signature": "fit(self, hist: np.ndarray) -> None", "returns": "abstract" },
+            { "name": "simulate", "signature": "simulate(self, n_paths: int, horizon: int, **kwargs) -> np.ndarray", "returns": "abstract" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/evaluation/metrics.py",
+      "description": "Section 6 comparison metrics: negative-increment stats, correlation, KL divergence.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ScenarioMetrics",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "pct_negative_increments", "signature": "pct_negative_increments(increments: np.ndarray) -> float", "returns": "percentage of increments < 0" },
+            { "name": "mean_negative_increment", "signature": "mean_negative_increment(increments: np.ndarray) -> float", "returns": "mean value conditional on increment < 0" },
+            { "name": "cross_correlation", "signature": "cross_correlation(panel: np.ndarray) -> np.ndarray", "returns": "correlation matrix across factors" },
+            { "name": "kl_divergence", "signature": "kl_divergence(historical: np.ndarray, simulated: np.ndarray, bandwidth: str = 'silverman') -> float", "returns": "KDE-based KL divergence D_KL(f_hist || f_sim)" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/evaluation/arbitrage.py",
+      "description": "Appendix B no-arbitrage / discount-factor monotonicity checks.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ArbitrageChecker",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "discount_factors", "signature": "discount_factors(curve: np.ndarray, tau: np.ndarray) -> np.ndarray", "returns": "B(0,tau) = exp(-tau * y(tau))" },
+            { "name": "share_non_negative_curves", "signature": "share_non_negative_curves(curves: np.ndarray) -> float", "returns": "share of simulated curves with all rates >= 0" },
+            { "name": "pct_monotonicity_violations", "signature": "pct_monotonicity_violations(curves: np.ndarray, tau: np.ndarray) -> float", "returns": "share of non-negative-rate curves that violate B non-increasing in tau" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_bootstrap/utils/config.py",
+      "description": "YAML config loading/validation, seeding, engine (numpy/torch) selection.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "Config",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "from_yaml", "signature": "from_yaml(path: str) -> 'Config'", "returns": "parsed config object" },
+            { "name": "set_seed", "signature": "set_seed(self, seed: int) -> None", "returns": "None" }
+          ]
+        }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "StationaryBootstrap.simulate",
+      "input": { "name": "z_hist", "shape": "[T, n]", "dtype": "float64" },
+      "output": { "name": "z_star", "shape": "[n_paths, horizon, n]", "dtype": "float64" },
+      "steps": [
+        "z_hist: [T, n] <- historical joint vector (returns r_t concatenated with rate differences delta_y_t)",
+        "for each of n_paths simulated trajectories:",
+        "  draw a geometric-block resampled index sequence of length `horizon` over rows of z_hist (Politis-Romano stationary bootstrap)",
+        "  z_star[path] = z_hist[index_sequence] -> [horizon, n]",
+        "split z_star into r_star [horizon, n_x] and delta_y_star [horizon, n_y]",
+        "reconstruct price levels: P_hat_t = (1 + r_star_t) elementwise* P_hat_{t-1}, cumulative over horizon -> [horizon, n_x]",
+        "reconstruct rate levels: y_hat_t = y_hat_{t-1} + delta_y_star_t, cumulative over horizon -> [horizon, n_y]",
+        "return stacked simulated levels: [n_paths, horizon, n_x + n_y]"
+      ]
+    },
+    {
+      "name": "VARBootstrap.fit_and_simulate",
+      "input": { "name": "x_hist", "shape": "[T, n]", "dtype": "float64" },
+      "output": { "name": "x_hat", "shape": "[n_paths, horizon, n]", "dtype": "float64" },
+      "steps": [
+        "x_hist: [T, n] <- state vector (price returns r_t concatenated with rate levels y_t)",
+        "estimate a0 [n], A1 [n, n] via OLS regression of x_t on [1, x_{t-1}] across T-1 observations",
+        "compute historical residuals eta_hat_t = x_t - a0 - A1 @ x_{t-1} -> [T-1, n]",
+        "check stationarity: rho(A1) = max(|eigvals(A1)|); assert rho(A1) < 1 for mean-reverting behavior",
+        "for each of n_paths simulated trajectories:",
+        "  x_hat_0 = x0 (user-supplied or last historical observation)",
+        "  for t in 1..horizon:",
+        "    eta_star_t = resample_with_replacement(eta_hat) -> [n]  (or block-resample if resample_block_length > 1)",
+        "    x_hat_t = a0 + A1 @ x_hat_{t-1} + eta_star_t -> [n]",
+        "reconstruct price levels from returns subvector; take rate levels subvector directly",
+        "return stacked simulated levels: [n_paths, horizon, n]"
+      ]
+    },
+    {
+      "name": "NelsonSiegel.fit_factors",
+      "input": { "name": "curve_panel", "shape": "[T, M]", "dtype": "float64" },
+      "output": { "name": "beta_t, epsilon_t", "shape": "[T, 3], [T, M]", "dtype": "float64" },
+      "steps": [
+        "curve_panel: [T, M] <- observed rates y_t(tau) at M maturities",
+        "calibrate lambda by grid/nonlinear search minimizing MSE over history restricted to tau <= 5y",
+        "build loading matrix ell(tau) = [1, L1(tau; lambda), L2(tau; lambda)] -> [M, 3]",
+        "for each date t: solve least-squares beta_t = argmin_b || y_t - ell @ b ||^2 -> [3]",
+        "compute fitting residuals epsilon_t(tau) = y_t(tau) - ell(tau) @ beta_t -> [M]",
+        "return beta_t [T,3] and epsilon_t [T,M]"
+      ]
+    },
+    {
+      "name": "NelsonSiegelVARBootstrap.simulate_curves",
+      "input": { "name": "beta_hist", "shape": "[T, 3]", "dtype": "float64" },
+      "output": { "name": "y_hat_curve", "shape": "[n_paths, horizon, M]", "dtype": "float64" },
+      "steps": [
+        "beta_hist: [T, 3] <- Nelson-Siegel factor series from NelsonSiegel.fit_factors",
+        "estimate a0 [3], A1 [3,3] via OLS VAR(1) on beta_hist (reuses VARBootstrap.fit logic with n=3)",
+        "compute residuals eta_hat_t [T-1, 3]",
+        "for each of n_paths simulated trajectories:",
+        "  beta_hat_0 = beta0 (last historical factor vector)",
+        "  for t in 1..horizon:",
+        "    eta_star_t = resample_with_replacement(eta_hat) -> [3]",
+        "    beta_hat_t = a0 + A1 @ beta_hat_{t-1} + eta_star_t -> [3]",
+        "  y_hat_t(tau) = ell(tau) @ beta_hat_t for all M maturities -> [horizon, M]",
+        "return stacked simulated curves: [n_paths, horizon, M]"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "engine": "numpy  # or 'torch' for batched GPU simulation of the VAR recursions",
+      "stationary_bootstrap": {
+        "mean_block_length": "ASSUMED — SIR confidence 0.4, see ambiguity 'block-length distribution parameter'; default 20 (trading days) # ASSUMED: literature default (Politis-Romano heuristic order sqrt(T) to T^(1/3))"
+      },
+      "var_bootstrap": {
+        "lag_order": 1,
+        "residual_resampling": "iid  # ASSUMED: confidence 0.65, see ambiguity 'residual resampling i.i.d. vs block'"
+      },
+      "nelson_siegel": {
+        "lambda_calibration": "grid_search_mse  # ASSUMED: confidence 0.6, exact numeric lambda not reported in paper",
+        "lambda_grid_min": 0.01,
+        "lambda_grid_max": 0.5,
+        "lambda_grid_steps": 200,
+        "calibration_tau_max_years": 5.0
+      }
+    },
+    "training": {
+      "var_estimator": "ols  # confidence 0.75",
+      "ns_factor_estimator": "least_squares_per_date  # confidence 0.9"
+    },
+    "data": {
+      "series": {
+        "equity_eur": "data/raw/equity_eur.csv  # MSCI Europe Net TR EUR Index, proprietary — ASSUMED path, user must supply",
+        "rate_1y": "data/raw/bot_1y.csv  # 12m Italian BOT gross yield, proprietary — ASSUMED path",
+        "inflation": "data/raw/hicp_ex_tobacco.csv  # Euro area HICP ex-tobacco, monthly, proprietary — ASSUMED path",
+        "yield_curve": "data/raw/it_yield_curve.csv  # Italian curve, maturities [3m,6m,1y..10y]"
+      },
+      "frequency": "daily_and_monthly",
+      "sample_window": "full_history  # ASSUMED: confidence 0.4, exact start/end dates not reported in paper"
+    },
+    "evaluation": {
+      "n_paths": 10000,
+      "horizon_years": 5,
+      "horizon_nodes_daily": 1260,
+      "horizon_nodes_monthly": 60,
+      "kl_kde_bandwidth": "silverman  # ASSUMED: confidence 0.4, paper notes result depends on bandwidth but does not specify it",
+      "maturities": ["3m", "6m", "1y", "2y", "3y", "4y", "5y", "6y", "7y", "8y", "9y", "10y"]
+    },
+    "hardware": {
+      "device": "cpu  # default; 'cuda' optional if engine=torch",
+      "precision": "float64",
+      "num_workers": 4
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      { "package": "numpy", "version": "1.26.*", "reason": "core numerical arrays, linear algebra for VAR(1) and Nelson-Siegel least squares" },
+      { "package": "pandas", "version": "2.2.*", "reason": "time series loading, alignment, resampling to daily/monthly frequency" },
+      { "package": "scipy", "version": "1.12.*", "reason": "least-squares optimization for Nelson-Siegel factors, gaussian_kde for KL divergence" },
+      { "package": "statsmodels", "version": "0.14.*", "reason": "VAR(1) estimation utilities and diagnostic checks" },
+      { "package": "torch", "version": "2.2.*", "reason": "optional batched/GPU-accelerated simulation engine for the 10^4-path Monte Carlo VAR recursions (engine='torch')" },
+      { "package": "matplotlib", "version": "3.8.*", "reason": "reproducing paper figures (Figures 1-4): factor sensitivity, trajectory fan charts, yield-curve snapshots" },
+      { "package": "pyyaml", "version": "6.0.*", "reason": "config.yaml loading" }
+    ],
+    "dev": [
+      { "package": "pytest", "version": "8.*" },
+      { "package": "pytest-cov", "version": "5.*" },
+      { "package": "black", "version": "24.*" },
+      { "package": "ruff", "version": "0.4.*" },
+      { "package": "mypy", "version": "1.*" }
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "scripts/fit_models.py",
+      "purpose": "Fit Stationary Bootstrap, VAR-Bootstrap, and Nelson-Siegel VAR-Bootstrap on historical data and persist fitted parameters.",
+      "cli_args": [
+        { "flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml" },
+        { "flag": "--freq", "type": "str", "required": false, "default": "daily", "help": "'daily' or 'monthly'" },
+        { "flag": "--out-dir", "type": "str", "required": false, "default": "results/fitted_models", "help": "Where to save fitted parameters" }
+      ]
+    },
+    {
+      "filename": "scripts/simulate.py",
+      "purpose": "Generate n_paths simulated trajectories / yield curves for a chosen methodology over the specified horizon.",
+      "cli_args": [
+        { "flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml" },
+        { "flag": "--method", "type": "str", "required": true, "default": null, "help": "'stationary_bootstrap' | 'var_bootstrap' | 'ns_var_bootstrap'" },
+        { "flag": "--n-paths", "type": "int", "required": false, "default": 10000, "help": "Number of Monte Carlo paths" },
+        { "flag": "--horizon-years", "type": "int", "required": false, "default": 5, "help": "Simulation horizon in years" },
+        { "flag": "--seed", "type": "int", "required": false, "default": 42, "help": "Random seed" },
+        { "flag": "--out", "type": "str", "required": false, "default": "results/simulations.npz", "help": "Output path for simulated paths" }
+      ]
+    },
+    {
+      "filename": "scripts/evaluate.py",
+      "purpose": "Compute Section 6/8 comparison metrics (negative increments, correlation, KL divergence) and Appendix B arbitrage checks; reproduce Tables 1-11.",
+      "cli_args": [
+        { "flag": "--simulations", "type": "str", "required": true, "default": null, "help": "Path to simulations.npz produced by simulate.py" },
+        { "flag": "--historical", "type": "str", "required": true, "default": null, "help": "Path to historical panel used as ground truth" },
+        { "flag": "--out", "type": "str", "required": false, "default": "results/metrics_report.md", "help": "Output markdown report path" }
+      ]
+    },
+    {
+      "filename": "scripts/plot_figures.py",
+      "purpose": "Reproduce paper figures: Nelson-Siegel factor sensitivity (Fig.1), Stationary vs VAR-Bootstrap fan charts (Figs.2-3), simulated yield curve snapshots (Fig.4).",
+      "cli_args": [
+        { "flag": "--simulations", "type": "str", "required": true, "default": null, "help": "Path to simulations.npz" },
+        { "flag": "--out-dir", "type": "str", "required": false, "default": "results/figures", "help": "Directory to write PNG/SVG figures" }
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.11-slim",
+    "system_deps": ["build-essential", "libopenblas-dev"],
+    "workdir": "/workspace",
+    "default_cmd": "python scripts/simulate.py --config configs/config.yaml --method ns_var_bootstrap"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "The three empirical series (MSCI Europe Net TR EUR, 12m Italian BOT yield, Euro-area HICP ex-tobacco) and the full Italian yield curve panel are proprietary / vendor data (e.g. Bloomberg/Refinitiv), not bundled with the paper. Faithful reproduction of the exact numeric tables (1-11) requires the same data and sample window.",
+      "source": "evaluation_protocol.datasets, implementation_assumptions",
+      "mitigation": "Ship data-loading interfaces that accept user-supplied CSVs matching a documented schema; include a synthetic-data generator (data/make_synthetic.py) so the pipeline is runnable end-to-end without proprietary data, clearly labeled as illustrative rather than reproducing paper's exact figures."
+    },
+    {
+      "severity": "Medium",
+      "description": "The Nelson-Siegel decay parameter lambda's calibrated numeric value and the exact optimization routine (grid vs. nonlinear solver) are not reported (SIR confidence 0.6, ambiguity flagged).",
+      "source": "sir.ambiguities[1] (Section 4 Nelson-Siegel calibration)",
+      "mitigation": "Implement calibrate_lambda() with a configurable grid-search default over a wide, documented range and expose it as a config parameter so users can plug in the paper's true lambda if it becomes known."
+    },
+    {
+      "severity": "Medium",
+      "description": "KL divergence values in Tables 7-9 depend materially on KDE bandwidth choice, which the paper explicitly flags as unspecified.",
+      "source": "sir.ambiguities[2] (Section 6 KL divergence)",
+      "mitigation": "Default to Silverman's rule via scipy.stats.gaussian_kde, but expose bandwidth as a config flag and report KL divergence sensitivity across 2-3 bandwidth choices in evaluate.py output."
+    },
+    {
+      "severity": "Medium",
+      "description": "Whether VAR-Bootstrap/NS-VAR-Bootstrap residuals are resampled i.i.d. or in blocks (to preserve volatility clustering) is ambiguous; this materially affects simulated tail behavior and negative-increment intensity metrics (Tables 3-4).",
+      "source": "sir.ambiguities[3]",
+      "mitigation": "Implement both i.i.d. and block resampling as an explicit `resample_block_length` config parameter (default 1 = i.i.d.) rather than hardcoding one choice."
+    },
+    {
+      "severity": "Low",
+      "description": "Stationary Bootstrap mean block length (geometric distribution parameter) is not reported numerically.",
+      "source": "sir.ambiguities[0]",
+      "mitigation": "Default to a documented heuristic (e.g. mean block length ~ T^(1/3)) exposed as a config value; document clearly as an assumption in README and config comments."
+    },
+    {
+      "severity": "Low",
+      "description": "Numerical stability of Nelson-Siegel loadings L1(tau), L2(tau) as tau -> 0 involves a 0/0 form (1 - e^{-lambda*tau})/(lambda*tau) that needs a stable limit implementation.",
+      "source": "mathematical_spec (Nelson-Siegel factor loadings)",
+      "mitigation": "Implement loadings() with a Taylor-series fallback (L1(0) = 1, L2(0) = 0) for tau below a small epsilon threshold, avoiding direct division by near-zero lambda*tau."
+    }
+  ]
+}

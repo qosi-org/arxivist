@@ -1,0 +1,23 @@
+name: sert-asset-pricing
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.10
+  - pytorch>=2.1
+  - numpy>=1.24
+  - pandas>=2.0
+  - pyyaml>=6.0
+  - scikit-learn>=1.3
+  - statsmodels>=0.14
+  - scipy>=1.11
+  - matplotlib>=3.7
+  - seaborn>=0.12
+  - tqdm>=4.65
+  - pip
+  - pip:
+      - pytest>=7.4
+      - black>=23.0
+      - ruff>=0.1
+      - jupyter>=1.0

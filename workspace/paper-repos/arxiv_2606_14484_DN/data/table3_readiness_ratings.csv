@@ -1,0 +1,17 @@
+coin,signature_scheme,exposure_model,pq_status,rating
+XRP,Ed25519/secp256k1,account_reuse,"ML-DSA on devnet; roadmap to full resistance by 2028",4
+Solana,Ed25519,account_reuse,"opt-in hash-based Winternitz Vault live; Falcon selected not yet shipped",4
+Zcash,zk-SNARK+ECDSA,shielded_pool,"dated roadmap: quantum-recoverable wallets 2026, fully PQ 2027",4
+BNB,secp256k1+BLS12-381,account_reuse,"tested ML-DSA + post-quantum consensus aggregation report May 2026",3.5
+TRON,secp256k1,account_reuse,"post-quantum initiative; testnet targeted Q2 2026",3.5
+Ethereum,secp256k1+BLS12-381,account_reuse,"most-developed roadmap; account-abstraction migration core PQ ~2029",3
+USDT,host_chain_secp256k1,inherits_host,"rely on host migration; centralized issuer can freeze/re-mint",3
+USDC,host_chain_secp256k1,inherits_host,"rely on host migration; centralized issuer can freeze/re-mint",3
+USDS,host_chain_secp256k1,inherits_host,"rely on host migration; centralized issuer can freeze/re-mint",3
+LINK,host_chain_secp256k1,inherits_host,"rely on host migration; centralized issuer can freeze/re-mint",3
+Monero,Ed25519_ring_signatures,stealth_addresses,"research working group formed late 2025",2.5
+Cardano,Ed25519,utxo_hashed_addresses,"post-quantum research program; no live scheme",2.5
+Bitcoin,secp256k1+Schnorr,utxo_hashed_addresses,"BIP-360 merged not activated; ~1.6-1.7M raw-key P2PK-era BTC exposed",2
+Stellar,Ed25519/secp256k1,account_reuse,"no public roadmap located",2
+Hyperliquid,Ed25519/secp256k1,account_reuse,"no public roadmap located",2
+Dogecoin,secp256k1,utxo_heavy_reuse,"no post-quantum effort",1.5

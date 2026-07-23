@@ -1,0 +1,455 @@
+{
+  "paper_id": "arxiv_2607_11935",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Eigenvector rotation precedes eigenvalue-based early-warning signals: a TVP-Kalman approach to detecting critical transitions",
+    "authors": ["Gildas Ngueuleweu Tiwang"],
+    "affiliations": [
+      "Laboratory of Applied Economics and Management Sciences, Department of Agribusiness, Faculty of Economics and Management, University of Dschang, Cameroon"
+    ],
+    "arxiv_id": "2607.11935",
+    "doi": null,
+    "submission_date": null,
+    "abstract": "Classical EWS rely on the dominant eigenvalue (variance, AR(1)), with O(dtheta^2) sensitivity and limited lead time. This paper introduces a complementary EWS based on eigenvector rotation, measured by elasticity beta(t)=dlog(y)/dlog(x) via a TVP-Kalman filter, with O(dtheta) sensitivity. On NASA AIRS data (3 regions) and 6 simulated tipping systems, beta is orthogonal to AR(1) and precedes it by 14-24 months (obs.) and 39-153 timesteps (sim.).",
+    "domain": "Other",
+    "key_claims": [
+      "Introduces a new early-warning-signal (EWS) class based on eigenvector rotation, measured by a dimensionless time-varying elasticity beta(t) = dlog(y)/dlog(x) estimated via a TVP-Kalman filter in log-log space",
+      "beta has O(delta_theta) sensitivity to bifurcation-parameter perturbations versus O(delta_theta^2) for classical eigenvalue-based EWS (AR(1), variance), theoretically implying longer lead time",
+      "On 24 years of monthly NASA AIRS data across three climate regions (Arctic, Tropics, Indian Monsoon), beta is empirically orthogonal to AR(1) (Pearson r ~ 0, n.s.) in all regions, and systematically precedes AR(1) by 14-24 months in 5 of 6 region-signal pairs",
+      "On six simulated systems with known tipping points, beta leads AR(1) by 39-153 timesteps specifically when the transition involves coupling degradation (e.g. Stommel AMOC model, critical slowing down), but does not detect a univariate fold bifurcation where coupling itself is unchanged",
+      "The Tropics region's beta (~0.49) closely matches the theoretical Clausius-Clapeyron scaling exponent (~0.5), while the Indian Monsoon shows a recent deceleration (beta'' < 0) interpreted as a potential early signal of monsoon circulation weakening"
+    ],
+    "parsed_at": "2026-07-17T13:26:26Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "TVP-Kalman elasticity filter (4-state, order-3 Taylor expansion) with RTS backward smoothing, benchmarked against classical rolling-window EWS (AR(1), variance, permutation entropy, mutual information) via lead-lag cross-correlation analysis",
+    "modules": [
+      {
+        "name": "TVP-Kalman forward filter",
+        "operation_type": "state_space_filter (linear Kalman filter)",
+        "input_shape": "scalar time series pair (log T_k, log q_k), k=1..284 (or simulation length)",
+        "output_shape": "filtered state estimate x_k|k = [beta_k, beta'_k, beta''_k, beta'''_k]^T and covariance P_k|k, for each k",
+        "parameters": {
+          "state_dim": 4,
+          "observation_noise_R": 0.001,
+          "process_noise_Q": "diag(1e-6, 1e-7, 1e-8, 1e-9)",
+          "time_step_dt": "1/12 year",
+          "transition_matrix_F": "order-3 Taylor expansion transition matrix (exact numeric entries not given in paper -- see implementation_assumptions)"
+        },
+        "paper_section": "2.2",
+        "confidence": 0.7,
+        "notes": "Observation equation log(q_k) = beta_k * log(T_k) + eps_k treats log(T_k) as a time-varying regressor (i.e. observation matrix H_k = [log(T_k), 0, 0, 0]), a standard time-varying-parameter (TVP) regression-via-Kalman-filter formulation (Harvey-style), though the paper does not spell out the generic Kalman recursion equations themselves."
+      },
+      {
+        "name": "RTS backward smoother",
+        "operation_type": "state_space_smoother (Rauch-Tung-Striebel)",
+        "input_shape": "forward-filtered states/covariances x_k|k, P_k|k for k=1..N and predicted x_k|k-1, P_k|k-1",
+        "output_shape": "smoothed state estimates x_k|N = [beta_k, beta'_k, beta''_k, beta'''_k]^T for each k",
+        "parameters": {},
+        "paper_section": "2.2",
+        "confidence": 0.65,
+        "notes": "Mentioned by name only (\"Kalman filter forward pass is followed by RTS backward smoothing\"); standard RTS recursion equations assumed, not given explicitly in the paper."
+      },
+      {
+        "name": "Classical rolling-window EWS computation",
+        "operation_type": "rolling_statistics",
+        "input_shape": "scalar time series x_t (T or q), rolling windows of 24 or 36 months",
+        "output_shape": "time series of AR(1), variance, permutation entropy, and mutual-information values",
+        "parameters": {
+          "AR1_window_months": 24,
+          "variance_window_months": 24,
+          "permutation_entropy_embedding_dim_m": 3,
+          "permutation_entropy_window_months": 36,
+          "mutual_information_window_months": 36,
+          "mutual_information_estimator": "nearest-neighbor regression (exact algorithm/library not specified)"
+        },
+        "paper_section": "2.3",
+        "confidence": 0.75,
+        "notes": "AR(1) computed via linear regression of x_t on x_{t-1} within each rolling window; variance is the window sample variance; permutation entropy and mutual-information estimators are named but their exact implementations (e.g. specific kNN/MI estimator such as Kraskov) are not specified."
+      },
+      {
+        "name": "Lead-lag cross-correlation analysis",
+        "operation_type": "cross_correlation_analysis",
+        "input_shape": "pair of aligned time series (beta or its derivatives, and a classical EWS signal)",
+        "output_shape": "optimal lag (months) and lead/lag direction per region-signal pair (Table 2), plus lead-time-to-tipping-point per simulated system (Table 3)",
+        "parameters": {
+          "significance_threshold_z": 2.0
+        },
+        "paper_section": "2.4, 3.2",
+        "confidence": 0.75,
+        "notes": "For observational data, optimal lag is found via cross-correlation between beta (and its derivatives beta', beta'', beta''') and each classical EWS signal. For simulations, lead time is defined as the interval between each EWS's first significant deviation (|z|>2) and the known tipping point."
+      },
+      {
+        "name": "Simulated tipping-point system generators",
+        "operation_type": "synthetic_data_simulation (6 dynamical systems)",
+        "input_shape": "None (simulated from specified/partially-specified ODEs or maps)",
+        "output_shape": "simulated (x_t, y_t) or x_t time series with a known tipping-point time",
+        "parameters": {
+          "systems": [
+            "Fold bifurcation: dx/dt = r(t) - x^2 + eta, r -> 0 at t=200",
+            "Beta step change: y = beta(t)*x + eps, beta: 0.8 -> 0.2 at t=200",
+            "Beta linear decay: beta decays from 1.0 to 0.2 (coupling degradation)",
+            "Logistic map: r: 2.5 -> 4.0 Feigenbaum cascade",
+            "Stommel AMOC model: 2-box model with freshwater forcing",
+            "Critical slowing down: dx/dt = -lambda(t)*x + eta, lambda -> 0"
+          ]
+        },
+        "paper_section": "2.4, Figure 3",
+        "confidence": 0.45,
+        "notes": "Only qualitative equations/parameter endpoints are given for each of the six systems; noise magnitudes (eta), exact forcing schedules (e.g. the Stommel AMOC freshwater-forcing trajectory), and simulation length/dt are not fully specified, making exact numeric reproduction of Table 3's lead times unlikely without additional assumptions."
+      }
+    ],
+    "connections": [
+      {"from": "raw AIRS T, q series (or simulated x, y)", "to": "TVP-Kalman forward filter", "tensor_name": "log(T_k), log(q_k) pairs"},
+      {"from": "TVP-Kalman forward filter", "to": "RTS backward smoother", "tensor_name": "forward state/covariance sequence (x_k|k, P_k|k, x_k|k-1, P_k|k-1)"},
+      {"from": "RTS backward smoother", "to": "Lead-lag cross-correlation analysis", "tensor_name": "smoothed beta(t) and derivatives"},
+      {"from": "raw AIRS T, q series (or simulated x, y)", "to": "Classical rolling-window EWS computation", "tensor_name": "raw T, q time series"},
+      {"from": "Classical rolling-window EWS computation", "to": "Lead-lag cross-correlation analysis", "tensor_name": "AR(1), variance, permutation entropy, mutual information time series"},
+      {"from": "Simulated tipping-point system generators", "to": "TVP-Kalman forward filter", "tensor_name": "simulated (x_t, y_t) pairs"},
+      {"from": "Simulated tipping-point system generators", "to": "Classical rolling-window EWS computation", "tensor_name": "simulated x_t series"}
+    ],
+    "variants": [
+      {
+        "name": "Observational (NASA AIRS) analysis",
+        "differences": {"data": "284 monthly observations per region, 3 regions (Arctic, Tropics, Indian Monsoon)", "purpose": "test orthogonality and lead-lag of beta vs classical EWS on real climate data (Section 3.1-3.3)"}
+      },
+      {
+        "name": "Simulated tipping-point validation",
+        "differences": {"data": "6 synthetic dynamical systems with known bifurcation times", "purpose": "validate that beta leads AR(1) specifically when coupling degrades (Section 3.4)"}
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Time-varying elasticity (eigenvector-rotation proxy)",
+      "latex": "\\beta(t) \\equiv \\frac{d\\log y}{d\\log x}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "1, Eq. (unnumbered)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Applied elasticity definition (temperature-humidity coupling)",
+      "latex": "\\beta(t) \\equiv \\frac{d\\log q(t)}{d\\log T(t)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "2.2",
+      "confidence": 0.95
+    },
+    {
+      "name": "TVP-Kalman observation equation",
+      "latex": "\\log q_k = \\beta_k \\log T_k + \\varepsilon_k, \\qquad \\varepsilon_k \\sim \\mathcal{N}(0, R)",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["R = 1e-3"],
+      "undefined_symbols": [],
+      "paper_section": "2.2",
+      "confidence": 0.95
+    },
+    {
+      "name": "TVP-Kalman state transition equation",
+      "latex": "\\boldsymbol{x}_k = \\boldsymbol{F}\\boldsymbol{x}_{k-1} + \\boldsymbol{\\eta}_k, \\qquad \\boldsymbol{\\eta}_k \\sim \\mathcal{N}(0, \\boldsymbol{Q}), \\qquad \\boldsymbol{x}_k = [\\beta_k, \\beta'_k, \\beta''_k, \\beta'''_k]^T",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["Q = diag(1e-6, 1e-7, 1e-8, 1e-9)", "F: order-3 Taylor expansion transition matrix, dt=1/12 year"],
+      "undefined_symbols": ["F (exact numeric entries not given in the paper)"],
+      "paper_section": "2.2",
+      "confidence": 0.8
+    },
+    {
+      "name": "Sensitivity-order theoretical prediction (eigenvector vs eigenvalue)",
+      "latex": "O(\\delta\\theta) \\; \\text{(eigenvector rotation)} \\;>\\; O(\\delta\\theta^2) \\; \\text{(eigenvalue expansion)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": ["delta_theta (distance to bifurcation in parameter space)"],
+      "paper_section": "1, 3.2",
+      "confidence": 0.85
+    },
+    {
+      "name": "AR(1) lag-1 autocorrelation (rolling window)",
+      "latex": "x_t = \\text{AR}(1) \\cdot x_{t-1} + \\text{const} + e_t \\quad \\text{(estimated via linear regression within a 24-month rolling window)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["window = 24 months"],
+      "undefined_symbols": [],
+      "paper_section": "2.3",
+      "confidence": 0.85
+    },
+    {
+      "name": "Rolling-window variance",
+      "latex": "\\sigma^2(x) \\; \\text{over a 24-month rolling window}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["window = 24 months"],
+      "undefined_symbols": [],
+      "paper_section": "2.3",
+      "confidence": 0.9
+    },
+    {
+      "name": "Clausius-Clapeyron scaling exponent derivation",
+      "latex": "q_{sat} \\sim e^{-L/RT} \\;\\Rightarrow\\; \\frac{d\\log q_{sat}}{d\\log T} \\approx T \\cdot \\frac{d}{dT}\\left(-\\frac{L}{RT}\\right) = \\frac{L}{RT} \\approx 0.5",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["L (latent heat)", "R (gas constant)", "T (temperature)"],
+      "undefined_symbols": [],
+      "paper_section": "3.3",
+      "confidence": 0.9
+    },
+    {
+      "name": "Fold bifurcation simulated system",
+      "latex": "\\frac{dx}{dt} = r(t) - x^2 + \\eta, \\qquad r \\to 0 \\;\\text{at}\\; t=200",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["r(t) schedule", "eta (noise, magnitude unspecified)"],
+      "undefined_symbols": [],
+      "paper_section": "2.4",
+      "confidence": 0.6
+    },
+    {
+      "name": "Beta step-change simulated system",
+      "latex": "y = \\beta(t) x + \\varepsilon, \\qquad \\beta: 0.8 \\to 0.2 \\;\\text{at}\\; t=200",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["epsilon (noise, magnitude unspecified)"],
+      "undefined_symbols": [],
+      "paper_section": "2.4",
+      "confidence": 0.6
+    },
+    {
+      "name": "Beta linear-decay simulated system",
+      "latex": "\\beta(t): 1.0 \\to 0.2 \\;\\text{(linear decay, coupling degradation)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["decay schedule endpoints (t=start to t=250)"],
+      "undefined_symbols": [],
+      "paper_section": "2.4",
+      "confidence": 0.55
+    },
+    {
+      "name": "Logistic map simulated system",
+      "latex": "x_{n+1} = r x_n (1-x_n), \\qquad r: 2.5 \\to 4.0 \\;\\text{(Feigenbaum cascade)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["r(t) schedule"],
+      "undefined_symbols": [],
+      "paper_section": "2.4",
+      "confidence": 0.6
+    },
+    {
+      "name": "Critical slowing down simulated system",
+      "latex": "\\frac{dx}{dt} = -\\lambda(t) x + \\eta, \\qquad \\lambda \\to 0",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["lambda(t) schedule", "eta (noise, magnitude unspecified)"],
+      "undefined_symbols": [],
+      "paper_section": "2.4",
+      "confidence": 0.6
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "Raw AIRS surface skin temperature series T",
+      "shape_notation": "[284] monthly observations per region (Sept 2002 - Apr 2026)",
+      "dtype": "float64",
+      "tensor_type": "input",
+      "module": "TVP-Kalman forward filter / Classical rolling-window EWS computation",
+      "confidence": 0.85
+    },
+    {
+      "name": "Raw AIRS surface specific/water-vapor humidity series q",
+      "shape_notation": "[284] monthly observations per region",
+      "dtype": "float64",
+      "tensor_type": "input",
+      "module": "TVP-Kalman forward filter / Classical rolling-window EWS computation",
+      "confidence": 0.85
+    },
+    {
+      "name": "Kalman state vector x_k",
+      "shape_notation": "[4] = [beta_k, beta'_k, beta''_k, beta'''_k]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "TVP-Kalman forward filter",
+      "confidence": 0.9
+    },
+    {
+      "name": "State covariance matrix P_k",
+      "shape_notation": "[4, 4]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "TVP-Kalman forward filter / RTS backward smoother",
+      "confidence": 0.85
+    },
+    {
+      "name": "Smoothed elasticity time series beta(t)",
+      "shape_notation": "[284] (or simulation length)",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "RTS backward smoother",
+      "confidence": 0.9
+    },
+    {
+      "name": "Classical EWS time series (AR(1), variance, permutation entropy, mutual information)",
+      "shape_notation": "[284 - window_length + 1] per EWS metric, per region, per variable",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "Classical rolling-window EWS computation",
+      "confidence": 0.8
+    },
+    {
+      "name": "Region-level summary statistics (Table 1)",
+      "shape_notation": "scalars per region: N, |beta| mean, sigma_beta, r(beta,AR1_T), r(beta,MI), transitions count",
+      "dtype": "float64 / int",
+      "tensor_type": "output",
+      "module": "Lead-lag cross-correlation analysis",
+      "confidence": 0.9
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": null,
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.1
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.1
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "Not applicable: this paper uses a fixed-hyperparameter linear Kalman filter (R, Q set a priori, Section 2.2), not a trained/optimized model in the machine-learning sense. There is no gradient-based training loop, loss minimisation, or learned parameter fitting -- R and Q are specified directly as filter design choices.",
+    "confidence": 0.9
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "NASA AIRS (Atmospheric Infrared Sounder) monthly data, Arctic region (65-90N)", "split": "single time series, N=284 months (Sept 2002 - Apr 2026)", "size": 284, "publicly_available": true},
+      {"name": "NASA AIRS monthly data, Tropics region (10S-10N)", "split": "single time series, N=284 months", "size": 284, "publicly_available": true},
+      {"name": "NASA AIRS monthly data, Indian Monsoon region (60E-100E, 5N-25N)", "split": "single time series, N=284 months", "size": 284, "publicly_available": true},
+      {"name": "Six simulated tipping-point systems (fold bifurcation, beta step change, beta linear decay, logistic map, Stommel AMOC, critical slowing down)", "split": "synthetic, per-system length varies (~250-400 timesteps based on Figure 3 axes)", "size": null, "publicly_available": true}
+    ],
+    "metrics": [
+      "Pearson correlation r(beta, AR(1)_T) per region",
+      "Pearson correlation r(beta, MI) per region",
+      "mean absolute elasticity |beta| and its standard deviation sigma_beta per region",
+      "number of beta regime transitions (beta''=0 crossings) per region",
+      "optimal cross-correlation lag (months) between beta/derivatives and each classical EWS signal, per region",
+      "lead time (timesteps) between first significant (|z|>2) EWS deviation and known tipping point, per simulated system"
+    ],
+    "reported_results": [
+      {"metric": "|beta| (mean absolute elasticity)", "dataset": "NASA AIRS Arctic", "split": "N/A", "value": 0.106, "is_primary": true},
+      {"metric": "sigma_beta", "dataset": "NASA AIRS Arctic", "split": "N/A", "value": 0.139, "is_primary": false},
+      {"metric": "r(beta, AR(1)_T)", "dataset": "NASA AIRS Arctic", "split": "N/A", "value": 0.05, "is_primary": true},
+      {"metric": "r(beta, MI)", "dataset": "NASA AIRS Arctic", "split": "N/A", "value": 0.03, "is_primary": false},
+      {"metric": "|beta| (mean absolute elasticity)", "dataset": "NASA AIRS Tropics", "split": "N/A", "value": 0.492, "is_primary": true},
+      {"metric": "sigma_beta", "dataset": "NASA AIRS Tropics", "split": "N/A", "value": 0.035, "is_primary": false},
+      {"metric": "r(beta, AR(1)_T)", "dataset": "NASA AIRS Tropics", "split": "N/A", "value": 0.08, "is_primary": true},
+      {"metric": "r(beta, MI)", "dataset": "NASA AIRS Tropics", "split": "N/A", "value": -0.33, "is_primary": true},
+      {"metric": "|beta| (mean absolute elasticity)", "dataset": "NASA AIRS Indian Monsoon", "split": "N/A", "value": 0.477, "is_primary": true},
+      {"metric": "sigma_beta", "dataset": "NASA AIRS Indian Monsoon", "split": "N/A", "value": 0.062, "is_primary": false},
+      {"metric": "r(beta, AR(1)_T)", "dataset": "NASA AIRS Indian Monsoon", "split": "N/A", "value": 0.03, "is_primary": true},
+      {"metric": "r(beta, MI)", "dataset": "NASA AIRS Indian Monsoon", "split": "N/A", "value": 0.29, "is_primary": true},
+      {"metric": "beta lead time over AR(1) (Stommel AMOC simulation)", "dataset": "Simulated Stommel AMOC", "split": "N/A", "value": 39, "is_primary": true},
+      {"metric": "beta lead time over AR(1) (critical slowing down simulation)", "dataset": "Simulated critical slowing down", "split": "N/A", "value": 153, "is_primary": true},
+      {"metric": "beta lead-lag range vs classical EWS (observational)", "dataset": "NASA AIRS (all regions)", "split": "N/A", "value": 19, "is_primary": true}
+    ],
+    "baselines": [
+      "AR(1) lag-1 autocorrelation (classical eigenvalue-based EWS)",
+      "Rolling-window variance (classical eigenvalue-based EWS)",
+      "Permutation entropy (embedding dim m=3)",
+      "Mutual information (nearest-neighbor estimator)",
+      "Precomputed DCC-GARCH correlation, Transfer Entropy, and Convergent Cross Mapping results referenced from prior work on the same dataset (not recomputed in this paper)"
+    ],
+    "compute": "Not specified in the paper. Given the small dataset size (284 monthly observations per region) and simple linear Kalman filter / classical rolling-window statistics, computation is expected to be lightweight and CPU-only (no GPU, no deep learning framework required).",
+    "special_conditions": [
+      "AR(1) and variance use a 24-month rolling window; permutation entropy and mutual information use a 36-month rolling window -- the two EWS families are computed over different window lengths",
+      "beta significance/orthogonality assessed via Pearson correlation with reported p-values (p>0.05 taken as non-significant, i.e. orthogonal)",
+      "Lead-time analysis in simulations uses a |z|>2 significance threshold for first detection of each EWS",
+      "Six simulated systems are used purely for controlled validation of the lead-time mechanism, not fit to any real data"
+    ],
+    "confidence": 0.85
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "The order-3 Taylor-expansion state-transition matrix F is not given numerically in the paper. It is assumed to be the standard discretised kinematic/Taylor chain matrix for a 4-state (value, 1st, 2nd, 3rd derivative) local polynomial trend model: F = [[1, dt, dt^2/2, dt^3/6], [0, 1, dt, dt^2/2], [0, 0, 1, dt], [0, 0, 0, 1]], with dt = 1/12 year, consistent with x_k = [beta_k, beta'_k, beta''_k, beta'''_k]^T.",
+      "basis": "standard state-space/Kalman-filter convention for polynomial (Taylor-series) trend models",
+      "confidence": 0.55,
+      "alternatives": ["a discrete-time ARIMA-style companion-form transition matrix", "a differently-scaled Taylor matrix (e.g. without the dt^2/2, dt^3/6 factorial scaling)"],
+      "affects_section": "architecture, mathematical_spec (TVP-Kalman state transition equation)"
+    },
+    {
+      "assumption": "The observation model treats log(T_k) as a time-varying regressor (observation matrix H_k = [log(T_k), 0, 0, 0]) so that the Kalman filter estimates a genuinely time-varying elasticity beta_k, consistent with standard time-varying-parameter (TVP) regression via Kalman filter (Harvey-style state-space regression).",
+      "basis": "standard TVP-regression-via-Kalman-filter convention in econometrics/time-series literature",
+      "confidence": 0.75,
+      "alternatives": ["a local-level model on beta alone with T,q entering only through a pre-computed log-ratio series"],
+      "affects_section": "architecture, mathematical_spec (TVP-Kalman observation equation)"
+    },
+    {
+      "assumption": "Permutation entropy and mutual-information estimators use standard, commonly-available implementations (e.g. Bandt-Pompe ordinal-pattern permutation entropy; a k-nearest-neighbor-based mutual information estimator such as Kraskov-Stogbauer-Grassberger) since the paper names the methods but not the exact algorithm/library/parameters (beyond embedding dimension m=3 and window length).",
+      "basis": "field-standard estimator choices for the named methods",
+      "confidence": 0.5,
+      "alternatives": ["a histogram-based mutual information estimator", "a different ordinal-pattern permutation entropy normalisation"],
+      "affects_section": "architecture (Classical rolling-window EWS computation), evaluation_protocol"
+    },
+    {
+      "assumption": "The six simulated tipping-point systems' noise magnitudes (eta, epsilon), exact forcing schedules (especially the Stommel AMOC 2-box model's freshwater-forcing trajectory), simulation lengths, and time steps are not fully specified numerically in the paper (only qualitative equations and bifurcation-parameter endpoints are given), so exact reproduction of Table 3's specific lead-time values (in timesteps) is not guaranteed without further assumptions.",
+      "basis": "explicit gaps in the paper's Section 2.4 description",
+      "confidence": 0.4,
+      "alternatives": ["parameter values may be recoverable from the author's code repository (https://github.com/GildasTiwangNg), which is referenced but not detailed in-text"],
+      "affects_section": "architecture (Simulated tipping-point system generators), mathematical_spec (six simulated-system equations)"
+    },
+    {
+      "assumption": "The exact spatial-averaging procedure used to reduce NASA AIRS gridded data to a single regional time series per region (e.g. simple area-weighted mean over all grid cells within the stated lat/lon bounding box) is not specified in the paper beyond naming the three region bounding boxes.",
+      "basis": "standard practice for regional climate-index construction from gridded satellite products",
+      "confidence": 0.5,
+      "alternatives": ["a specific sub-selection of grid cells", "a different weighting scheme (e.g. cosine-latitude weighting)"],
+      "affects_section": "evaluation_protocol (datasets)"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 2.2 (TVP-Kalman estimation of beta)",
+      "description": "The paper names the state-transition matrix F only as \"the Taylor expansion transition matrix of order 3\" without giving its numeric entries, and does not spell out the generic Kalman filter recursion (predict/update) equations or the RTS smoother recursion equations themselves -- these are assumed to be the textbook forms.",
+      "primary_assumption": "F is the standard factorial-scaled Taylor/kinematic chain matrclass for a 4-state polynomial trend model with dt=1/12 year; standard Kalman/RTS recursions apply",
+      "alternatives": ["a differently normalised or truncated Taylor matrix", "a non-standard filter recursion variant"],
+      "confidence": 0.55
+    },
+    {
+      "location": "Section 2.4 and Figure 3 (six simulated tipping-point systems)",
+      "description": "Noise magnitudes, exact forcing schedules (especially for the Stommel AMOC 2-box model), simulation lengths, and integration time steps are not given numerically for any of the six systems -- only qualitative governing equations and bifurcation-parameter start/end values are provided.",
+      "primary_assumption": "Reasonable illustrative parameter values (small additive Gaussian noise, linear or sigmoid-like forcing ramps) would need to be chosen to approximately reproduce Table 3's reported lead times, but exact numeric matches are not guaranteed",
+      "alternatives": ["the author's code repository may contain the exact parameter values used"],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 2.3 (Classical EWS computed) and Data and Code Availability",
+      "description": "The exact algorithms/libraries used for permutation entropy and mutual information estimation, and the precise NASA AIRS Giovanni-portal query/spatial-averaging procedure used to build each region's T and q series, are not specified in the text beyond high-level parameter choices (window lengths, embedding dimension).",
+      "primary_assumption": "Standard, commonly-used estimator implementations and a simple area-weighted regional average are assumed",
+      "alternatives": ["a different regional aggregation scheme", "a different entropy/MI estimator implementation"],
+      "confidence": 0.5
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.7,
+    "mathematical_spec": 0.82,
+    "tensor_semantics": 0.82,
+    "training_pipeline": 0.9,
+    "evaluation_protocol": 0.85,
+    "implementation_assumptions": 0.5,
+    "overall_sir_confidence": 0.72
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "index_version": 1,
+  "total_papers": 1,
+  "papers": [
+    {
+      "paper_id": "paper_coordinated-sniper-cohorts-pumpfun",
+      "title": "Coordinated Sniper Cohorts on Pump.fun",
+      "domain": "On-Chain Market Microstructure / Blockchain Forensics",
+      "sir_version": 1,
+      "sir_confidence": 0.91,
+      "has_repo": false,
+      "has_notebook": false,
+      "has_comparison": false,
+      "last_updated": "2026-07-14T00:02:00Z"
+    }
+  ]
+}

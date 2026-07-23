@@ -1,0 +1,143 @@
+{
+  "paper_id": "arxiv_2607_14410",
+  "comparison_date": "2026-07-22T09:00:00Z",
+  "arxivist_sir_version": 1,
+  "reproducibility_score": 0.07,
+  "score_confidence": "low",
+  "metric_comparisons": [
+    {
+      "metric": "ari",
+      "dataset": "melanoma cohort (paper) / synthetic cohort (repro)",
+      "split": "cohort mean, N=11 (paper) vs N=4 (repro)",
+      "paper_value": 0.329,
+      "user_value": 0.052,
+      "absolute_deviation": -0.277,
+      "deviation_pct": -84.2,
+      "direction": "below",
+      "severity": "critical"
+    },
+    {
+      "metric": "nmi",
+      "dataset": "melanoma cohort (paper) / synthetic cohort (repro)",
+      "split": "cohort mean, N=11 (paper) vs N=4 (repro)",
+      "paper_value": 0.45,
+      "user_value": 0.078,
+      "absolute_deviation": -0.372,
+      "deviation_pct": -82.7,
+      "direction": "below",
+      "severity": "critical"
+    },
+    {
+      "metric": "spatial_contiguity",
+      "dataset": "melanoma cohort (paper) / synthetic cohort (repro)",
+      "split": "cohort mean, N=11 (paper) vs N=4 (repro)",
+      "paper_value": 0.85,
+      "user_value": 0.533,
+      "absolute_deviation": -0.317,
+      "deviation_pct": -37.3,
+      "direction": "below",
+      "severity": "critical"
+    },
+    {
+      "metric": "silhouette",
+      "dataset": "melanoma cohort (paper) / synthetic cohort (repro)",
+      "split": "cohort mean, N=11 (paper) vs N=4 (repro)",
+      "paper_value": 0.417,
+      "user_value": 0.276,
+      "absolute_deviation": -0.141,
+      "deviation_pct": -33.8,
+      "direction": "below",
+      "severity": "critical"
+    },
+    {
+      "metric": "mus",
+      "dataset": "melanoma cohort (paper) / synthetic cohort (repro)",
+      "split": "cohort mean, N=11 (paper) vs N=4 (repro)",
+      "paper_value": 0.803,
+      "user_value": 0.3875,
+      "absolute_deviation": 0.0,
+      "deviation_pct": 0.0,
+      "direction": "exact",
+      "severity": "unmatched"
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 4,
+    "unmatched": 1
+  },
+  "hallucinations": {
+    "structural": [
+      {
+        "component": "Shared embedding Z fed to both cross-modal projection heads (proj_head_a, proj_head_b)",
+        "location_in_code": "src/lattice/models/lattice_model.py::LatticeModel.forward",
+        "severity": "Minor",
+        "evidence": "Eq. 7 refers to a 'modality-specific latent branch z^(m) after graph refinement', which could imply per-modality branches inside the encoder. The paper does not describe such a branching mechanism, so this implementation applies both projection heads to the single shared Z instead of inventing an unstated branch structure. This is a code-level design choice, documented in the module docstring, not an SIR-derived architectural claim.",
+        "suggested_fix": "If the original authors' code becomes available, check whether the encoder maintains separate per-modality residual branches prior to the final Z, and route each projection head to its own branch if so."
+      }
+    ],
+    "parametric": [
+      {
+        "hyperparameter": "training.recon_loss",
+        "assumed_value": "huber (delta=1.0)",
+        "severity": "Significant",
+        "evidence": "SIR ambiguities[0], confidence 0.6: main-text Eq. 6 specifies squared-error reconstruction, but Appendix H states Huber loss is actually used. This directly affects reconstruction-loss scale and gradient behavior, and could not be fully disambiguated from the paper text alone.",
+        "suggested_fix": "Re-run with training.recon_loss: mse and compare; contact authors to confirm which was used for Table 2."
+      },
+      {
+        "hyperparameter": "model.projection_head.aligned_modality_pair",
+        "assumed_value": "[0, 1] (Visium RNA, spatial ATAC)",
+        "severity": "Minor",
+        "evidence": "SIR ambiguities[1], confidence 0.55: Eq. 7-8 are written generically for arbitrary modality pairs, but Appendix H names only one pair. Using only one pair likely under-utilizes the alignment objective relative to what an all-pairs formulation would provide, especially at M3-M5 where more modalities are active.",
+        "suggested_fix": "Try aligning all C(5,2)=10 modality pairs and summing the NCE loss; compare downstream ARI/NMI trend across M1-M5."
+      },
+      {
+        "hyperparameter": "data.edge_weight_mode",
+        "assumed_value": "uniform (unweighted kNN graph)",
+        "severity": "Minor",
+        "evidence": "SIR ambiguities[2], confidence 0.5: Eq. 3's Gaussian kernel sigma is never given numerically, so this repro defaults to unweighted edges. Uniform vs. Gaussian weighting changes how strongly the spatial-smoothness loss penalizes distant same-neighborhood spots.",
+        "suggested_fix": "Sweep data.edge_weight_mode: gaussian with a few sigma values (e.g. median-distance heuristic already implemented) and compare spatial_contiguity trend."
+      },
+      {
+        "hyperparameter": "training.beta1 / training.beta2 (AdamW)",
+        "assumed_value": "0.9 / 0.999 (PyTorch defaults)",
+        "severity": "Minor",
+        "evidence": "SIR implementation_assumptions[0], confidence 0.6: not stated in the paper.",
+        "suggested_fix": "Low priority; AdamW is generally insensitive to beta choice at this scale, unlikely to explain the observed deviation magnitude."
+      }
+    ],
+    "omission": [
+      {
+        "missing_component": "SARSIM-derived Leiden target cluster count K",
+        "sir_location": "Appendix H 'Downstream analysis'; SIR ambiguities[4]",
+        "severity": "Minor",
+        "suggested_fix": "Not a code omission -- evaluate.py substitutes an independent Leiden/KMeans resolution sweep with silhouette-based K selection, since SARSIM's clustering metadata is not published. This substitution could shift ARI/NMI somewhat if the paper's true K differs meaningfully from the swept value."
+      }
+    ]
+  },
+  "verification_log": {
+    "comparison_timestamp": "2026-07-22T09:00:00Z",
+    "sir_version_used": 1,
+    "architecture_plan_version": 1,
+    "paper_metrics_total": 5,
+    "user_results_total": 30,
+    "matched_pairs": 4,
+    "user_config_modifications": [
+      "data.num_synthetic_samples: 11 -> 4",
+      "data.spots_per_sample: 4992 -> 800",
+      "training.num_epochs: 100 -> 25 (ran to completion, no early stop triggered)",
+      "training.early_stopping_patience: 20 -> 6",
+      "Dataset itself is SYNTHETIC throughout (paper's private cohort unavailable) -- this is the dominant, unavoidable modification."
+    ],
+    "user_results_hash": "sha256:e0507ee868ee37a3e709b622808364275bd002202397f733555f957792286c84",
+    "requires_manual_review": true,
+    "review_reasons": [
+      "Comparison is against a synthetic dataset, not the paper's private cohort -- deviations reflect data mismatch far more than implementation correctness.",
+      "Config was substantially scaled down (4 vs 11 samples, 800 vs 4992 spots, 25 vs 100 epochs) for sandbox runtime; not a full-scale run.",
+      "MUS is unmatched: paper's MUS is normalized jointly across baselines + the M1-M5 ladder on the real cohort; this repro's MUS is normalized only across its own M1-M5 synthetic rows, so the two numbers are not on the same scale."
+    ]
+  }
+}

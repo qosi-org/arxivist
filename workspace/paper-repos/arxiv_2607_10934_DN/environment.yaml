@@ -1,0 +1,14 @@
+name: kyle-liquidity
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=1.26.*
+  - scipy=1.13.*
+  - matplotlib=3.8.*
+  - pyyaml=6.0.*
+  - pip
+  - pip:
+      - pytest==8.2.0
+      - black==24.4.0
+      - mypy==1.10.0

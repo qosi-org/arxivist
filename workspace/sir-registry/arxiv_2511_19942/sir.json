@@ -1,0 +1,274 @@
+{
+  "paper_id": "arxiv_2511_19942",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Differential Smoothing Mitigates Sharpening and Improves LLM Reasoning",
+    "authors": ["Jingchu Gai", "Guanning Zeng", "Huaqing Zhang", "Aditi Raghunathan"],
+    "affiliations": [],
+    "arxiv_id": "2511.19942",
+    "doi": null,
+    "submission_date": "2025-11-25",
+    "abstract": "The paper addresses diversity collapse in RL fine-tuning of LLMs, proving formally why it occurs (a selection and reinforcement bias), and proposes differential smoothing, a reward-shaping method that provably improves both correctness and diversity, outperforming vanilla RL and entropy-based heuristics.",
+    "domain": "RL",
+    "key_claims": [
+      "RL fine-tuning of LLMs (e.g. GRPO) exhibits diversity collapse ('sharpening') due to a formally provable selection and reinforcement bias",
+      "Differential smoothing (reward-shaping using the base model's own log-probability) provably improves both correctness (Pass@1) and diversity (Pass@K) simultaneously",
+      "DS-GRPO outperforms vanilla GRPO, entropy bonus/penalty heuristics, GR-PKPO, Unlikeliness Reward, and CISPO baselines",
+      "On Countdown, DS-GRPO improves Pass@K by ~4% across all K and yields a 4x inference speedup (Pass@64 of vanilla matched at k=16)",
+      "On math reasoning (5 benchmarks, 3 model sizes 1.5B-8B), DS-GRPO improves Pass@1 by 0.2-2.9% and Pass@64/AIME24 by up to 6.7%"
+    ],
+    "parsed_at": "2026-07-17T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "DS-GRPO (Differential Smoothing applied to GRPO) on Qwen2.5-3B-Instruct (Countdown task)",
+    "modules": [
+      {
+        "name": "policy_model",
+        "operation_type": "pretrained_causal_lm",
+        "input_shape": "[B, T] token ids",
+        "output_shape": "[B, T, V] logits",
+        "parameters": { "base_checkpoint": "Qwen2.5-3B-Instruct (Countdown) / Qwen2.5-Math-1.5B, Qwen3-1.7B, Qwen2.5-Math-7B, Mistral-8B-Instruct (math reasoning)" },
+        "paper_section": "Experimental Setup",
+        "confidence": 0.9,
+        "notes": "No custom architecture — reuses off-the-shelf pretrained/instruct-tuned LLMs unchanged; the paper's contribution is entirely in the RL objective/reward-shaping, not the network architecture."
+      },
+      {
+        "name": "reference_base_model",
+        "operation_type": "frozen_pretrained_causal_lm",
+        "input_shape": "[B, T] token ids",
+        "output_shape": "[B, T, V] logits (log-probabilities used for KL and reward shaping)",
+        "parameters": { "role": "provides pi_base(tau) used in KL term and in the differential smoothing reward" },
+        "paper_section": "Eq. 1, Eq. 4",
+        "confidence": 0.85,
+        "notes": "Ambiguity: whether pi_theta_old or pi_base is used in practice is only justified post-hoc in Appendix B.3 — flagged as an ambiguity below."
+      },
+      {
+        "name": "grpo_advantage_estimator",
+        "operation_type": "group_relative_advantage_normalization",
+        "input_shape": "[G] group rewards per prompt",
+        "output_shape": "[G] normalized advantages",
+        "parameters": {},
+        "paper_section": "Eq. 5",
+        "confidence": 0.9,
+        "notes": "Standard GRPO group-standardized advantage: (r_i - mean)/std over G sampled rollouts per prompt."
+      },
+      {
+        "name": "differential_smoothing_reward_shaper",
+        "operation_type": "conditional_reward_shaping",
+        "input_shape": "reward r_hat(tau), log pi_base(tau)",
+        "output_shape": "shaped reward r_DS(tau)",
+        "parameters": { "gamma_p": "penalizes correct trajectories by base log-prob", "gamma_n": "boosts incorrect trajectories by base log-prob" },
+        "paper_section": "Eq. 4, Eq. 6",
+        "confidence": 0.9,
+        "notes": "This is the paper's central architectural contribution: a piecewise reward/advantage modification applied differently depending on whether the trajectory is correct (r>0) or not (r<=0)."
+      }
+    ],
+    "connections": [
+      { "from": "policy_model", "to": "grpo_advantage_estimator", "tensor_name": "sampled_trajectory_rewards" },
+      { "from": "reference_base_model", "to": "differential_smoothing_reward_shaper", "tensor_name": "log_pi_base" },
+      { "from": "grpo_advantage_estimator", "to": "differential_smoothing_reward_shaper", "tensor_name": "A_i" },
+      { "from": "differential_smoothing_reward_shaper", "to": "policy_model", "tensor_name": "policy_gradient_update (A_i_DS)" }
+    ],
+    "variants": [
+      { "name": "DS-GRPO-Positive", "differences": { "description": "only the positive-trajectory (gamma_p) modification is applied; negative trajectories unmodified" } },
+      { "name": "DS-GRPO-Negative", "differences": { "description": "only the negative-trajectory (gamma_n) modification is applied; positive trajectories unmodified" } },
+      { "name": "Vanilla GRPO", "differences": { "description": "baseline with no differential smoothing (gamma_p = gamma_n = 0)" } }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Vanilla RL / KL-regularized policy objective",
+      "latex": "\\pi_{\\text{van}}(\\tau)=\\arg\\max_{\\pi}\\mathbb{E}_{\\tau\\sim\\pi}\\widehat{r}(\\tau)-\\beta\\cdot\\mathbb{D}_{\\text{KL}}(\\pi||\\pi_{\\text{base}})",
+      "role": "objective",
+      "used_in": "training",
+      "hyperparameters": ["beta_KL"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 1",
+      "confidence": 0.9
+    },
+    {
+      "name": "Solution Multiplicity",
+      "latex": "\\text{Solution Multiplicity}(\\mathcal{X})=\\frac{1}{|\\mathcal{X}|}\\sum_{x\\in\\mathcal{X}}A(x)",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": ["A(x) — number of distinct correct solutions for problem x, defined qualitatively but not with an explicit formula in the extracted text"],
+      "paper_section": "Eq. 2 / Table 1",
+      "confidence": 0.65
+    },
+    {
+      "name": "Differential Smoothing reward",
+      "latex": "r_{\\text{DS}}(\\tau)=\\begin{cases}\\widehat{r}(\\tau)-\\gamma_{p}\\cdot\\log(\\pi_{\\text{base}}(\\tau))&\\text{if }\\widehat{r}(\\tau)>0\\\\\\widehat{r}(\\tau)+\\gamma_{n}\\cdot\\log(\\pi_{\\text{base}}(\\tau))&\\text{if }\\widehat{r}(\\tau)\\leq 0\\end{cases}",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["gamma_p", "gamma_n"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 4",
+      "confidence": 0.92
+    },
+    {
+      "name": "GRPO group-standardized advantage",
+      "latex": "A_i=\\frac{r_i-\\mu(\\{r_j\\}_{j=1}^G)}{\\sigma(\\{r_j\\}_{j=1}^G)}",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["G (group size)"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 5",
+      "confidence": 0.9
+    },
+    {
+      "name": "DS-GRPO advantage modification",
+      "latex": "A_{i}^{\\text{DS}}=A_{i}+\\begin{cases}-\\gamma_{p}\\log\\pi_{\\theta_{\\text{old}}}(y_{i}|x),&\\text{if }r_{i}=1\\\\+\\gamma_{n}\\log\\pi_{\\theta_{\\text{old}}}(y_{i}|x),&\\text{otherwise}\\end{cases}",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["gamma_p", "gamma_n"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 6",
+      "confidence": 0.9
+    },
+    {
+      "name": "Correctness metric",
+      "latex": "C(\\pi)=\\sum_{\\tau\\in\\mathcal{C}}\\pi(\\tau)",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "theory section",
+      "confidence": 0.8
+    },
+    {
+      "name": "Correct-solution diversity (normalized variance)",
+      "latex": "\\sigma(\\pi)=[\\sum_{\\tau\\in\\mathcal{C}}\\pi(\\tau)^2-C(\\pi)^2]/C(\\pi)^2",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "theory section",
+      "confidence": 0.8
+    }
+  ],
+  "tensor_semantics": [
+    { "name": "input_tokens", "shape_notation": "[B, T]", "dtype": "int64", "tensor_type": "input", "module": "policy_model", "confidence": 0.8 },
+    { "name": "policy_logits", "shape_notation": "[B, T, V]", "dtype": "float32/bfloat16", "tensor_type": "output", "module": "policy_model", "confidence": 0.75 },
+    { "name": "base_logprob", "shape_notation": "[B, T]", "dtype": "float32", "tensor_type": "intermediate", "module": "reference_base_model", "confidence": 0.7 },
+    { "name": "group_rewards", "shape_notation": "[G]", "dtype": "float32", "tensor_type": "intermediate", "module": "grpo_advantage_estimator", "confidence": 0.85 },
+    { "name": "shaped_advantage", "shape_notation": "[G]", "dtype": "float32", "tensor_type": "intermediate", "module": "differential_smoothing_reward_shaper", "confidence": 0.85 }
+  ],
+  "training_pipeline": {
+    "optimizer": { "name": null, "learning_rate": null, "beta1": null, "beta2": null, "weight_decay": null, "confidence": 0.15 },
+    "lr_schedule": { "type": null, "warmup_steps": null, "total_steps": null, "confidence": 0.1 },
+    "batch_size": 32,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.35
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      { "name": "Countdown (synthetic arithmetic puzzle: reach target from 3-4 integers in [1,99], each used once)", "split": "train+eval", "size": null, "publicly_available": true },
+      { "name": "DAPO17k", "split": "train", "size": 14053, "publicly_available": true },
+      { "name": "MATH12k", "split": "train", "size": 12000, "publicly_available": true },
+      { "name": "MATH500", "split": "test", "size": 500, "publicly_available": true },
+      { "name": "OlympiadBench", "split": "test", "size": null, "publicly_available": true },
+      { "name": "AMC23", "split": "test", "size": null, "publicly_available": true },
+      { "name": "AIME24", "split": "test", "size": null, "publicly_available": true },
+      { "name": "AIME25", "split": "test", "size": null, "publicly_available": true },
+      { "name": "Knight and Knaves / Countdown-3 (Solution Multiplicity analysis)", "split": "eval (200 problems sampled)", "size": 200, "publicly_available": true }
+    ],
+    "metrics": ["Pass@1", "Pass@K", "Solution Multiplicity"],
+    "reported_results": [
+      { "metric": "Pass@K improvement over vanilla GRPO", "dataset": "Countdown", "split": "eval", "value": 4.0, "is_primary": true },
+      { "metric": "Pass@1 improvement over vanilla GRPO", "dataset": "Qwen2.5-Math-1.5B avg (5 benchmarks)", "split": "test", "value": 2.9, "is_primary": false },
+      { "metric": "Pass@64 improvement over vanilla GRPO", "dataset": "AIME24", "split": "test", "value": 6.7, "is_primary": true },
+      { "metric": "Solution Multiplicity", "dataset": "Knight and Knaves", "split": "eval", "value": 1.5, "is_primary": false },
+      { "metric": "Solution Multiplicity", "dataset": "Math", "split": "eval", "value": 3.7, "is_primary": false },
+      { "metric": "Solution Multiplicity", "dataset": "Countdown-3", "split": "eval", "value": 6.5, "is_primary": false },
+      { "metric": "Solution Multiplicity", "dataset": "Countdown", "split": "eval", "value": 15.7, "is_primary": false }
+    ],
+    "baselines": ["Vanilla GRPO (Shao et al., 2024)", "GR-PKPO (Chen et al., 2025c)", "Unlikeliness Reward (He et al., 2025a)", "CISPO (Chen et al., 2025a)", "Global entropy bonus", "Global entropy penalty", "Rank-based penalty approaches"],
+    "compute": null,
+    "special_conditions": ["Temperature=0.7 for math reasoning generation", "High clip ratio 0.25 / Low clip ratio 0.20 (asymmetric PPO-style clipping)", "Trained 'until reward saturates' rather than a fixed step count"],
+    "confidence": 0.55
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Optimizer is AdamW with a small constant or lightly-warmed-up learning rate typical of RLHF/GRPO fine-tuning (commonly ~1e-6 to 5e-6 for LLM policy fine-tuning)",
+      "basis": "literature default — not stated in paper; AdamW + small LR is near-universal for LLM RL fine-tuning (GRPO/PPO) in the DeepSeek-Math/DAPO lineage this paper builds on",
+      "confidence": 0.5,
+      "alternatives": ["AdamW at 5e-7", "AdamW at 1e-5", "RMSProp (unlikely)"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "GRPO clip epsilon = 0.2 (standard PPO-style default), matching DAPO's asymmetric clipping described in the paper (high=0.25 / low=0.20 for math tasks)",
+      "basis": "paper explicitly gives high/low clip ratios for math tasks (0.25/0.20) but not for Countdown; assumed same values apply to Countdown by default",
+      "confidence": 0.55,
+      "alternatives": ["symmetric epsilon=0.2 for both tasks", "different clip values specific to Countdown, unreported"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "beta_KL (KL regularization coefficient) is a small positive value in the same range as forward-KL GRPO implementations (~0.001-0.04); paper studies sensitivity across a range but does not give a single default for main-text experiments",
+      "basis": "common practice + paper's own stability ablation implies beta_KL was varied but a canonical default must be assumed for the main reported numbers",
+      "confidence": 0.4,
+      "alternatives": ["beta_KL=0.001", "beta_KL=0.01", "beta_KL=0.04"],
+      "affects_section": "mathematical_spec"
+    },
+    {
+      "assumption": "gamma_p=0.03 and gamma_n=0.01 (given explicitly for Countdown/Qwen2.5-3B-Instruct) are assumed as the starting values to try first for a scaled-down reproduction, even on a different/smaller base model",
+      "basis": "explicitly stated in paper for the Countdown setup; math-task coefficient ranges were not given",
+      "confidence": 0.7,
+      "alternatives": ["re-tune via small grid search if reproduction shows no effect"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Number of training steps/rollouts is determined empirically ('until reward saturates') rather than fixed; for a scaled-down free-Colab reproduction, a much smaller fixed step budget will be substituted to just demonstrate the sharpening-vs-smoothing effect qualitatively, not match paper's final absolute numbers",
+      "basis": "paper does not report exact steps; Colab compute budget forces a fixed, small step count regardless",
+      "confidence": 0.3,
+      "alternatives": ["fixed step count determined by early stopping on a validation Pass@K plateau"],
+      "affects_section": "training_pipeline"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Training hyperparameters (optimizer/LR/steps), general",
+      "description": "Optimizer type, learning rate, number of training steps/epochs, warmup schedule, and gradient accumulation are not stated anywhere in the extracted text.",
+      "primary_assumption": "AdamW, small constant LR (~1e-6-5e-6), trained until a small fixed step budget is exhausted (Colab-scoped)",
+      "alternatives": ["Different optimizer/LR values reported only in an appendix not captured by this extraction pass"],
+      "confidence": 0.35
+    },
+    {
+      "location": "Eq. 1 vs Eq. 6 — reference distribution used in practice",
+      "description": "The theory uses pi_base in the KL term and reward shaping, but Appendix B.3 apparently justifies using pi_theta_old (the previous policy iterate) in practice instead of the frozen base model — the exact swap logic/justification was not captured in this extraction.",
+      "primary_assumption": "Use pi_theta_old (current policy's previous iterate) for the differential-smoothing log-prob term in the actual GRPO implementation, matching Eq. 6 notation",
+      "alternatives": ["Use the frozen pi_base throughout, matching Eq. 1/Eq. 4 notation literally"],
+      "confidence": 0.5
+    },
+    {
+      "location": "Solution Multiplicity metric A(x)",
+      "description": "Eq. 2 references a per-problem quantity A(x) (apparently 'number of distinct correct solutions found') without an explicit closed-form definition being captured in this extraction pass.",
+      "primary_assumption": "A(x) = count of distinct correct completions among K sampled rollouts for problem x",
+      "alternatives": ["A(x) could involve a semantic-equivalence dedup step not captured here"],
+      "confidence": 0.55
+    },
+    {
+      "location": "Countdown dataset construction",
+      "description": "Exact dataset size and train/test split construction for the Countdown task were not stated in the extracted text.",
+      "primary_assumption": "Use the standard, publicly available Countdown-RL dataset format (procedurally generated 3-4 integers in [1,99]) matching prior RL-reasoning papers this one builds on",
+      "alternatives": ["Paper may have used a custom-sized subset"],
+      "confidence": 0.45
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.88,
+    "mathematical_spec": 0.87,
+    "tensor_semantics": 0.7,
+    "training_pipeline": 0.35,
+    "evaluation_protocol": 0.6,
+    "implementation_assumptions": 0.5,
+    "overall_sir_confidence": 0.66
+  }
+}

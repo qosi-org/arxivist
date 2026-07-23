@@ -1,0 +1,225 @@
+{
+  "paper_id": "arxiv_1502_03167",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift",
+    "authors": ["Sergey Ioffe", "Christian Szegedy"],
+    "affiliations": ["Google Inc."],
+    "arxiv_id": "1502.03167",
+    "doi": null,
+    "submission_date": "2015-03-02",
+    "abstract": "We propose Batch Normalization, which normalizes layer inputs for each mini-batch, allowing higher learning rates, reducing dependence on initialization, and acting as a regularizer.",
+    "domain": "CV",
+    "key_claims": [
+      "BN reduces internal covariate shift by normalizing layer inputs per mini-batch",
+      "BN allows use of much higher learning rates without divergence",
+      "BN acts as a regularizer, reducing the need for Dropout",
+      "BN-x5 achieves same accuracy as Inception with 14x fewer training steps",
+      "BN-Inception ensemble achieves 4.9% top-5 validation error on ImageNet"
+    ],
+    "parsed_at": "2026-07-10T01:30:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "BN-MLP-MNIST",
+    "modules": [
+      {
+        "name": "BatchNormTransform",
+        "operation_type": "batch_normalization",
+        "input_shape": "[B, D]",
+        "output_shape": "[B, D]",
+        "parameters": { "gamma": "learnable", "beta": "learnable", "epsilon": 1e-5 },
+        "paper_section": "Section 3, Algorithm 1",
+        "confidence": 0.99,
+        "notes": "Normalizes each dimension using mini-batch mean and variance. gamma and beta learned per activation. During inference uses population statistics."
+      },
+      {
+        "name": "FullyConnectedLayer",
+        "operation_type": "linear_then_bn_then_activation",
+        "input_shape": "[B, D_in]",
+        "output_shape": "[B, D_out]",
+        "parameters": { "hidden_units": 100, "activation": "sigmoid" },
+        "paper_section": "Section 4.1",
+        "confidence": 0.95,
+        "notes": "MNIST experiment: 3 hidden layers of 100 units each with sigmoid. BN applied before nonlinearity (before g in z=g(BN(Wu)))."
+      },
+      {
+        "name": "OutputLayer",
+        "operation_type": "linear_softmax",
+        "input_shape": "[B, 100]",
+        "output_shape": "[B, 10]",
+        "parameters": { "num_classes": 10 },
+        "paper_section": "Section 4.1",
+        "confidence": 0.95,
+        "notes": "10-class softmax output with cross-entropy loss."
+      }
+    ],
+    "connections": [
+      { "from": "FullyConnectedLayer", "to": "BatchNormTransform", "tensor_name": "pre_activation" },
+      { "from": "BatchNormTransform", "to": "FullyConnectedLayer", "tensor_name": "normalized_activation" },
+      { "from": "FullyConnectedLayer", "to": "OutputLayer", "tensor_name": "final_hidden" }
+    ],
+    "variants": [
+      {
+        "name": "BN-MLP-MNIST",
+        "differences": { "layers": 3, "hidden_units": 100, "activation": "sigmoid", "dataset": "MNIST" }
+      },
+      {
+        "name": "BN-Inception-ImageNet",
+        "differences": { "architecture": "Inception", "dataset": "ImageNet", "lr_multiplier": 5 }
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "mini_batch_mean",
+      "latex": "\\mu_\\mathcal{B} \\leftarrow \\frac{1}{m} \\sum_{i=1}^{m} x_i",
+      "role": "normalization",
+      "used_in": "training",
+      "hyperparameters": ["m"],
+      "undefined_symbols": [],
+      "paper_section": "Algorithm 1",
+      "confidence": 0.99
+    },
+    {
+      "name": "mini_batch_variance",
+      "latex": "\\sigma^2_\\mathcal{B} \\leftarrow \\frac{1}{m} \\sum_{i=1}^{m} (x_i - \\mu_\\mathcal{B})^2",
+      "role": "normalization",
+      "used_in": "training",
+      "hyperparameters": ["m"],
+      "undefined_symbols": [],
+      "paper_section": "Algorithm 1",
+      "confidence": 0.99
+    },
+    {
+      "name": "normalize",
+      "latex": "\\hat{x}_i \\leftarrow \\frac{x_i - \\mu_\\mathcal{B}}{\\sqrt{\\sigma^2_\\mathcal{B} + \\epsilon}}",
+      "role": "normalization",
+      "used_in": "both",
+      "hyperparameters": ["epsilon"],
+      "undefined_symbols": [],
+      "paper_section": "Algorithm 1",
+      "confidence": 0.99
+    },
+    {
+      "name": "scale_and_shift",
+      "latex": "y_i \\leftarrow \\gamma \\hat{x}_i + \\beta \\equiv \\text{BN}_{\\gamma,\\beta}(x_i)",
+      "role": "normalization",
+      "used_in": "both",
+      "hyperparameters": ["gamma", "beta"],
+      "undefined_symbols": [],
+      "paper_section": "Algorithm 1",
+      "confidence": 0.99
+    },
+    {
+      "name": "inference_normalization",
+      "latex": "\\hat{x} = \\frac{x - \\text{E}[x]}{\\sqrt{\\text{Var}[x] + \\epsilon}}",
+      "role": "normalization",
+      "used_in": "inference",
+      "hyperparameters": ["epsilon"],
+      "undefined_symbols": [],
+      "paper_section": "Section 3.1",
+      "confidence": 0.99
+    }
+  ],
+  "tensor_semantics": [
+    { "name": "x", "shape_notation": "[B, D]", "dtype": "float32", "tensor_type": "input", "module": "BatchNormTransform", "confidence": 0.97 },
+    { "name": "x_hat", "shape_notation": "[B, D]", "dtype": "float32", "tensor_type": "intermediate", "module": "BatchNormTransform", "confidence": 0.99 },
+    { "name": "y", "shape_notation": "[B, D]", "dtype": "float32", "tensor_type": "output", "module": "BatchNormTransform", "confidence": 0.99 },
+    { "name": "mu_B", "shape_notation": "[D]", "dtype": "float32", "tensor_type": "intermediate", "module": "BatchNormTransform", "confidence": 0.99 },
+    { "name": "sigma2_B", "shape_notation": "[D]", "dtype": "float32", "tensor_type": "intermediate", "module": "BatchNormTransform", "confidence": 0.99 }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "SGD_with_momentum",
+      "learning_rate": 0.0015,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.85
+    },
+    "lr_schedule": {
+      "type": "exponential_decay",
+      "warmup_steps": null,
+      "total_steps": 50000,
+      "confidence": 0.9
+    },
+    "batch_size": 60,
+    "effective_batch_size": 60,
+    "training_steps": 50000,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.88
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      { "name": "MNIST", "split": "test", "size": 10000, "publicly_available": true },
+      { "name": "ImageNet LSVRC2012", "split": "validation", "size": 50000, "publicly_available": true }
+    ],
+    "metrics": ["accuracy", "top-5 error"],
+    "reported_results": [
+      { "metric": "top-5 error", "dataset": "ImageNet", "split": "validation", "value": 4.9, "is_primary": true },
+      { "metric": "top-1 error", "dataset": "ImageNet", "split": "validation", "value": 20.1, "is_primary": false },
+      { "metric": "training_steps_to_72pct", "dataset": "ImageNet", "split": "validation", "value": 2100000, "is_primary": false }
+    ],
+    "baselines": ["Inception (no BN)", "GoogLeNet ensemble", "Deep Image ensemble"],
+    "compute": "Large-scale distributed architecture, mini-batch size 32 for ImageNet",
+    "special_conditions": [
+      "BN applied before nonlinearity (before g in z=g(BN(Wu)))",
+      "During inference: population statistics used instead of mini-batch statistics",
+      "Moving averages used to track population mean/variance during training"
+    ],
+    "confidence": 0.92
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "epsilon=1e-5 for numerical stability",
+      "basis": "Standard default in most BN implementations; paper does not state exact value",
+      "confidence": 0.7,
+      "alternatives": ["1e-3", "1e-8"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Moving average decay=0.9 for tracking population statistics",
+      "basis": "Common default; paper describes using moving averages but does not specify decay",
+      "confidence": 0.65,
+      "alternatives": ["0.99", "0.999"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "gamma initialized to 1, beta initialized to 0",
+      "basis": "Standard initialization so BN starts as identity transform",
+      "confidence": 0.9,
+      "alternatives": [],
+      "affects_section": "architecture"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 3, Algorithm 1",
+      "description": "Exact epsilon value not stated in paper",
+      "primary_assumption": 1e-5,
+      "alternatives": [1e-3, 1e-8],
+      "confidence": 0.7
+    },
+    {
+      "location": "Section 3.1",
+      "description": "Moving average decay coefficient for inference statistics not specified",
+      "primary_assumption": 0.9,
+      "alternatives": [0.99, 0.999],
+      "confidence": 0.65
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.97,
+    "mathematical_spec": 0.99,
+    "tensor_semantics": 0.98,
+    "training_pipeline": 0.88,
+    "evaluation_protocol": 0.92,
+    "implementation_assumptions": 0.75,
+    "overall_sir_confidence": 0.91
+  }
+}

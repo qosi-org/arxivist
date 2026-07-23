@@ -1,0 +1,8 @@
+early_dropout_rate: 0.1
+early_dropout_epochs: 50
+late_dropout_rate: 0.1
+late_dropout_start: 250
+model: vit_t
+batch_size: 256
+lr: 0.001
+epochs: 300

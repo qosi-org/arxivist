@@ -1,0 +1,26 @@
+# Config for kyle_liquidity (arxiv_2607_10934)
+# There is no neural network being trained here -- this paper is a stochastic-control /
+# probability-theory paper. Sections below are kept for ArXivist schema compatibility.
+
+model:
+  n_assets: 3          # used only by the common_eigenbasis case; scalar cases ignore this
+  C: 1.0                # prior variance Sigma_0 (scalar cases) — SPD matrix built internally for common_eigenbasis
+  sigma: 1.0             # constant noise volatility for the Kyle (1985) case
+  T: 1.0
+
+training:
+  # NOTE: no training loop exists in this repo (nothing is being fit to data).
+  n_steps: 1000          # ASSUMED: time-discretization resolution for Euler-Maruyama SDE simulation.
+                         # Not specified anywhere in the paper (continuous-time throughout).
+  seed: 0
+
+data:
+  synthetic_only: true
+  note: "No dataset exists for this paper. All inputs are synthetic parameters (C, sigma, T)."
+
+evaluation:
+  closed_form_tolerance: 1.0e-3   # ASSUMED: numerical tolerance for closed-form agreement checks
+
+hardware:
+  device: cpu
+  num_workers: 0

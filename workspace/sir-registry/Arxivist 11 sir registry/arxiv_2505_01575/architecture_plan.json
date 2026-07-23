@@ -1,0 +1,351 @@
+{
+  "paper_id": "arxiv_2505_01575",
+  "plan_version": 1,
+  "created_at": "2026-07-12T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "Paper explicitly states PyTorch v3.8-era nn.Transformer implementation on an RTX 3070, and notes the model is feasible on CPU-only laptops for limited data sizes. We use PyTorch for fidelity, upgrade Python target to 3.10+, and use a plain YAML config (no Hydra/OmegaConf) since the config surface is small and paper-scoped."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/sert_asset_pricing/models/positional_encoding.py",
+      "description": "Sinusoidal positional encoding (Eq. 1-2)",
+      "sir_modules_mapped": ["SinusoidalPositionalEncoding"],
+      "classes": [
+        {"name": "SinusoidalPositionalEncoding", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "[B,T,d_model] x + PE"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/models/mlp_autoencoder.py",
+      "description": "Generic MLP autoencoder used both as (a) pre-training dimension-projection module and (b) in-block feedforward autoencoder",
+      "sir_modules_mapped": ["MLPAutoencoderPretrain", "FeedForwardAutoencoder"],
+      "classes": [
+        {"name": "MLPAutoencoder", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "[B,T,out_dim]"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/models/attention.py",
+      "description": "Masked multi-head self-attention and masked multi-head cross-attention (Eq. 3-11)",
+      "sir_modules_mapped": ["MultiHeadSelfAttentionEncoder", "CrossAttention"],
+      "classes": [
+        {"name": "CausalMask", "base_class": "object", "public_methods": [
+          {"name": "build", "signature": "build(seq_len: int, device: torch.device) -> torch.Tensor", "returns": "[T,T] additive mask"}
+        ]},
+        {"name": "MultiHeadSelfAttention", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor", "returns": "[B,T,d_model]"}
+        ]},
+        {"name": "MultiHeadCrossAttention", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, q_in: torch.Tensor, kv_in: torch.Tensor, mask: torch.Tensor) -> torch.Tensor", "returns": "[B,T,d_model]"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/models/blocks.py",
+      "description": "Encoder / decoder blocks combining attention + FFN autoencoder + Add&Norm (post-LN) or LNF (pre-LN)",
+      "sir_modules_mapped": ["AddAndLayerNorm", "MultiHeadSelfAttentionEncoder", "FeedForwardAutoencoder"],
+      "classes": [
+        {"name": "EncoderBlock", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor", "returns": "[B,T,d_model]"}
+        ]},
+        {"name": "DecoderBlock", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, y: torch.Tensor, enc_out: torch.Tensor, self_mask: torch.Tensor, cross_mask: torch.Tensor) -> torch.Tensor", "returns": "[B,T,d_model]"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/models/transformer_variants.py",
+      "description": "Top-level model classes assembling the six paper model families: PretrainedTransformer, PretrainedTransformerLNF, StandardTransformer (C_Trans benchmark), SERT, SERTLNF, EncoderOnlyTransformer (En_Trans benchmark)",
+      "sir_modules_mapped": ["InputEmbedding", "MLPAutoencoderPretrain", "OutputDenseLayer", "SERT_Encoder"],
+      "classes": [
+        {"name": "PretrainedTransformer", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor, y_shifted: torch.Tensor) -> torch.Tensor", "returns": "[B,T,1] predicted returns"}
+        ]},
+        {"name": "StandardTransformer", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor, y_shifted: torch.Tensor) -> torch.Tensor", "returns": "[B,T,1] predicted returns"}
+        ]},
+        {"name": "SERT", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "[B,T,1] predicted returns"}
+        ]},
+        {"name": "EncoderOnlyTransformer", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "[B,T,1] predicted returns"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/data/dataset.py",
+      "description": "Rolling-window panel dataset over 182 sorted-portfolio factors and 420-stock excess returns",
+      "sir_modules_mapped": [],
+      "classes": [
+        {"name": "RollingFactorDataset", "base_class": "torch.utils.data.Dataset", "public_methods": [
+          {"name": "__getitem__", "signature": "__getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]", "returns": "(X window [T,182], y window [T,420])"},
+          {"name": "__len__", "signature": "__len__(self) -> int", "returns": "number of rolling windows"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/data/transforms.py",
+      "description": "Missing-value filtering (drop factors with >40% missing) and windowing utilities",
+      "sir_modules_mapped": [],
+      "classes": [
+        {"name": "FactorPreprocessor", "base_class": "object", "public_methods": [
+          {"name": "fit_transform", "signature": "fit_transform(self, df) -> pandas.DataFrame", "returns": "filtered factor dataframe"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/training/losses.py",
+      "description": "MSE + L1 regularization loss (Section 4.1.5)",
+      "sir_modules_mapped": [],
+      "classes": [
+        {"name": "MSEWithL1", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, pred: torch.Tensor, target: torch.Tensor, model: nn.Module) -> torch.Tensor", "returns": "scalar loss"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/training/trainer.py",
+      "description": "Rolling-window trainer: 102-month train / 30-month val, Adam optimizer, early stopping, checkpointing",
+      "sir_modules_mapped": [],
+      "classes": [
+        {"name": "RollingWindowTrainer", "base_class": "object", "public_methods": [
+          {"name": "fit", "signature": "fit(self) -> dict", "returns": "training history dict"},
+          {"name": "evaluate_oos", "signature": "evaluate_oos(self, split: str) -> dict", "returns": "OOS R2/MSE per stock"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/evaluation/metrics.py",
+      "description": "OOS R2 (Campbell-Thompson denominator), MSE, alpha regression, Diebold-Mariano HAC test",
+      "sir_modules_mapped": [],
+      "classes": [
+        {"name": "OOSMetrics", "base_class": "object", "public_methods": [
+          {"name": "oos_r2", "signature": "oos_r2(y_true, y_pred, y_hist_mean) -> float", "returns": "OOS R2"},
+          {"name": "diebold_mariano_hac", "signature": "diebold_mariano_hac(errors_a, errors_b, lags: int) -> tuple[float,float]", "returns": "(DM stat, p-value)"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/evaluation/backtest.py",
+      "description": "Sign-signal (trend-following) and softmax-filtered backtests, equal- and value-weighted, static/dynamic transaction costs, Sharpe/Sortino/MDD",
+      "sir_modules_mapped": [],
+      "classes": [
+        {"name": "Backtester", "base_class": "object", "public_methods": [
+          {"name": "run", "signature": "run(self, preds, actuals, weighting: str, tc_mode: str) -> dict", "returns": "performance dict (AR, Sharpe, Sortino, MDD)"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/sert_asset_pricing/utils/config.py",
+      "description": "YAML config loading, seeding utility (Python/NumPy/PyTorch), device selection",
+      "sir_modules_mapped": [],
+      "classes": [
+        {"name": "ConfigLoader", "base_class": "object", "public_methods": [
+          {"name": "load", "signature": "load(path: str) -> dict", "returns": "parsed & validated config dict"}
+        ]}
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "PretrainedTransformer forward pass",
+      "input": {"name": "X_raw", "shape": "[B, T, 182]", "dtype": "float32"},
+      "output": {"name": "y_hat", "shape": "[B, T, 1]", "dtype": "float32"},
+      "steps": [
+        "X_proj = MLPAutoencoder(X_raw)          -> [B, T, 420]   (pre-training dimension projection)",
+        "X_embed = InputEmbedding(X_proj)         -> [B, T, d_model]  (linear embedding, d_model=420)",
+        "X' = X_embed + SinusoidalPE               -> [B, T, d_model]",
+        "enc_out = EncoderBlock(X')  (N*=1)         -> [B, T, d_model]  (causal masked self-attn + FFN autoencoder + Add&Norm)",
+        "Y_embed = OutputEmbedding(y_shifted) + PE  -> [B, T, d_model]",
+        "dec_out = DecoderBlock(Y_embed, enc_out)   -> [B, T, d_model]  (self-attn + cross-attn + FFN autoencoder + Add&Norm)",
+        "y_hat = OutputDenseLayer(dec_out)          -> [B, T, 1]"
+      ]
+    },
+    {
+      "name": "SERT forward pass (encoder-only)",
+      "input": {"name": "X_raw", "shape": "[B, T, 182]", "dtype": "float32"},
+      "output": {"name": "y_hat", "shape": "[B, T, 1]", "dtype": "float32"},
+      "steps": [
+        "X_proj = MLPAutoencoder(X_raw)          -> [B, T, 420]",
+        "X_embed = InputEmbedding(X_proj)         -> [B, T, d_model]",
+        "X' = X_embed + SinusoidalPE               -> [B, T, d_model]",
+        "enc_out = EncoderBlock(X')  (N*=1, causal self-attn) -> [B, T, d_model]",
+        "y_hat = OutputDenseLayer(enc_out)          -> [B, T, 1]  (linear, no decoder/cross-attn)"
+      ]
+    },
+    {
+      "name": "Standard Transformer benchmark (C_Trans / En_Trans, no pretraining)",
+      "input": {"name": "X_raw", "shape": "[B, T, 182]", "dtype": "float32"},
+      "output": {"name": "y_hat", "shape": "[B, T, 1]", "dtype": "float32"},
+      "steps": [
+        "X_embed = InputEmbedding(X_raw)          -> [B, T, d_model]  (no MLP pre-training module)",
+        "X' = X_embed + SinusoidalPE               -> [B, T, d_model]",
+        "enc_out = EncoderBlock(X')                 -> [B, T, d_model]",
+        "[C_Trans only] dec_out = DecoderBlock(Y_embed, enc_out) -> [B, T, d_model]",
+        "y_hat = OutputDenseLayer(enc_out or dec_out) -> [B, T, 1]"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "family": "pretrained_transformer",
+      "d_model": 420,
+      "input_factor_dim": 182,
+      "num_heads": 3,
+      "num_blocks": 1,
+      "ffn_hidden_ratio": 0.7,
+      "ffn_hidden_ratio_lnf": 0.2,
+      "layer_norm_first": false,
+      "use_pretrain_module": true,
+      "activation": "relu  # ASSUMED: not explicitly named in paper, confidence 0.6",
+      "dropout": 0.1
+    },
+    "training": {
+      "optimizer": "adam",
+      "learning_rate": 0.001,
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "epsilon": 1.0e-08,
+      "l1_lambda": 1.0e-05,
+      "max_epochs": 200,
+      "early_stopping_patience": 10,
+      "train_window": 102,
+      "val_window": 30,
+      "step_size": 12,
+      "seed": 42,
+      "batch_size": "full_cross_section  # ASSUMED: not specified, confidence 0.5"
+    },
+    "data": {
+      "factors_path": "data/raw/factors_182.csv",
+      "returns_path": "data/raw/excess_returns_420stocks.csv",
+      "missing_value_threshold": 0.4,
+      "num_stocks": 420,
+      "start_date": "1957-01-01",
+      "end_date": "2022-12-31",
+      "oos_periods": {
+        "1911": ["2013-01-01", "2019-11-30"],
+        "2112": ["2013-01-01", "2021-12-31"],
+        "2212": ["2013-01-01", "2022-12-31"]
+      }
+    },
+    "evaluation": {
+      "transaction_cost_static_bps": 50,
+      "transaction_cost_dynamic_bps": 20,
+      "softmax_filter_pct": 0.5,
+      "weighting_schemes": ["equal", "value"],
+      "dm_test_lags_hac": 12
+    },
+    "hardware": {
+      "device": "cuda_if_available_else_cpu",
+      "precision": "float32",
+      "num_workers": 2
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": ">=2.1,<3.0", "reason": "core Transformer implementation (paper uses nn.Transformer building blocks)"},
+      {"package": "numpy", "version": ">=1.24", "reason": "numerical arrays, gradient/metric computation"},
+      {"package": "pandas", "version": ">=2.0", "reason": "panel factor/return data handling, rolling windows"},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "config file loading"},
+      {"package": "scikit-learn", "version": ">=1.3", "reason": "regression utilities for alpha estimation"},
+      {"package": "statsmodels", "version": ">=0.14", "reason": "HAC-robust Diebold-Mariano test, Newey-West standard errors"},
+      {"package": "matplotlib", "version": ">=3.7", "reason": "backtesting plots, OOS distribution plots"},
+      {"package": "seaborn", "version": ">=0.12", "reason": "distribution/histogram plots matching paper Fig. 9-12"},
+      {"package": "tqdm", "version": ">=4.65", "reason": "training/backtest progress bars"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=7.4"},
+      {"package": "black", "version": ">=23.0"},
+      {"package": "ruff", "version": ">=0.1"},
+      {"package": "jupyter", "version": ">=1.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Train a specified model variant over the rolling-window scheme",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "path to config YAML"},
+        {"flag": "--resume", "type": "str", "required": false, "default": null, "help": "checkpoint path to resume from"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "random seed override"},
+        {"flag": "--debug", "type": "flag", "required": false, "default": false, "help": "reduced data/steps for quick local testing"},
+        {"flag": "--dry-run", "type": "flag", "required": false, "default": false, "help": "build components without training"}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Compute OOS R2/MSE, alpha, and DM-test statistics for a trained model against benchmarks",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "path to config YAML"},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "path to trained checkpoint"},
+        {"flag": "--period", "type": "str", "required": false, "default": "2212", "help": "OOS period id: 1911 | 2112 | 2212"}
+      ]
+    },
+    {
+      "filename": "backtest.py",
+      "purpose": "Run sign-signal / softmax-filtered backtests (equal- & value-weighted, static/dynamic transaction cost) and reproduce Sharpe/Sortino/MDD tables",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "path to config YAML"},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "path to trained checkpoint"},
+        {"flag": "--weighting", "type": "str", "required": false, "default": "equal", "help": "equal | value"},
+        {"flag": "--tc-mode", "type": "str", "required": false, "default": "static", "help": "static | dynamic"},
+        {"flag": "--softmax-filter", "type": "flag", "required": false, "default": false, "help": "apply softmax trading-signal filter"}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Single-window inference producing next-period predicted excess returns for all stocks",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "path to config YAML"},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "path to trained checkpoint"},
+        {"flag": "--input-window", "type": "str", "required": true, "default": null, "help": "path to a single 102-month factor window CSV"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.2.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "Exact identity of the 420 large-cap U.S. stocks and the precise 182 sorted-portfolio factor construction (from Andrew Y.; Zimmermann 2020) are not enumerated in the paper text, making bit-for-bit numerical reproduction of reported R2/backtest tables impossible without the original private dataset.",
+      "source": "SIR ambiguities[2]",
+      "mitigation": "Provide a data/download.py + data/README_data.md that documents the exact public source (Open Source Asset Pricing / Zimmermann factor library + CRSP for large-cap universe) and lets users plug in their own extract; ship synthetic data generators for notebook demos."
+    },
+    {
+      "severity": "Medium",
+      "description": "L1 regularization coefficient and MLP-autoencoder pretraining-module internal architecture (hidden layer count/width) are not numerically specified.",
+      "source": "SIR ambiguities[0,1]",
+      "mitigation": "Expose l1_lambda and pretrain autoencoder hidden-dim ratio as config-tunable hyperparameters with ASSUMED comments; default to single hidden layer at 70% latent ratio consistent with main-body FFN convention."
+    },
+    {
+      "severity": "Medium",
+      "description": "No explicit LR schedule, batch size, or total epoch count is given; training_pipeline SIR confidence is only 0.55.",
+      "source": "SIR confidence_annotations.training_pipeline",
+      "mitigation": "Use literature-standard constant Adam LR=0.001 with early stopping (patience config-tunable) and full-cross-section batching, clearly marked ASSUMED in config.yaml comments."
+    },
+    {
+      "severity": "Low",
+      "description": "5-head variant (H5) is absent from all reported tables for both SERT and Pre-trained Transformer groups with no explanation.",
+      "source": "SIR ambiguities[3]",
+      "mitigation": "Model config supports arbitrary num_heads; head-sweep script defaults to the paper's exact set {1,2,3,4,6,7} but documents that 5 was skipped by the original authors."
+    },
+    {
+      "severity": "Low",
+      "description": "Diebold-Mariano HAC lag length is not explicitly given.",
+      "source": "SIR mathematical_spec (implicit)",
+      "mitigation": "Default HAC lag to 12 (one year, matching monthly rebalancing) as a config-tunable parameter in evaluation.dm_test_lags_hac."
+    }
+  ]
+}

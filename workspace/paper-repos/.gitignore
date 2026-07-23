@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.env
+checkpoints/*.pt
+checkpoints/*.pth
+checkpoints/*.ckpt
+data/raw/
+data/processed/
+results/*.csv
+results/*.json
+*.log
+.DS_Store
+wandb/
+lightning_logs/

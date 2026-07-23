@@ -1,0 +1,110 @@
+{
+  "paper_id": "arxiv_2607_10934",
+  "comparison_date": "2026-07-15T18:38:54Z",
+  "arxivist_sir_version": 1,
+  "reproducibility_score": 0.8703,
+  "score_confidence": "medium",
+  "metric_comparisons": [
+    {
+      "metric": "terminal_covariance_identity (eq. 4.6)",
+      "dataset": "kyle1985 (synthetic, C=1.0, sigma=1.0, T=1.0)",
+      "split": "n/a",
+      "paper_value": 1.0,
+      "user_value": 0.9999979999999999,
+      "absolute_deviation": 2.0000000000575113e-06,
+      "deviation_pct": 0.00020000000000575113,
+      "direction": "below",
+      "severity": "excellent"
+    },
+    {
+      "metric": "terminal_covariance_identity (eq. 4.6)",
+      "dataset": "back_pedersen1998 (synthetic, C=1.0, sigma(t)=1+0.5sin, T=1.0)",
+      "split": "n/a",
+      "paper_value": 1.0,
+      "user_value": 0.9999982222192922,
+      "absolute_deviation": 1.7777807077568042e-06,
+      "deviation_pct": 0.00017777807077568042,
+      "direction": "below",
+      "severity": "excellent"
+    },
+    {
+      "metric": "terminal_covariance_identity, Monte Carlo mean (eq. 4.6)",
+      "dataset": "collin_dufresne_fos2016 (synthetic stochastic sigma_t, 50 MC paths)",
+      "split": "n/a",
+      "paper_value": 1.0,
+      "user_value": 0.9999999191670597,
+      "absolute_deviation": 8.083294034122446e-08,
+      "deviation_pct": 8.083294034122446e-06,
+      "direction": "below",
+      "severity": "excellent"
+    },
+    {
+      "metric": "M*_0 agreement: eigenbasis-route vs direct-matrix-closed-form (Section 5.3 vs 5.6)",
+      "dataset": "common_eigenbasis_bcel2020 (synthetic, n_assets=3, random SPD C)",
+      "split": "n/a",
+      "paper_value": 1.0,
+      "user_value": 1.000000000000002,
+      "absolute_deviation": 3.3306690738754696e-16,
+      "deviation_pct": 1.9109458074267642e-13,
+      "direction": "above",
+      "severity": "excellent"
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 4,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0,
+    "unmatched": 0
+  },
+  "hallucinations": {
+    "structural": [],
+    "parametric": [
+      {
+        "hyperparameter": "n_steps (time-discretization resolution)",
+        "assumed_value": 1000,
+        "severity": "Minor",
+        "evidence": "Not specified anywhere in the paper (continuous-time throughout); terminal_price_error empirically shrinks as n_steps grows (0.13 at 100 steps -> 0.0026 at 20000 steps), consistent with an Euler-Maruyama discretization artifact rather than an implementation bug.",
+        "suggested_fix": "Increase --config training.n_steps for tighter terminal-price agreement if higher precision is needed; does not affect any of the four closed-form identity checks, which use independent fixed quadrature grids."
+      },
+      {
+        "hyperparameter": "sigma(t) functional form for back_pedersen1998, m(t)/nu for cdf2016, C/sigma eigenvalues for common_eigenbasis",
+        "assumed_value": "illustrative synthetic choices (sin-wave sigma(t); constant m=0.1, nu=0.2; random SPD C)",
+        "severity": "Minor",
+        "evidence": "The paper states these cases hold for ARBITRARY deterministic sigma(t) / m(t) / shared-eigenbasis (C, sigma); specific numeric choices are needed only to run a concrete demo and do not correspond to any paper-reported configuration (none exists, since this is a theory paper).",
+        "suggested_fix": "None needed for the paper's own claims (which are about arbitrary members of these classes); swap in any other valid (C, sigma) if project-specific numbers are needed."
+      }
+    ],
+    "omission": [
+      {
+        "missing_component": "Section 5.5 general scalar stochastic-liquidity BSDE solver",
+        "sir_location": "SIR mathematical_spec 'Stochastic maximum principle Hamiltonian (scalar stochastic liquidity)', implementation_assumptions[1]",
+        "severity": "Significant",
+        "suggested_fix": "Implement a quadratic BSDE solver (deep BSDE / Han-Jentzen-E or LSMC) for eq. (5.44)-(5.45) if this case needs to be covered; currently only Sections 5.1, 5.2, 5.4, 5.6 are implemented."
+      },
+      {
+        "missing_component": "Section 5.7 general (non-commuting) matrix FBSDE",
+        "sir_location": "SIR architecture module GeneralMatrixFBSDE_OpenProblem, ambiguities[0]",
+        "severity": "Minor",
+        "suggested_fix": "None available -- this is an open problem in the source paper itself, not an omission introduced by this pipeline. fbsde_stub.py documents this and raises NotImplementedError by design."
+      }
+    ]
+  },
+  "verification_log": {
+    "comparison_timestamp": "2026-07-15T18:38:54Z",
+    "sir_version_used": 1,
+    "architecture_plan_version": 1,
+    "paper_metrics_total": 6,
+    "user_results_total": 4,
+    "matched_pairs": 4,
+    "user_config_modifications": [],
+    "user_results_hash": "8a0e41285b4b147cb79c573e94c0f988ac6f1eb801f8588287ac7e7d4b2c5cf3",
+    "requires_manual_review": true,
+    "review_reasons": [
+      "overall_sir_confidence (0.58) is below the pipeline's 0.65 threshold",
+      "Section 5.5 and 5.7 paper claims are unmatched by design (out of scope / explicitly open problem), not because of an implementation failure",
+      "There is no independent human-run experiment to compare against -- these are self-verification checks of the generated code against the paper's own closed-form formulas, since the paper reports no numerical results table"
+    ]
+  }
+}

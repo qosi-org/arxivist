@@ -1,0 +1,22 @@
+{
+  "paper_id": "arxiv_2511_19942",
+  "title": "Differential Smoothing Mitigates Sharpening and Improves LLM Reasoning",
+  "authors": ["Jingchu Gai", "Guanning Zeng", "Huaqing Zhang", "Aditi Raghunathan"],
+  "domain": "RL",
+  "arxiv_id": "2511.19942",
+  "version": 1,
+  "created_at": "2026-07-17T00:00:00Z",
+  "last_updated": "2026-07-17T00:00:00Z",
+  "sir_confidence": 0.66,
+  "stages_with_data": [1],
+  "has_comparison_report": false,
+  "repo_path": "paper-repos/arxiv_2511_19942/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-17T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    }
+  ]
+}

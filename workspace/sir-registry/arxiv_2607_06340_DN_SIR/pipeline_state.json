@@ -1,0 +1,77 @@
+{
+  "paper_id": "arxiv_2607_06340",
+  "paper_title": "Signature-based identification of volatility models from path geometry",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "stage_timestamps": {
+    "1": "2026-07-12T00:00:00Z",
+    "2": "2026-07-12T00:00:00Z",
+    "3": "2026-07-12T00:00:00Z",
+    "4": "2026-07-12T00:00:00Z",
+    "5": "2026-07-12T00:00:00Z",
+    "6": "2026-07-13T00:00:00Z"
+  },
+  "stage_confidence": {
+    "1": 0.82,
+    "2": 1.0,
+    "3": null,
+    "4": null,
+    "5": null,
+    "6": null
+  },
+  "sir_path": "sir-registry/arxiv_2607_06340/sir.json",
+  "repo_path": "paper-repos/arxiv_2607_06340/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2607_06340/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2607_06340/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2607_06340/notebooks/reproduction_walkthrough.ipynb",
+    "comparison_report": "paper-repos/arxiv_2607_06340/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": {
+    "heston_ou_correlation_rho": 0.3,
+    "heston_discretization_scheme": 0.45,
+    "gpu_signature_implementation": 0.5,
+    "neural_network_baseline_hparams": 0.4,
+    "section_6_8_nu_comparability": 0.4
+  },
+  "human_review_required": true,
+  "human_review_reasons": [
+    "architecture_plan.json flags a High-severity risk: rough Bergomi simulation uses a Cholesky fBM substitute for the paper GPU hybrid scheme",
+    "A real bug was found and fixed during testing: passing objective/num_class explicitly to XGBClassifier caused .predict() to return probabilities instead of labels in xgboost 3.3.0",
+    "A second bug was found and fixed: 6.8_low_nu / 6.8_high_nu experiments were not applying the heston_ou_shared_dist kappa/theta sharing before nu override, silently ignoring the override",
+    "Open, unresolved item: 6.8_low_nu does not currently reproduce the papers direction (expected higher Heston/OU confusion at low nu; observed lower). Flagged honestly in README and notebook rather than presented as fixed.",
+    "Stage 6 comparison (2026-07-13): reproducibility score 0.38 (low confidence). New finding: OU per-class accuracy collapsed to 53.75% vs papers 100% at demo scale, disproportionate to other classes -- flagged for a larger-scale rerun to confirm sample-size hypothesis."
+  ],
+  "loop_count": 1,
+  "retry_history": [
+    {
+      "stage": 4,
+      "retry_at": "2026-07-12T00:00:00Z",
+      "reason": "XGBClassifier objective/num_class bug found via unit test failure",
+      "outcome": "success"
+    },
+    {
+      "stage": 4,
+      "retry_at": "2026-07-12T00:00:00Z",
+      "reason": "6.8 nu-override elif-chain bug found via notebook execution (wrong direction result)",
+      "outcome": "success"
+    },
+    {
+      "stage": 4,
+      "retry_at": "2026-07-12T00:00:00Z",
+      "reason": "6.8_low_nu magnitude/direction still does not match paper after fix; root cause identified as an unresolved SIR ambiguity (comparable-ranges calibration), not a code bug",
+      "outcome": "escalated"
+    }
+  ],
+  "created_at": "2026-07-12T00:00:00Z",
+  "last_updated": "2026-07-13T00:00:00Z",
+  "pipeline_complete": true
+}

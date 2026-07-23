@@ -1,0 +1,26 @@
+{
+  "paper_id": "arxiv_1406_2661",
+  "reproducibility_score": 0.18,
+  "score_confidence": "low",
+  "classification": "Poor",
+  "per_metric": [
+    {
+      "metric": "Parzen log-likelihood",
+      "dataset": "MNIST",
+      "paper_value": 225,
+      "user_value": -889.29,
+      "matched": true,
+      "deviation_severity": "critical"
+    },
+    {
+      "metric": "Parzen log-likelihood",
+      "dataset": "TFD",
+      "paper_value": 2057,
+      "user_value": null,
+      "matched": false,
+      "deviation_severity": "not_evaluated"
+    }
+  ],
+  "fraction_metrics_matched": 0.5,
+  "notes": "Score heavily penalized by low training budget (5 epochs vs paper's much longer schedule) and un-cross-validated Parzen sigma. Not indicative of a broken implementation — see hallucination_report.md."
+}

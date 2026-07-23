@@ -1,0 +1,384 @@
+{
+  "paper_id": "arxiv_2607_06340",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Signature-based identification of volatility models from path geometry",
+    "authors": ["Òscar Burés", "Rafael De Santiago"],
+    "affiliations": [
+      "Departament de Matemàtica Econòmica, Financera i Actuarial, Universitat de Barcelona",
+      "Department of Managerial Decision Sciences, IESE Business School"
+    ],
+    "arxiv_id": "2607.06340",
+    "doi": null,
+    "submission_date": "2026-07-08",
+    "abstract": "A signature-based framework for identifying stochastic volatility model classes from observed path data. Volatility trajectories are mapped into a feature space via truncated path signatures and classified with gradient boosting (XGBoost), distinguishing model classes without parametric calibration. The method achieves high classification accuracy across structurally distinct models and rough volatility models with closely spaced Hurst parameters, remains effective under parameter uncertainty, and the misclassification pattern between Heston and Ornstein-Uhlenbeck is analyzed in terms of the volatility-of-volatility parameter. Most discriminative information is captured by the first four signature levels.",
+    "domain": "Tabular",
+    "key_claims": [
+      "Truncated path signatures (order 4, 31 features) combined with an XGBoost classifier can distinguish Heston, Ornstein-Uhlenbeck, and rough Bergomi volatility paths with near-perfect accuracy (>99.99%) when each model class uses fixed parameters",
+      "Under random parameter sampling within each class, classification remains high: Heston vs OU vs 2 rough Bergomi classes reaches ~98.6% overall accuracy, with OU at 100% and Heston at 96.6% (confused only with OU)",
+      "Distinguishing rough Bergomi classes by Hurst parameter H alone (same model family) is harder: 4-class H-only classification reaches ~83.9-84.7% accuracy, with confusion strictly limited to adjacent H values",
+      "Order-3 and order-4 signature terms dominate feature importance (sig_27, an order-4 term, and sig_13, an order-3 term, jointly account for ~50-60% of importance); increasing truncation to order 5 gives only modest further gains",
+      "Heston vs Ornstein-Uhlenbeck confusion is driven almost entirely by the Heston volatility-of-volatility parameter nu: misclassification-as-OU falls monotonically from 70.7% (low nu tercile) to 27.0% (medium) to 8.2% (high nu tercile)",
+      "XGBoost matches or exceeds a comparable fully-connected neural network on the same signature features, while training in ~18s vs >5 minutes for the network",
+      "Classification accuracy improves with longer time horizon T (rough-volatility effects, and hence discriminative signal, are strongest at short T)",
+      "Training set size can be reduced 5x (250k to 50k paths/class) with only a modest accuracy drop (e.g. 0.8391 vs 0.8364 for the hardest 4-class rBergomi experiment)"
+    ],
+    "parsed_at": "2026-07-12T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "truncated_signature_plus_XGBoost",
+    "modules": [
+      {
+        "name": "HestonPathSimulator",
+        "operation_type": "data_generation",
+        "input_shape": null,
+        "output_shape": "[n_paths, n_steps+1]",
+        "parameters": {
+          "sde": "dS_t = S_t sqrt(v_t) dB_t, dv_t = kappa(theta - v_t) dt + nu sqrt(v_t) dW_t",
+          "fixed_params_sec5": {"X0": 0.1, "kappa": 2, "theta": 0.1, "nu": 0.2},
+          "random_params_sec6": {
+            "kappa": "U(1.0, 3.0)", "theta": "U(0.05, 0.15)",
+            "nu": "U(0.15, min(0.35, 0.95*sqrt(2*kappa*theta)))"
+          }
+        },
+        "paper_section": "3, 5, 6.1",
+        "confidence": 0.85,
+        "notes": "Only the variance process v_t is used as the 'volatility path' being classified; the price process S_t itself is not part of the classification pipeline. Discretization scheme (Euler vs Milstein/exact) not specified explicitly."
+      },
+      {
+        "name": "OrnsteinUhlenbeckPathSimulator",
+        "operation_type": "data_generation",
+        "input_shape": null,
+        "output_shape": "[n_paths, n_steps+1]",
+        "parameters": {
+          "sde": "dX_t = kappa(theta - X_t) dt + sigma dW_t",
+          "fixed_params_sec5": {"X0": 0.15, "kappa": 3, "theta": 0.15, "sigma": 0.1},
+          "random_params_sec6": {"kappa": "U(1.5, 3.5)", "theta": "U(0.10, 0.20)", "sigma": "U(0.05, 0.30)"}
+        },
+        "paper_section": "3, 5, 6.1",
+        "confidence": 0.9,
+        "notes": "Standard Gaussian OU process, exact simulation is straightforward (closed-form transition density)."
+      },
+      {
+        "name": "RoughBergomiPathSimulator",
+        "operation_type": "data_generation",
+        "input_shape": null,
+        "output_shape": "[n_paths, n_steps+1]",
+        "parameters": {
+          "formula": "v_t = xi * exp(eta * W^H_t - 0.5 * eta^2 * t^(2H))",
+          "fixed_params_sec5": {"xi": 0.08, "eta": 1.8, "H_values": [0.1, 0.3, 0.15, 0.4, 0.6, 0.05, 0.25, 0.35]},
+          "random_params_sec6": {"xi": 0.10, "eta": "U(0.8, 2.0)"},
+          "simulation_scheme": "hybrid scheme of Bennedsen, Lunde & Pakkanen (2017)"
+        },
+        "paper_section": "3, 5, 6.1",
+        "confidence": 0.85,
+        "notes": "W^H is fractional Brownian motion with Hurst parameter H. The paper explicitly reuses the SAME realizations of the driving noise (eta draws / underlying fBM increments) across different H-valued rBergomi classes so that classes differ only through H, not through incidental parameter draws -- this is an important, easy-to-miss experimental control (Section 6.1)."
+      },
+      {
+        "name": "TruncatedSignatureComputer",
+        "operation_type": "feature_extraction",
+        "input_shape": "[n_paths, n_steps+1] (time-augmented to 2 channels: time, path value)",
+        "output_shape": "[n_paths, d_N] where d_N = sum_{k=0}^{N} 2^k",
+        "parameters": {
+          "truncation_order_default": 4,
+          "truncation_orders_tested": [3, 4, 5],
+          "d_N_by_order": {"3": 15, "4": 31, "5": 63},
+          "path_augmentation": "time-augmented: X_hat_t = (t, X_t)",
+          "discretization_steps": 100,
+          "time_horizon_default": 0.1,
+          "time_horizons_tested": [0.1, 0.2, 0.4]
+        },
+        "paper_section": "2, 3 (equation for vec(S(X)<=N))",
+        "confidence": 0.85,
+        "notes": "Implementation based on 'a vectorized adaptation of the implementation by Peter Foster' (github.com/pafoster/path_signatures_introduction), modified for GPU execution. The paper does not give the exact GPU vectorization code; standard practice is to use an off-the-shelf signature package (e.g. iisignature or signatory) computing the log-signature or full signature of the time-augmented, piecewise-linear-interpolated path."
+      },
+      {
+        "name": "XGBoostClassifier",
+        "operation_type": "classification_head",
+        "input_shape": "[n_paths, d_N]",
+        "output_shape": "[n_paths, n_classes]",
+        "parameters": {
+          "learning_rate": 0.05,
+          "max_depth": 6,
+          "n_estimators": 500,
+          "objective": "multi:softprob (categorical cross-entropy)",
+          "gpu_accelerated": true,
+          "no_separate_validation_set": true
+        },
+        "paper_section": "4, 4.1",
+        "confidence": 0.95,
+        "notes": "Explicit hyperparameters given in the paper text: learning rate 0.05, max depth 6, 500 estimators, GPU-accelerated XGBClassifier from the xgboost package."
+      },
+      {
+        "name": "NeuralNetworkBaseline",
+        "operation_type": "classification_head",
+        "input_shape": "[n_paths, d_N] (standardized)",
+        "output_shape": "[n_paths, n_classes]",
+        "parameters": {
+          "hidden_layers": [128, 64, 32],
+          "activation": "ReLU",
+          "regularization": ["batch_normalization", "dropout"],
+          "output_activation": "softmax",
+          "optimizer": "Adam",
+          "loss": "categorical_cross_entropy",
+          "epochs": 40,
+          "validation_split_for_early_stopping": 0.10,
+          "hyperparameter_tuning": false
+        },
+        "paper_section": "6.7",
+        "confidence": 0.75,
+        "notes": "Used only as a one-off robustness check (Experiment 6.2 comparison), not the paper's primary classifier. Dropout rate, batch size, and learning rate are not specified numerically."
+      },
+      {
+        "name": "FeatureImportanceAnalyzer",
+        "operation_type": "post_hoc_analysis",
+        "input_shape": "[n_paths, d_N] + trained XGBoost model",
+        "output_shape": "[d_N] importance scores (two variants)",
+        "parameters": {
+          "methods": ["xgboost_builtin_gain_importance", "permutation_importance (Breiman 2001)"],
+          "truncation_for_display": "90% cumulative importance"
+        },
+        "paper_section": "6.4",
+        "confidence": 0.9,
+        "notes": "Two importance measures computed and compared to check for the known bias of tree-based importance toward high-variance (typically higher-order signature) features."
+      }
+    ],
+    "connections": [
+      {"from": "HestonPathSimulator", "to": "TruncatedSignatureComputer", "tensor_name": "variance_path"},
+      {"from": "OrnsteinUhlenbeckPathSimulator", "to": "TruncatedSignatureComputer", "tensor_name": "OU_path"},
+      {"from": "RoughBergomiPathSimulator", "to": "TruncatedSignatureComputer", "tensor_name": "rBergomi_path"},
+      {"from": "TruncatedSignatureComputer", "to": "XGBoostClassifier", "tensor_name": "signature_features"},
+      {"from": "TruncatedSignatureComputer", "to": "NeuralNetworkBaseline", "tensor_name": "signature_features"},
+      {"from": "XGBoostClassifier", "to": "FeatureImportanceAnalyzer", "tensor_name": "trained_model"}
+    ],
+    "variants": [
+      {"name": "Section 5: fixed parameters per class (proof of concept)", "differences": {"parameter_sampling": "none, fixed per experiment"}},
+      {"name": "Section 6: random parameters per path (main results)", "differences": {"parameter_sampling": "uniform ranges per class, resampled per path"}},
+      {"name": "Signature order robustness (6.5)", "differences": {"truncation_order": "3 or 5 instead of 4"}},
+      {"name": "Time horizon robustness (6.6)", "differences": {"T": "0.2 or 0.4 instead of 0.1"}},
+      {"name": "Heston/OU same-distribution stress test (6.8)", "differences": {"heston_and_OU_share_kappa_theta_distributions": true}},
+      {"name": "Heston/OU nu-fixed stress test (6.8)", "differences": {"nu": "fixed low (U(0.01,0.10)) or high (0.28) instead of default range"}},
+      {"name": "Sample-size robustness (6.9)", "differences": {"n_paths_per_class": "50,000 instead of 250,000"}}
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Heston stochastic volatility model",
+      "latex": "dS_t = S_t \\sqrt{v_t}\\, dB_t, \\quad dv_t = \\kappa(\\theta - v_t)\\, dt + \\nu \\sqrt{v_t}\\, dW_t",
+      "role": "data_generating_process",
+      "used_in": "data_generation",
+      "hyperparameters": ["kappa", "theta", "nu", "correlation(B,W)"],
+      "undefined_symbols": ["correlation coefficient between B_t and W_t is not given numerically"],
+      "paper_section": "3, Eq. 3.1",
+      "confidence": 0.85
+    },
+    {
+      "name": "Ornstein-Uhlenbeck process",
+      "latex": "dX_t = \\kappa(\\theta - X_t)\\, dt + \\sigma\\, dW_t",
+      "role": "data_generating_process",
+      "used_in": "data_generation",
+      "hyperparameters": ["kappa", "theta", "sigma"],
+      "undefined_symbols": [],
+      "paper_section": "3, Eq. 3.3",
+      "confidence": 0.95
+    },
+    {
+      "name": "rough Bergomi variance process",
+      "latex": "v_t = v_0 \\exp\\left(\\eta W^H_t - \\tfrac{1}{2}\\eta^2 t^{2H}\\right)",
+      "role": "data_generating_process",
+      "used_in": "data_generation",
+      "hyperparameters": ["v0 (xi)", "eta", "H"],
+      "undefined_symbols": [],
+      "paper_section": "3, Eq. 3.2",
+      "confidence": 0.9
+    },
+    {
+      "name": "Truncated path signature (vectorized, order N)",
+      "latex": "\\mathrm{vec}(S(X)^{\\le N}_t) \\in \\mathbb{R}^{d_N}, \\quad d_N = \\sum_{k=0}^{N} d^k \\text{ (d=2 for time-augmented scalar path)}",
+      "role": "feature_map",
+      "used_in": "feature_extraction",
+      "hyperparameters": ["N (truncation order)"],
+      "undefined_symbols": [],
+      "paper_section": "2, 3",
+      "confidence": 0.9
+    },
+    {
+      "name": "Categorical cross-entropy loss",
+      "latex": "\\ell(y) = -\\sum_{k=1}^{K} \\mathbb{1}\\{y=k\\} \\log \\hat p_k",
+      "role": "objective",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "4, footnote 2",
+      "confidence": 0.95
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "raw_volatility_path",
+      "shape_notation": "[n_paths, 101]",
+      "dtype": "float64",
+      "tensor_type": "input",
+      "module": "HestonPathSimulator / OrnsteinUhlenbeckPathSimulator / RoughBergomiPathSimulator",
+      "confidence": 0.85
+    },
+    {
+      "name": "signature_features (order 4)",
+      "shape_notation": "[n_paths, 31]",
+      "dtype": "float64",
+      "tensor_type": "intermediate",
+      "module": "TruncatedSignatureComputer",
+      "confidence": 0.9
+    },
+    {
+      "name": "class_probabilities",
+      "shape_notation": "[n_paths, n_classes]",
+      "dtype": "float32",
+      "tensor_type": "output",
+      "module": "XGBoostClassifier",
+      "confidence": 0.95
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "XGBoost gradient boosting (not SGD-based); Adam only for the NN robustness-check baseline",
+      "learning_rate": 0.05,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.9
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.9
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": 500,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.85,
+    "notes": "'training_steps'=500 refers to XGBoost's n_estimators (boosting rounds), not SGD steps. Dataset: 250,000 simulated paths per model class (1,000,000 total across the 4-class experiments), with 50,000 paths per class reserved for out-of-sample test evaluation. No separate validation set is used for XGBoost (regularization is relied upon instead); the NN baseline in Sec 6.7 uses a 10% validation split for early stopping only."
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "Simulated Heston/OU/rBergomi paths (fixed params, Sec 5)", "split": "train/test, test=50000/class", "size": 250000, "publicly_available": false},
+      {"name": "Simulated Heston/OU/rBergomi paths (random params, Sec 6)", "split": "train/test, test=50000/class", "size": 250000, "publicly_available": false}
+    ],
+    "metrics": ["overall classification accuracy", "per-class confusion matrix (counts in Sec 5, percentages in Sec 6)", "XGBoost built-in (gain) feature importance", "permutation feature importance"],
+    "reported_results": [
+      {"metric": "accuracy", "dataset": "Exp 5.1 (Heston/OU/rB0.1/rB0.3, fixed params)", "split": "test", "value": 0.999985, "is_primary": true},
+      {"metric": "accuracy", "dataset": "Exp 5.2 (Heston/rB0.15/rB0.4/rB0.6, fixed params)", "split": "test", "value": 0.9999, "is_primary": true},
+      {"metric": "accuracy", "dataset": "Exp 5.3 (4x rBergomi H=0.05/0.15/0.25/0.35, fixed params)", "split": "test", "value": 0.9983, "is_primary": true},
+      {"metric": "accuracy", "dataset": "Exp 5.3 (train)", "split": "train", "value": 0.9996, "is_primary": false},
+      {"metric": "accuracy", "dataset": "Exp 6.1 (Heston/OU/rB0.1/rB0.3, random params)", "split": "test", "value": 0.9863, "is_primary": true},
+      {"metric": "accuracy", "dataset": "Exp 6.2 (Heston/rB0.1/rB0.2/rB0.3, random params, XGBoost)", "split": "test", "value": 0.8956, "is_primary": true},
+      {"metric": "accuracy", "dataset": "Exp 6.2 (same, neural network)", "split": "test", "value": null, "is_primary": false},
+      {"metric": "accuracy", "dataset": "Exp 6.3 (4x rBergomi H=0.05/0.15/0.25/0.35, random params)", "split": "test", "value": 0.8391, "is_primary": true},
+      {"metric": "accuracy", "dataset": "Exp 6.3 (train)", "split": "train", "value": 0.847, "is_primary": false},
+      {"metric": "accuracy", "dataset": "Exp 6.3 order-3 signature", "split": "test", "value": null, "is_primary": false},
+      {"metric": "accuracy", "dataset": "Exp 6.3 order-5 signature", "split": "test", "value": null, "is_primary": false},
+      {"metric": "heston_misclass_as_OU_rate", "dataset": "Exp 6.1 baseline", "split": "test", "value": 0.034, "is_primary": true},
+      {"metric": "heston_misclass_as_OU_rate", "dataset": "Exp 6.8 identical kappa/theta distributions", "split": "test", "value": 0.354, "is_primary": true},
+      {"metric": "heston_accuracy", "dataset": "Exp 6.8 identical distributions", "split": "test", "value": 0.646, "is_primary": true},
+      {"metric": "heston_misclass_as_OU_rate", "dataset": "Exp 6.8, nu~U(0.01,0.10) low", "split": "test", "value": 0.698, "is_primary": true},
+      {"metric": "heston_accuracy", "dataset": "Exp 6.8, nu=0.28 fixed high", "split": "test", "value": 0.909, "is_primary": true},
+      {"metric": "heston_misclass_as_OU_rate", "dataset": "nu tercile: low (nu<=0.1328)", "split": "test", "value": 0.707, "is_primary": true},
+      {"metric": "heston_misclass_as_OU_rate", "dataset": "nu tercile: medium (0.1328<nu<=0.2179)", "split": "test", "value": 0.270, "is_primary": true},
+      {"metric": "heston_misclass_as_OU_rate", "dataset": "nu tercile: high (nu>0.2179)", "split": "test", "value": 0.082, "is_primary": true},
+      {"metric": "accuracy", "dataset": "Exp 6.1 (50k paths/class)", "split": "test", "value": 0.9846, "is_primary": false},
+      {"metric": "accuracy", "dataset": "Exp 6.2 (50k paths/class)", "split": "test", "value": 0.8928, "is_primary": false},
+      {"metric": "accuracy", "dataset": "Exp 6.3 (50k paths/class)", "split": "test", "value": 0.8364, "is_primary": false}
+    ],
+    "baselines": ["Fully-connected neural network (128-64-32, ReLU, batch norm, dropout, Adam)", "Order-3 truncated signature", "Order-5 truncated signature"],
+    "compute": "Consumer desktop, 128GB RAM, NVIDIA RTX 3080 Ti GPU. Experiment total times range 4-16 minutes (Sec 5) and 6-16 minutes (Sec 6), dominated by signature computation (>90% of wall-clock time); XGBoost training itself is 8-24 seconds per experiment.",
+    "special_conditions": [
+      "Same fBM/eta realizations reused across rough Bergomi classes within an experiment so classes differ only through H, not through incidental parameter draws (Section 6.1)",
+      "No separate validation set for XGBoost; overfitting controlled via built-in regularization only",
+      "Confusion matrices reported as absolute counts in Section 5 (fixed params) vs percentages in Section 6 (random params)"
+    ],
+    "confidence": 0.9
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Heston/rough-Bergomi/OU path discretization uses a standard Euler-Maruyama (or, for Heston, a full-truncation/reflection scheme to keep variance non-negative) with 100 equally spaced steps over [0, T].",
+      "basis": "paper states '100 time steps' but not the exact discretization scheme for the Heston SDE (which needs a positivity-preserving scheme in practice)",
+      "confidence": 0.5,
+      "alternatives": ["Quadratic-exponential (QE) scheme of Andersen (2008)", "Full truncation Euler", "Milstein scheme"],
+      "affects_section": "architecture.HestonPathSimulator"
+    },
+    {
+      "assumption": "Correlation between the Heston Brownian motions B_t and W_t is set to a standard negative value (e.g. rho=-0.7) reflecting the leverage effect, even though only the variance path v_t (not the price S_t) is used for classification, making rho largely irrelevant to this paper's results.",
+      "basis": "rho is never given numerically and the price process S_t is not used downstream (only v_t is classified)",
+      "confidence": 0.3,
+      "alternatives": ["rho=0 (uncorrelated, since S_t is unused anyway)", "any other value -- has no effect on reported results since v_t's law does not depend on rho"],
+      "affects_section": "mathematical_spec Heston SDE"
+    },
+    {
+      "assumption": "Rough Bergomi paths are simulated via the exact hybrid scheme of Bennedsen, Lunde & Pakkanen (2017) building on McCrickerd & Pakkanen's public code, adapted to GPU (as stated), rather than a naive Cholesky/circulant-embedding fBM simulation.",
+      "basis": "explicitly stated in the paper's Implementation Details paragraph",
+      "confidence": 0.85,
+      "alternatives": ["Cholesky decomposition of the fBM covariance matrix (exact but O(n^3), impractical at this record count)", "Circulant embedding FFT method"],
+      "affects_section": "architecture.RoughBergomiPathSimulator"
+    },
+    {
+      "assumption": "Truncated path signatures are computed using a standard signature package's low-level tensor algebra (e.g. iisignature.sig or a custom GPU kernel per Peter Foster's reference code), operating on the time-augmented, piecewise-linear-interpolated path.",
+      "basis": "paper references 'a vectorized adaptation of the implementation by Peter Foster... modified for GPU execution' without giving the code",
+      "confidence": 0.6,
+      "alternatives": ["signatory (PyTorch-native, GPU-capable) library", "esig library (CPU only)", "custom hand-rolled tensor-algebra recursion"],
+      "affects_section": "architecture.TruncatedSignatureComputer"
+    },
+    {
+      "assumption": "XGBoost's objective is 'multi:softprob' with default tree_method='gpu_hist' (or the newer 'hist' + device='cuda'), num_class set to the number of model classes in each experiment (2-4 depending on experiment).",
+      "basis": "standard XGBoost multi-class setup consistent with the paper's stated GPU acceleration and categorical cross-entropy loss",
+      "confidence": 0.8,
+      "alternatives": ["multi:softmax (returns labels directly rather than probabilities)"],
+      "affects_section": "architecture.XGBoostClassifier"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 3, Heston model (Eq. 3.1)",
+      "description": "The correlation between the two driving Brownian motions B_t and W_t in the Heston model is never given numerically, though it is standard in the literature (usually negative, e.g. -0.5 to -0.9, the 'leverage effect').",
+      "primary_assumption": "rho is irrelevant to this paper's results since only v_t (not S_t) is used for classification, and v_t's marginal law does not depend on rho",
+      "alternatives": ["A specific rho value if the authors' code happens to also simulate S_t and something downstream depends on it (not evidenced in the text)"],
+      "confidence": 0.3
+    },
+    {
+      "location": "Section 4.1 / Implementation details",
+      "description": "The exact discretization/simulation scheme for the Heston variance SDE (needed to avoid negative variance in a square-root diffusion) is not specified.",
+      "primary_assumption": "A positivity-preserving scheme (e.g. full-truncation Euler or QE scheme) is used, consistent with the Feller-condition-aware sampling of nu in Section 6.1",
+      "alternatives": ["Naive Euler-Maruyama with reflection/absorption at zero"],
+      "confidence": 0.45
+    },
+    {
+      "location": "Section 4.1 / Implementation details",
+      "description": "The exact GPU-vectorized signature computation code (adapted from Peter Foster's reference implementation) is not provided; only that it is 'modified for GPU execution'.",
+      "primary_assumption": "A standard iterated-integral tensor-algebra recursion (as in Chen's identity, Section 2) implemented via batched matrix operations on GPU, equivalent in output to CPU-based packages like iisignature",
+      "alternatives": ["signatory (PyTorch) library used directly instead of custom code"],
+      "confidence": 0.5
+    },
+    {
+      "location": "Section 6.7, neural network baseline",
+      "description": "Dropout rate, batch size, and learning rate for the Adam optimizer in the neural-network robustness check are not given numerically.",
+      "primary_assumption": "Standard literature defaults: dropout ~0.2-0.3, batch size 256-512, Adam learning rate 1e-3",
+      "alternatives": ["Different values would not change the paper's qualitative conclusion (XGBoost comparable accuracy, much faster training) but could shift the exact 99.6% NN accuracy reported for Heston in Exp 6.2"],
+      "confidence": 0.4
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.83,
+    "mathematical_spec": 0.9,
+    "tensor_semantics": 0.9,
+    "training_pipeline": 0.88,
+    "evaluation_protocol": 0.9,
+    "implementation_assumptions": 0.6,
+    "overall_sir_confidence": 0.82
+  }
+}

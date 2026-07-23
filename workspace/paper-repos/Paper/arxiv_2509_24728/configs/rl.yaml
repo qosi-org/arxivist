@@ -1,0 +1,72 @@
+# RL experiment configuration — Section 5.3, Appendix I
+# Paper: "Beyond Softmax: A Natural Parameterization for Categorical Random Variables"
+
+experiment: "rl"
+parameterization: "natural"  # one of: natural, softmax
+
+catnat:
+  # K = number of discrete actions (Breakout=4, Seaquest=18 → pad to 32)
+  # TODO (RISK-01): Seaquest has 18 actions; must pad to 32 (next power of 2)
+  K: 4              # Breakout default; override for Seaquest
+  activation: "natural"
+  natural_activation_C: 0.0
+  natural_activation_A: 6.283185307
+
+env:
+  name: "BreakoutNoFrameskip-v4"   # RISK-07: NoFrameskip-v4 matches Huang et al. 2022 PPO codebase
+  frame_stack: 4                    # Explicitly stated (Appendix I.1)
+  frame_size: 84                    # Explicitly stated
+  reward_clip: 1.0                  # Explicitly stated: clip to [-1, 1]
+  grayscale: true                   # Explicitly stated
+
+model:
+  # AtariCNN backbone — explicitly stated (Appendix I.2)
+  conv1_filters: 32
+  conv1_kernel: 8
+  conv1_stride: 4
+  conv2_filters: 64
+  conv2_kernel: 4
+  conv2_stride: 2
+  conv3_filters: 64
+  conv3_kernel: 3
+  conv3_stride: 1
+  fc_hidden: 512
+  init: "orthogonal"      # Explicitly stated
+
+training:
+  algorithm: "ppo"
+  optimizer: "adam"
+  adam_epsilon: 1.0e-5            # Explicitly stated (Appendix I.5)
+  total_timesteps: 8000000        # Explicitly stated
+  lr_schedule: "linear_anneal"    # Explicitly stated
+  lr: 2.5e-4                      # ASSUMED: common PPO default; override via TPE search
+  # GAE parameters (Appendix I.3) — explicitly stated
+  gamma: 0.99
+  gae_lambda: 0.95
+  normalize_advantages: true
+  # PPO clip (Appendix I.3)
+  clip_coef: 0.1                  # ASSUMED: searched via TPE
+  ent_coef: 0.01                  # ASSUMED: searched via TPE
+  vf_coef: 0.5                    # ASSUMED: standard PPO default
+  max_grad_norm: 0.5              # ASSUMED: standard PPO default
+  num_envs: 8                     # ASSUMED: searched via TPE
+  num_steps: 128                  # ASSUMED: searched via TPE
+  num_minibatches: 4              # ASSUMED: searched via TPE
+  update_epochs: 4                # ASSUMED: searched via TPE
+  # Hyperparameter search
+  n_seeds: 10                     # Explicitly stated
+  hparam_search_trials: 160       # Explicitly stated
+  hparam_top_k: 10                # Explicitly stated
+  log_every_n_steps: 1000
+  save_every_n_steps: 100000
+
+output:
+  results_dir: "results/rl/"
+  checkpoint_dir: "checkpoints/rl/"
+  hparam_db: "results/rl/hparam_search.db"
+
+hardware:
+  device: "cuda"
+  num_workers: 0    # RL envs typically use 0 for DataLoader
+  pin_memory: true
+  deterministic: false

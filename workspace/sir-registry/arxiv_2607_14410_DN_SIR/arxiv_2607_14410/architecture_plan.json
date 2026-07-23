@@ -1,0 +1,624 @@
+{
+  "paper_id": "arxiv_2607_14410",
+  "plan_version": 1,
+  "created_at": "2026-07-21T10:10:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "Paper explicitly states PyTorch + PyTorch Geometric (TransformerConv) and that all reported training used CPU-only execution (device=cpu). No HuggingFace components are used. Plain YAML is sufficient given the modest, flat hyperparameter surface; Hydra/OmegaConf would add complexity not warranted by the paper's config needs."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/lattice/models/modality_adapters.py",
+      "description": "Per-modality linear input adapters + modality-aware fusion (mean pooling weighted by observed-modality presence).",
+      "sir_modules_mapped": [
+        "modality_input_adapters",
+        "modality_aware_fusion"
+      ],
+      "classes": [
+        {
+          "name": "ModalityInputAdapter",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {
+              "name": "forward",
+              "signature": "forward(self, x: torch.Tensor) -> torch.Tensor",
+              "returns": "[N, hidden_dim]"
+            }
+          ]
+        },
+        {
+          "name": "ModalityAwareFusion",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {
+              "name": "forward",
+              "signature": "forward(self, modality_reps: list[torch.Tensor], presence_mask: torch.Tensor) -> torch.Tensor",
+              "returns": "[N, hidden_dim]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/lattice/models/graph_encoder.py",
+      "description": "Spatial kNN graph builder + stacked TransformerConv encoder producing node embeddings Z.",
+      "sir_modules_mapped": [
+        "spatial_knn_graph_builder",
+        "transformer_conv_encoder_stack"
+      ],
+      "classes": [
+        {
+          "name": "SpatialGraphBuilder",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "build",
+              "signature": "build(self, coords: torch.Tensor) -> torch_geometric.data.Data",
+              "returns": "graph with edge_index [2,E] and optional edge_weight [E]"
+            }
+          ]
+        },
+        {
+          "name": "LatticeGraphEncoder",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {
+              "name": "forward",
+              "signature": "forward(self, x: torch.Tensor, edge_index: torch.Tensor, edge_weight: torch.Tensor | None = None) -> torch.Tensor",
+              "returns": "Z: [N, 128]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/lattice/models/decoder.py",
+      "description": "Feedforward reconstruction decoder mapping embeddings back to the full concatenated feature space.",
+      "sir_modules_mapped": [
+        "reconstruction_decoder"
+      ],
+      "classes": [
+        {
+          "name": "ReconstructionDecoder",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {
+              "name": "forward",
+              "signature": "forward(self, z: torch.Tensor) -> torch.Tensor",
+              "returns": "X_hat: [N, D]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/lattice/models/projection_heads.py",
+      "description": "Two-layer MLP projection heads used for the cross-modal NCE alignment loss.",
+      "sir_modules_mapped": [
+        "cross_modal_projection_heads"
+      ],
+      "classes": [
+        {
+          "name": "ModalityProjectionHead",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {
+              "name": "forward",
+              "signature": "forward(self, z_m: torch.Tensor) -> torch.Tensor",
+              "returns": "h: [N, 64]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/lattice/models/lattice_model.py",
+      "description": "Top-level LATTICE model wiring adapters -> fusion -> graph encoder -> decoder + projection heads.",
+      "sir_modules_mapped": [
+        "modality_input_adapters",
+        "modality_aware_fusion",
+        "transformer_conv_encoder_stack",
+        "reconstruction_decoder",
+        "cross_modal_projection_heads"
+      ],
+      "classes": [
+        {
+          "name": "LatticeModel",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {
+              "name": "forward",
+              "signature": "forward(self, modality_blocks: list[torch.Tensor], presence_mask: torch.Tensor, edge_index: torch.Tensor, edge_weight: torch.Tensor | None, mask: torch.Tensor) -> dict[str, torch.Tensor]",
+              "returns": "{'z': Z, 'x_hat': X_hat, 'h_align': (h_a, h_b)}"
+            },
+            {
+              "name": "embed",
+              "signature": "embed(self, modality_blocks: list[torch.Tensor], presence_mask: torch.Tensor, edge_index: torch.Tensor, edge_weight: torch.Tensor | None) -> torch.Tensor",
+              "returns": "Z: [N, 128], no masking (inference mode)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/lattice/data/dataset.py",
+      "description": "Spot-level multimodal dataset. Because the paper's private 11-sample melanoma cohort cannot be released (SIR ambiguity: data availability), this generates a SYNTHETIC dataset matching the described shapes (N spots, 5 modality blocks, D=5G) so the pipeline is fully runnable end-to-end.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "SyntheticSpatialMultimodalDataset",
+          "base_class": "torch.utils.data.Dataset",
+          "public_methods": [
+            {
+              "name": "__len__",
+              "signature": "__len__(self) -> int",
+              "returns": "number of samples (slides)"
+            },
+            {
+              "name": "__getitem__",
+              "signature": "__getitem__(self, idx: int) -> dict",
+              "returns": "dict with modality_blocks, coords, presence_mask"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/lattice/data/graph_utils.py",
+      "description": "Standalone kNN graph construction + optional Gaussian edge-kernel helper functions, reused by SpatialGraphBuilder.",
+      "sir_modules_mapped": [
+        "spatial_knn_graph_builder"
+      ],
+      "classes": []
+    },
+    {
+      "path": "src/lattice/training/losses.py",
+      "description": "Masked reconstruction (Huber, per Appendix H), cross-modal NCE alignment, and spatial smoothness losses; combined objective.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/lattice/training/trainer.py",
+      "description": "Training loop: builds graph, samples masks each epoch, computes combined loss, AdamW step, early stopping, checkpointing.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "LatticeTrainer",
+          "base_class": "object",
+          "public_methods": [
+            {
+              "name": "fit",
+              "signature": "fit(self, dataset, num_epochs: int) -> dict",
+              "returns": "training history dict"
+            },
+            {
+              "name": "save_checkpoint",
+              "signature": "save_checkpoint(self, path: str, epoch: int, is_best: bool = False) -> None",
+              "returns": "None"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/lattice/evaluation/metrics.py",
+      "description": "ARI, NMI, spatial contiguity, silhouette, and Multimodal Utility Score (MUS, Eq.11) computation for evaluation and Stage 6 comparison.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/lattice/utils/config.py",
+      "description": "YAML config loading/validation and global seeding (Python, NumPy, PyTorch).",
+      "sir_modules_mapped": [],
+      "classes": []
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "LatticeModel.forward (training, masked reconstruction + alignment + spatial)",
+      "input": {
+        "name": "modality_blocks[b]",
+        "shape": "[N, d_b] x 5",
+        "dtype": "float32"
+      },
+      "output": {
+        "name": "z, x_hat, h_align",
+        "shape": "z:[N,128], x_hat:[N,D], h_align:([N,64],[N,64])",
+        "dtype": "float32"
+      },
+      "steps": [
+        "for b in 1..5: adapted[b] = ModalityInputAdapter_b(modality_blocks[b]) -> [N,128]   # SIR: modality_input_adapters",
+        "fused = ModalityAwareFusion(adapted, presence_mask) -> [N,128]                     # SIR: modality_aware_fusion",
+        "Omega = sample_mask(D, ratio=0.15) -> [N,D]                                          # Eq.4, rho=0.15",
+        "x_tilde = (1-Omega) * X  (masking applied on raw concatenated X, decoder target)     # Eq.4",
+        "edge_index, edge_weight = SpatialGraphBuilder.build(coords)                          # Eq.2-3, k=6",
+        "z = LatticeGraphEncoder(fused, edge_index, edge_weight) -> [N,128]                  # Sec 3.3, 3 TransformerConv layers, 4 heads",
+        "x_hat = ReconstructionDecoder(z) -> [N,D]                                            # Eq.5",
+        "h_a = ModalityProjectionHead_a(z) -> [N,64]; h_b = ModalityProjectionHead_b(z) -> [N,64]  # Eq.7, pair=(Visium RNA, spatial ATAC)",
+        "return {'z': z, 'x_hat': x_hat, 'h_align': (h_a, h_b), 'mask': Omega}"
+      ]
+    },
+    {
+      "name": "LatticeModel.embed (inference, no masking)",
+      "input": {
+        "name": "modality_blocks[b]",
+        "shape": "[N, d_b] x 5",
+        "dtype": "float32"
+      },
+      "output": {
+        "name": "z",
+        "shape": "[N,128]",
+        "dtype": "float32"
+      },
+      "steps": [
+        "adapted, fused as above (no masking applied)",
+        "edge_index, edge_weight = SpatialGraphBuilder.build(coords)",
+        "z = LatticeGraphEncoder(fused, edge_index, edge_weight) -> [N,128]",
+        "return z"
+      ]
+    },
+    {
+      "name": "combined_training_objective",
+      "input": {
+        "name": "x, x_hat, mask, h_a, h_b, z, edge_index, edge_weight",
+        "shape": "see above",
+        "dtype": "float32"
+      },
+      "output": {
+        "name": "loss",
+        "shape": "scalar",
+        "dtype": "float32"
+      },
+      "steps": [
+        "L_rec = masked_huber_reconstruction_loss(x, x_hat, mask, delta=1.0)   # Eq.6 (main text: MSE) vs Appendix H (Huber) -- ambiguity, Huber used per assumption",
+        "L_align = nce_alignment_loss(h_a, h_b, temperature=0.1)               # Eq.8",
+        "L_spatial = spatial_smoothness_loss(z, edge_index, edge_weight)       # Eq.9 / Laplacian form Appendix I.2",
+        "L = 1.0*L_rec + 0.5*L_align + 0.1*L_spatial                          # Eq.10, lambda1=1.0, lambda2=0.5, lambda3=0.1",
+        "return L"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "hidden_dim": 128,
+      "num_modality_blocks": 5,
+      "graph_encoder": {
+        "num_layers": 3,
+        "num_heads": 4,
+        "dropout": 0.1,
+        "activation": "relu",
+        "normalization": "layer_norm"
+      },
+      "decoder": {
+        "hidden_width": 256
+      },
+      "projection_head": {
+        "output_dim": 64,
+        "hidden_width": 64,
+        "aligned_modality_pair": [
+          0,
+          1
+        ]
+      },
+      "note_low_confidence": "aligned_modality_pair ASSUMED from Appendix H (confidence 0.55, see SIR ambiguities)"
+    },
+    "training": {
+      "optimizer": "adamw",
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "beta_note": "ASSUMED: PyTorch AdamW defaults, not stated in paper (SIR confidence 0.6)",
+      "lr_schedule": "constant",
+      "lr_schedule_note": "ASSUMED: no schedule described in paper (SIR confidence 0.3)",
+      "num_epochs": 100,
+      "early_stopping_patience": 20,
+      "gradient_clip_norm": 1.0,
+      "masking_ratio": 0.15,
+      "recon_loss": "huber",
+      "recon_loss_delta": 1.0,
+      "recon_loss_note": "ASSUMED: Appendix H says Huber(delta=1.0); main-text Eq.6 says MSE -- internal paper inconsistency (SIR confidence 0.6)",
+      "alignment_temperature": 0.1,
+      "lambda_rec": 1.0,
+      "lambda_align": 0.5,
+      "lambda_spatial": 0.1,
+      "seed": 42,
+      "mixed_precision": false,
+      "device": "cpu"
+    },
+    "data": {
+      "knn_k": 6,
+      "knn_symmetrization": "union",
+      "edge_weight_mode": "uniform",
+      "edge_weight_mode_note": "ASSUMED: unweighted kNN graph; Gaussian kernel sigma never specified in paper (SIR confidence 0.5)",
+      "num_synthetic_samples": 11,
+      "spots_per_sample": 4992,
+      "gene_count_range": [
+        129,
+        322
+      ],
+      "data_source_note": "SYNTHETIC DATA \u2014 real cohort is private/unreleasable (SIR ambiguity: data availability, confidence 0.8)",
+      "val_fraction": 0.1
+    },
+    "evaluation": {
+      "metrics": [
+        "ari",
+        "nmi",
+        "spatial_contiguity",
+        "silhouette",
+        "mus"
+      ],
+      "leiden_resolution_sweep": [
+        0.1,
+        0.3,
+        0.5,
+        0.8,
+        1.0,
+        1.2,
+        1.5,
+        2.0
+      ],
+      "leiden_resolution_note": "ASSUMED: target K normally imported from companion SARSIM metadata, which is not public (SIR confidence 0.5)"
+    },
+    "hardware": {
+      "device": "cpu",
+      "num_workers": 0,
+      "precision": "float32"
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {
+        "package": "torch",
+        "version": "2.2.2",
+        "reason": "Core tensor/autograd framework; matches paper's PyTorch usage."
+      },
+      {
+        "package": "torch-geometric",
+        "version": "2.5.3",
+        "reason": "Provides TransformerConv graph layer used by the encoder."
+      },
+      {
+        "package": "numpy",
+        "version": "1.26.4",
+        "reason": "Array ops, synthetic data generation, metric computation."
+      },
+      {
+        "package": "scikit-learn",
+        "version": "1.4.2",
+        "reason": "ARI, NMI, silhouette score, kNN utilities for evaluation."
+      },
+      {
+        "package": "scipy",
+        "version": "1.13.0",
+        "reason": "Sparse graph utilities and distance computations."
+      },
+      {
+        "package": "pyyaml",
+        "version": "6.0.1",
+        "reason": "Config file loading."
+      },
+      {
+        "package": "pandas",
+        "version": "2.2.2",
+        "reason": "Tabular handling of per-sample metrics/results."
+      },
+      {
+        "package": "matplotlib",
+        "version": "3.8.4",
+        "reason": "Plotting for notebooks and evaluation reports."
+      },
+      {
+        "package": "networkx",
+        "version": "3.3",
+        "reason": "Leiden/graph community-detection support utilities."
+      },
+      {
+        "package": "python-igraph",
+        "version": "0.11.5",
+        "reason": "Backend required by leidenalg for Leiden clustering."
+      },
+      {
+        "package": "leidenalg",
+        "version": "0.10.2",
+        "reason": "Leiden community detection used for downstream spatial-domain clustering (Appendix H)."
+      },
+      {
+        "package": "tqdm",
+        "version": "4.66.4",
+        "reason": "Training progress bars."
+      }
+    ],
+    "dev": [
+      {
+        "package": "pytest",
+        "version": "8.2.0"
+      },
+      {
+        "package": "black",
+        "version": "24.4.2"
+      },
+      {
+        "package": "ruff",
+        "version": "0.4.4"
+      },
+      {
+        "package": "jupyter",
+        "version": "1.0.0"
+      },
+      {
+        "package": "nbformat",
+        "version": "5.10.4"
+      }
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Train LATTICE on the (synthetic, by default) multimodal spatial dataset.",
+      "cli_args": [
+        {
+          "flag": "--config",
+          "type": "str",
+          "required": false,
+          "default": "configs/config.yaml",
+          "help": "Path to config YAML"
+        },
+        {
+          "flag": "--resume",
+          "type": "str",
+          "required": false,
+          "default": null,
+          "help": "Checkpoint path to resume from"
+        },
+        {
+          "flag": "--seed",
+          "type": "int",
+          "required": false,
+          "default": null,
+          "help": "Override config seed"
+        },
+        {
+          "flag": "--debug",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "help": "Reduce dataset size/epochs for a quick smoke test"
+        },
+        {
+          "flag": "--dry-run",
+          "type": "bool",
+          "required": false,
+          "default": false,
+          "help": "Build all components without training"
+        }
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Compute ARI/NMI/spatial-contiguity/silhouette/MUS for a trained checkpoint across the modality ladder M1-M5.",
+      "cli_args": [
+        {
+          "flag": "--config",
+          "type": "str",
+          "required": false,
+          "default": "configs/config.yaml",
+          "help": "Path to config YAML"
+        },
+        {
+          "flag": "--checkpoint",
+          "type": "str",
+          "required": true,
+          "default": null,
+          "help": "Path to model checkpoint"
+        },
+        {
+          "flag": "--modality-level",
+          "type": "str",
+          "required": false,
+          "default": "M5",
+          "help": "One of M1..M5"
+        }
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Embed a single sample's spot-by-modality tensors into Z using a trained checkpoint.",
+      "cli_args": [
+        {
+          "flag": "--config",
+          "type": "str",
+          "required": false,
+          "default": "configs/config.yaml",
+          "help": "Path to config YAML"
+        },
+        {
+          "flag": "--checkpoint",
+          "type": "str",
+          "required": true,
+          "default": null,
+          "help": "Path to model checkpoint"
+        },
+        {
+          "flag": "--sample-index",
+          "type": "int",
+          "required": false,
+          "default": 0,
+          "help": "Which synthetic/real sample to embed"
+        },
+        {
+          "flag": "--output",
+          "type": "str",
+          "required": false,
+          "default": "results/embedding.npy",
+          "help": "Where to write the embedding"
+        }
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime",
+    "system_deps": [
+      "git",
+      "wget",
+      "build-essential"
+    ],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "The real 11-sample, 54,912-spot melanoma cohort is private and cannot be released; there is no public dataset at this exact 5-modality Visium resolution.",
+      "source": "SIR ambiguities[5] / implementation_assumptions[7]",
+      "mitigation": "Generated repo defaults to a synthetic dataset matching documented shapes (N=4992/sample, 5 blocks, D=5G, G in [129,322]) so the pipeline runs end-to-end; README clearly states that Table 2/3 numbers cannot be reproduced without the real cohort, and documents exactly how to plug in real data via data/README_data.md."
+    },
+    {
+      "severity": "Medium",
+      "description": "Reconstruction loss form is inconsistent between main text (MSE, Eq.6) and Appendix H (Huber, delta=1.0).",
+      "source": "SIR ambiguities[0]",
+      "mitigation": "Implemented Huber loss (Appendix H) as the default per the assumption, but losses.py exposes both `masked_mse_reconstruction_loss` and `masked_huber_reconstruction_loss` behind a config flag (`recon_loss: huber|mse`) so either can be selected."
+    },
+    {
+      "severity": "Medium",
+      "description": "Cross-modal alignment pair scope is ambiguous (one stated pair vs. general formula for arbitrary pairs).",
+      "source": "SIR ambiguities[1]",
+      "mitigation": "Config exposes `aligned_modality_pair: [0, 1]` (default, per Appendix H) but `nce_alignment_loss` in losses.py accepts an arbitrary list of pairs, so users can switch to all-pairs alignment by editing the config list."
+    },
+    {
+      "severity": "Low",
+      "description": "Whether spatial-loss edge weights use the optional Gaussian kernel (Eq.3, sigma unspecified) or a uniform/binary kNN adjacency is unconfirmed.",
+      "source": "SIR ambiguities[2]",
+      "mitigation": "Default `edge_weight_mode: uniform`; graph_utils.py also implements `gaussian_kernel_weights(coords, edge_index, sigma)` behind the same config flag, with sigma defaulting to the median pairwise spatial distance if enabled."
+    },
+    {
+      "severity": "Low",
+      "description": "Missing-modality handling per spot (varying multiome cell counts, Table 1) is not explicitly specified.",
+      "source": "SIR ambiguities[3] / implementation_assumptions[6]",
+      "mitigation": "ModalityAwareFusion accepts a per-spot, per-modality presence_mask and performs zero-imputation + presence-weighted mean pooling; documented as an assumption in the module docstring."
+    },
+    {
+      "severity": "Low",
+      "description": "Leiden target cluster count K normally sourced from the unpublished companion SARSIM paper's clustering metadata.",
+      "source": "SIR ambiguities[4] / implementation_assumptions[9]",
+      "mitigation": "evaluation/metrics.py performs an independent Leiden resolution sweep over the configured resolution grid and selects K via silhouette score, rather than requiring the undisclosed SARSIM K."
+    },
+    {
+      "severity": "Medium",
+      "description": "AdamW beta1/beta2 and LR schedule are not stated in the paper.",
+      "source": "SIR implementation_assumptions[0], [1]",
+      "mitigation": "Config defaults to PyTorch AdamW defaults (0.9, 0.999) and a constant LR with early stopping, both clearly marked ASSUMED in config.yaml comments."
+    },
+    {
+      "severity": "Low",
+      "description": "leidenalg / python-igraph can be non-trivial to install in some CPU-only or restricted-network environments.",
+      "source": "Architecture Planner (implementation risk, not SIR-derived)",
+      "mitigation": "requirements.txt pins known-compatible versions; README documents a conda-based fallback install path via environment.yaml if pip wheels are unavailable."
+    }
+  ]
+}

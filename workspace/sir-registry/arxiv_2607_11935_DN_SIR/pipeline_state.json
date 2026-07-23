@@ -1,0 +1,52 @@
+{
+  "paper_id": "arxiv_2607_11935",
+  "paper_title": "Eigenvector rotation precedes eigenvalue-based early-warning signals: a TVP-Kalman approach to detecting critical transitions",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "stage_timestamps": {
+    "1": "2026-07-17T18:13:16Z",
+    "2": "2026-07-17T18:13:16Z",
+    "3": "2026-07-18T14:58:41Z",
+    "4": "2026-07-18T14:58:41Z",
+    "5": "2026-07-18T14:58:41Z",
+    "6": "2026-07-18T20:06:20Z"
+  },
+  "stage_confidence": {
+    "1": 0.72,
+    "2": 1.0,
+    "3": 0.8,
+    "4": 0.85,
+    "5": 0.85,
+    "6": 0.75
+  },
+  "sir_path": "sir-registry/arxiv_2607_11935/sir.json",
+  "repo_path": "paper-repos/arxiv_2607_11935/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2607_11935/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2607_11935/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2607_11935/notebooks/reproduce_arxiv_2607_11935.ipynb",
+    "comparison_report": "paper-repos/arxiv_2607_11935/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": {
+    "architecture": 0.7,
+    "implementation_assumptions": 0.5
+  },
+  "human_review_required": true,
+  "human_review_reasons": [
+    "Stage 6: paper central orthogonality claim (beta vs AR(1)) not reproduced on synthetic-fallback data (r=-0.395, p=3.4e-11 vs paper r=+0.08, p=0.22); root cause likely synthetic data generator, requires confirmation with real AIRS data",
+    "Reproducibility score 0.01 (Critical band) -- see comparison/benchmark_comparison.md"
+  ],
+  "loop_count": 0,
+  "retry_history": [],
+  "created_at": "2026-07-17T18:13:16Z",
+  "last_updated": "2026-07-18T20:06:20Z",
+  "pipeline_complete": true
+}

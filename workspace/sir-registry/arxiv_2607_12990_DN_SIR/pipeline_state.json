@@ -1,0 +1,50 @@
+{
+  "paper_id": "arxiv_2607_12990",
+  "paper_title": "A Noise-Aware Quantum Algorithm for Credit Valuation Adjustments on Real Quantum Hardware",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "stage_timestamps": {
+    "1": "2026-07-16T08:04:52Z",
+    "2": "2026-07-16T08:04:52Z",
+    "3": "2026-07-17T05:31:47Z",
+    "4": "2026-07-17T05:31:47Z",
+    "5": "2026-07-17T05:31:47Z",
+    "6": null
+  },
+  "stage_confidence": {
+    "1": 0.76,
+    "2": 1.0,
+    "3": 0.85,
+    "4": 0.9,
+    "5": 0.9,
+    "6": null
+  },
+  "sir_path": "sir-registry/arxiv_2607_12990/sir.json",
+  "repo_path": "paper-repos/arxiv_2607_12990/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2607_12990/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2607_12990/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2607_12990/notebooks/reproduce_arxiv_2607_12990.ipynb",
+    "comparison_report": null
+  },
+  "confidence_flags": {
+    "training_pipeline": 0.5,
+    "implementation_assumptions": 0.55
+  },
+  "human_review_required": true,
+  "human_review_reasons": [
+    "Synthetic-fallback survival-curve inconsistency between continuous-MC and finite-grid CVA benchmarks discovered during a real full-scale training+evaluation run; Section 4.5 error-budget numbers unreliable until fixed (see README.md Known Issue)."
+  ],
+  "loop_count": 0,
+  "retry_history": [],
+  "created_at": "2026-07-16T08:04:52Z",
+  "last_updated": "2026-07-17T11:44:04Z",
+  "pipeline_complete": false
+}

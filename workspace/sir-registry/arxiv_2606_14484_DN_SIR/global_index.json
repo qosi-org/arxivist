@@ -1,0 +1,39 @@
+{
+  "index_version": 6,
+  "total_papers": 3,
+  "papers": [
+    {
+      "paper_id": "arxiv_2607_12990",
+      "title": "A Noise-Aware Quantum Algorithm for Credit Valuation Adjustments on Real Quantum Hardware",
+      "domain": "Other",
+      "sir_version": 1,
+      "sir_confidence": 0.76,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": false,
+      "last_updated": "2026-07-17T05:31:47Z"
+    },
+    {
+      "paper_id": "arxiv_2607_11935",
+      "title": "Eigenvector rotation precedes eigenvalue-based early-warning signals: a TVP-Kalman approach to detecting critical transitions",
+      "domain": "Other",
+      "sir_version": 1,
+      "sir_confidence": 0.72,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": true,
+      "last_updated": "2026-07-18T20:06:20Z"
+    },
+    {
+      "paper_id": "arxiv_2606_14484",
+      "title": "Quantum Horizon: An evaluation of quantum computing as a threat to Bitcoin and Ethereum",
+      "domain": "Other",
+      "sir_version": 1,
+      "sir_confidence": 0.64,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": false,
+      "last_updated": "2026-07-21T10:12:16Z"
+    }
+  ]
+}

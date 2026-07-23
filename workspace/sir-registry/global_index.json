@@ -1,13 +1,25 @@
 {
   "index_version": 1,
-  "total_papers": 5,
+  "total_papers": 6,
   "papers": [
+    {
+      "paper_id": "arxiv_2511_19942",
+      "title": "Differential Smoothing Mitigates Sharpening and Improves LLM Reasoning",
+      "domain": "RL",
+      "sir_version": 1,
+      "sir_confidence": 0.66,
+      "has_repo": true,
+      "has_notebook": false,
+      "has_comparison": false,
+      "pipeline_complete": false,
+      "last_updated": "2026-07-17T00:00:00Z"
+    },
     {
       "paper_id": "arxiv_2605_06564",
       "title": "Dynamic Treatment on Networks",
       "domain": "RL / Causal Inference / Network Science",
       "sir_version": 1,
-      "sir_confidence": 0.83,
+      "sir_confidence": 0.78,
       "has_repo": true,
       "has_notebook": true,
       "has_comparison": true,
@@ -15,11 +27,11 @@
       "last_updated": "2026-05-09T00:00:00Z"
     },
     {
-      "paper_id": "arxiv_2605_17307",
-      "title": "Deep Reinforcement Learning Framework for Diversified Portfolio Management Across Global Equity Markets",
-      "domain": "RL / Quantitative Finance / Portfolio Management",
+      "paper_id": "arxiv_2606_11859",
+      "title": "Scenario Generation for Time Series and Curves: A Comparison of Nonparametric and Semiparametric Bootstrap",
+      "domain": "Other",
       "sir_version": 1,
-      "sir_confidence": 0.88,
+      "sir_confidence": 0.78,
       "has_repo": true,
       "has_notebook": true,
       "has_comparison": false,
@@ -27,20 +39,15 @@
       "last_updated": "2026-05-24T12:20:00Z"
     },
     {
-      "paper_id": "arxiv_2306_015006",
-      "title": "DNABERT-2: Efficient Foundation Model and Benchmark For Multi-Species Genomes",
-      "domain": "Multimodal",
+      "paper_id": "arxiv_1406_2661",
+      "title": "Generative Adversarial Nets",
       "sir_version": 1,
-      "sir_confidence": 0.87,
-      "has_repo": true,
-      "has_notebook": true,
-      "has_comparison": true,
-      "last_updated": "2026-07-16T00:00:00Z"
+      "sir_confidence": 0.65,
+      "pipeline_complete": true
     },
     {
-      "paper_id": "arxiv_2306_015794",
-      "title": "HyenaDNA: Long-Range Genomic Sequence Modeling at Single Nucleotide Resolution",
-      "domain": "Multimodal",
+      "paper_id": "arxiv_1502_03167",
+      "title": "Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift",
       "sir_version": 1,
       "sir_confidence": 0.78,
       "has_repo": true,

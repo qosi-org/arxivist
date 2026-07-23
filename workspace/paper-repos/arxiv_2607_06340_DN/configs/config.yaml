@@ -1,0 +1,58 @@
+# ArXivist-generated config for arxiv_2607_06340
+# "Signature-based identification of volatility models from path geometry"
+
+seed: 42
+
+simulation:
+  n_steps: 100              # explicit
+  T_default: 0.1            # explicit
+  n_paths_per_class: 250000 # explicit (paper default); use --debug for 500
+  n_test_per_class: 50000   # explicit
+
+heston:
+  fixed: {X0: 0.1, kappa: 2.0, theta: 0.1, nu: 0.2}
+  random:
+    kappa_range: [1.0, 3.0]
+    theta_range: [0.05, 0.15]
+    nu_range: [0.15, 0.35]     # upper bound also capped by Feller condition, see code
+    feller_safety_margin: 0.95
+  correlation_rho: -0.7        # ASSUMED: not specified in paper; irrelevant since only v_t is used (SIR confidence 0.3)
+  discretization_scheme: full_truncation_euler  # ASSUMED (confidence 0.45)
+
+ou:
+  fixed: {X0: 0.15, kappa: 3.0, theta: 0.15, sigma: 0.1}
+  random:
+    kappa_range: [1.5, 3.5]
+    theta_range: [0.10, 0.20]
+    sigma_range: [0.05, 0.30]
+
+rbergomi:
+  fixed: {xi: 0.08, eta: 1.8}
+  random:
+    xi: 0.10
+    eta_range: [0.8, 2.0]
+  simulation_scheme: cholesky_fbm  # ASSUMED substitute for paper's GPU hybrid scheme (confidence 0.6)
+
+signature:
+  truncation_order_default: 4
+  truncation_orders_tested: [3, 4, 5]
+
+xgboost:
+  learning_rate: 0.05
+  max_depth: 6
+  n_estimators: 500
+  objective: "multi:softprob"
+  tree_method: "hist"   # set to "gpu_hist" (older xgboost) or device: cuda (2.x) if a GPU is available
+
+nn_baseline:
+  hidden_layers: [128, 64, 32]
+  dropout: 0.2           # ASSUMED (confidence 0.4)
+  batch_size: 256        # ASSUMED
+  learning_rate: 0.001   # ASSUMED
+  epochs: 40
+  validation_split: 0.10
+
+hardware:
+  device: cpu
+  num_workers: -1
+  precision: float64

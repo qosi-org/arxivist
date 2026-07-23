@@ -1,0 +1,451 @@
+{
+  "paper_id": "arxiv_2507_06345",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Reinforcement Learning for Trade Execution with Market and Limit Orders",
+    "authors": ["Patrick Cheridito", "Moritz Weiss"],
+    "affiliations": ["Department of Mathematics, ETH Zurich, Switzerland"],
+    "arxiv_id": "2507.06345v2",
+    "doi": null,
+    "submission_date": "2026-01-26",
+    "abstract": "We introduce a novel reinforcement learning framework for optimal trade execution in a limit order book. We formulate the trade execution problem as a dynamic allocation task whose objective is the optimal placement of market and limit orders to maximize expected revenue. By modeling market and limit order allocations with multivariate logistic-normal distributions, the framework enables efficient training of the reinforcement learning algorithm. Numerical experiments show that the proposed method outperforms traditional benchmark strategies in simulated limit order book environments.",
+    "domain": "RL",
+    "key_claims": [
+      "Novel actor-critic RL algorithm using the logistic-normal distribution to model random allocations on the simplex, with a new closed-form policy gradient expression applicable to any dynamic allocation task",
+      "General state/action space formulation for trade execution that tracks full limit order book state including queue positions of the algorithm's own orders",
+      "Detailed empirical analysis in simulated markets with noise, tactical, and strategic traders that generate direct and indirect market impact reacting to the algorithm's own trades",
+      "Logistic-normal (LN) policy outperforms heuristic benchmarks (submit-and-leave, TWAP) and a Dirichlet-distribution (DR) RL benchmark across most tested market/position configurations",
+      "Ablation studies show order book volume features are the most important inputs, followed by order-flow/mid-price-drift features, then own order level/queue-position features"
+    ],
+    "parsed_at": "2026-07-08T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "Logistic-Normal Actor-Critic (LN)",
+    "modules": [
+      {
+        "name": "PolicyNetwork",
+        "operation_type": "feed_forward_mlp",
+        "input_shape": "[state_dim]",
+        "output_shape": "[K]",
+        "parameters": {"hidden_layers": 2, "hidden_units": 128, "hidden_activation": "tanh", "output_activation": "none"},
+        "paper_section": "Section 6.3 / Appendix B.1",
+        "confidence": 0.9,
+        "notes": "Maps market+private state s to mean vector mu_theta in R^K of the underlying multivariate normal distribution used to construct the logistic-normal policy. Output layer bias initialized to (-1,...,-1); other output weights initialized with orthogonal init, gain 1e-5."
+      },
+      {
+        "name": "ValueNetwork",
+        "operation_type": "feed_forward_mlp",
+        "input_shape": "[state_dim]",
+        "output_shape": "[1]",
+        "parameters": {"hidden_layers": 2, "hidden_units": 128, "hidden_activation": "tanh", "output_activation": "none"},
+        "paper_section": "Section 4.4 / Appendix B.1",
+        "confidence": 0.9,
+        "notes": "Critic network V_phi(s) estimating expected future normalized reward, used to compute advantage estimates via Monte Carlo return minus baseline (GAE with lambda=1)."
+      },
+      {
+        "name": "LogisticNormalTransform",
+        "operation_type": "bijective_transform",
+        "input_shape": "[K]",
+        "output_shape": "[K+1]",
+        "parameters": {},
+        "paper_section": "Section 4.2",
+        "confidence": 0.95,
+        "notes": "Maps x in R^K sampled from N(mu_theta, Sigma) to action a in simplex S^K via a_k = exp(x_k)/(1+sum exp(x_l)) for k<K and a_K = 1/(1+sum exp(x_l)). Inverse: x_k = log(a_k/a_K)."
+      },
+      {
+        "name": "DirichletPolicyNetwork",
+        "operation_type": "feed_forward_mlp",
+        "input_shape": "[state_dim]",
+        "output_shape": "[K+1]",
+        "parameters": {"hidden_layers": 2, "hidden_units": 128, "hidden_activation": "tanh", "output_activation": "softplus"},
+        "paper_section": "Appendix B.2",
+        "confidence": 0.85,
+        "notes": "Benchmark algorithm (DR): outputs concentration parameters alpha of a Dirichlet distribution on the simplex. Softplus keeps outputs positive; bias initialized so alpha ~ (1,...,1,10)."
+      },
+      {
+        "name": "LimitOrderBookSimulator",
+        "operation_type": "market_simulation_environment",
+        "input_shape": "n/a",
+        "output_shape": "n/a",
+        "parameters": {"D": 30, "tick_levels": "discrete"},
+        "paper_section": "Section 2, Section 5",
+        "confidence": 0.85,
+        "notes": "Discrete-price limit order book with best bid/ask, D=30 visible price levels per side, queues of resting limit orders per level, matched FIFO within a level."
+      },
+      {
+        "name": "NoiseTraderAgents",
+        "operation_type": "poisson_process_agents",
+        "input_shape": "n/a",
+        "output_shape": "n/a",
+        "parameters": {"market_order_intensity_lambdaM": 0.1237, "limit_order_intensities": "table 3", "cancellation_intensities": "table 3 x100"},
+        "paper_section": "Section 5.1, Appendix A.1",
+        "confidence": 0.85,
+        "notes": "Submit market/limit/cancellation orders via independent Poisson processes, sizes from shifted half-normal distribution (delta=2, capped at 5 std devs), following Abergel and Jedidi (2013) intensities with cancellation intensities scaled x100."
+      },
+      {
+        "name": "TacticalTraderAgents",
+        "operation_type": "imbalance_reactive_agents",
+        "input_shape": "n/a",
+        "output_shape": "n/a",
+        "parameters": {"damping_factor_c": 0.65, "reaction_factors_dM_dL_dC": 2},
+        "paper_section": "Section 5.2, Appendix A.1",
+        "confidence": 0.85,
+        "notes": "Order arrival intensities scale with positive/negative parts of weighted volume imbalance I = (V_b - V_a)/(V_b + V_a), weighted with exponential damping e^{-c(k-1)} over levels."
+      },
+      {
+        "name": "StrategicTraderAgent",
+        "operation_type": "twap_agent",
+        "input_shape": "n/a",
+        "output_shape": "n/a",
+        "parameters": {"market_order_size_nuM": 1, "limit_order_size_nuL": 2, "interval_dtM_dtL": "3s"},
+        "paper_section": "Section 5.3, Appendix A.1",
+        "confidence": 0.9,
+        "notes": "Randomly buys or sells (p=1/2) a large position; sends market order of size 1 every 3s and limit order of size 2 at best ask every 3s, from t=-dt to T."
+      }
+    ],
+    "connections": [
+      {"from": "MarketState", "to": "PolicyNetwork", "tensor_name": "state_features"},
+      {"from": "MarketState", "to": "ValueNetwork", "tensor_name": "state_features"},
+      {"from": "PolicyNetwork", "to": "LogisticNormalTransform", "tensor_name": "mu_theta"},
+      {"from": "LogisticNormalTransform", "to": "LimitOrderBookSimulator", "tensor_name": "action_allocation"},
+      {"from": "LimitOrderBookSimulator", "to": "NoiseTraderAgents", "tensor_name": "order_book_state"},
+      {"from": "LimitOrderBookSimulator", "to": "TacticalTraderAgents", "tensor_name": "order_book_state"},
+      {"from": "LimitOrderBookSimulator", "to": "StrategicTraderAgent", "tensor_name": "order_book_state"},
+      {"from": "LimitOrderBookSimulator", "to": "ValueNetwork", "tensor_name": "reward_and_next_state"}
+    ],
+    "variants": [
+      {
+        "name": "LN (Logistic-Normal, primary)",
+        "differences": {"action_distribution": "logistic-normal", "variance_schedule": "manual linear decay (Eq. 12)"}
+      },
+      {
+        "name": "DR (Dirichlet benchmark)",
+        "differences": {"action_distribution": "Dirichlet", "output_activation": "softplus"}
+      },
+      {
+        "name": "LNVR (Logistic-Normal with learned variance, ablation)",
+        "differences": {"variance": "learned diagonal log-variance parameter instead of scheduled"}
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "RL objective (expected cumulative reward)",
+      "latex": "J(\\pi) = \\mathbb{E}_{a\\sim\\pi_\\theta, s_0\\sim\\rho}\\left[\\sum_{n=0}^{N-1} r(s_n,a_n)\\right]",
+      "role": "objective",
+      "used_in": "training",
+      "hyperparameters": ["N", "T", "dt"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 2",
+      "confidence": 0.95
+    },
+    {
+      "name": "Normalized reward (implementation shortfall)",
+      "latex": "r(s_n,a_n) = \\frac{\\bar r(s_n,a_n) - \\gamma_n p^b(0)}{M}",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["M", "p^b(0)"],
+      "undefined_symbols": [],
+      "paper_section": "Section 3.3",
+      "confidence": 0.95
+    },
+    {
+      "name": "Objective in per-lot revenue form",
+      "latex": "J(\\pi) = \\frac{1}{M}\\mathbb{E}_{a\\sim\\pi_\\theta, s_0\\sim\\rho}\\left[\\sum_{n=0}^{N-1}\\bar r(s_n,a_n)\\right] - p^b(0)",
+      "role": "objective",
+      "used_in": "training",
+      "hyperparameters": ["M"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 3",
+      "confidence": 0.9
+    },
+    {
+      "name": "Policy gradient theorem (actor-critic)",
+      "latex": "\\nabla_\\theta J(\\pi_\\theta) = \\mathbb{E}_{a\\sim\\pi_\\theta, s_0\\sim\\rho}\\left[\\sum_{n=0}^{N-1} A^{\\pi_\\theta}(s_n,a_n)\\nabla_\\theta \\log \\pi_\\theta(a_n|s_n)\\right]",
+      "role": "objective",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 4",
+      "confidence": 0.95
+    },
+    {
+      "name": "Value function",
+      "latex": "V^{\\pi_\\theta}(s) = \\mathbb{E}_{a\\sim\\pi_\\theta}\\left[\\sum_{l=n}^{N-1} r(s_l,a_l) \\mid s_n=s\\right]",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 5",
+      "confidence": 0.95
+    },
+    {
+      "name": "Advantage function",
+      "latex": "A^{\\pi_\\theta}(s,a) = \\mathbb{E}_{a\\sim\\pi_\\theta}\\left[\\sum_{l=n}^{N-1} r(s_l,a_l) \\mid s_n=s, a_n=a\\right] - V^{\\pi_\\theta}(s)",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 6",
+      "confidence": 0.95
+    },
+    {
+      "name": "Logistic transform (simplex mapping)",
+      "latex": "a_k = \\frac{e^{x_k}}{1+\\sum_{l=0}^{K-1} e^{x_l}},\\ k=0,\\dots,K-1;\\quad a_K = \\frac{1}{1+\\sum_{l=0}^{K-1} e^{x_l}}",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["K"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.2",
+      "confidence": 0.95
+    },
+    {
+      "name": "Logistic-normal density",
+      "latex": "\\pi(a) = \\frac{1}{(2\\pi)^K|\\Sigma|^{1/2}\\prod_{k=0}^{K}a_k}\\exp\\left(-\\frac{1}{2}(h^{-1}(a)-\\mu)^T\\Sigma^{-1}(h^{-1}(a)-\\mu)\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["mu", "Sigma"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 7",
+      "confidence": 0.9
+    },
+    {
+      "name": "Policy gradient with logistic-normal (reparameterized)",
+      "latex": "\\nabla_\\theta J(\\pi_\\theta) = \\mathbb{E}_{x\\sim\\phi_\\theta, s_0\\sim\\rho}\\left[\\sum_{n=0}^{N-1} A^{\\pi_\\theta}(s_n,h(x_n))\\nabla_\\theta \\log(\\phi_\\theta(x_n|s_n))\\right]",
+      "role": "objective",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 9",
+      "confidence": 0.9
+    },
+    {
+      "name": "Variance annealing schedule",
+      "latex": "\\sigma_i = (\\sigma_{final}-\\sigma_{init})\\left(\\frac{i-1}{H-1}\\right) + \\sigma_{init},\\ i=1,\\dots,H",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["sigma_init", "sigma_final", "H"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 12",
+      "confidence": 0.9
+    },
+    {
+      "name": "Advantage estimate (Monte Carlo return minus baseline, GAE lambda=1)",
+      "latex": "A^{\\pi_{\\theta_i}}_{\\vartheta_i}(s_{n,k},a_{n,k}) = \\sum_{l=n}^{N-1} r(s_{l,k},a_{l,k}) - V^{\\pi_{\\theta_i}}_{\\vartheta_i}(s_{n,k})",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 13",
+      "confidence": 0.9
+    },
+    {
+      "name": "Policy loss",
+      "latex": "\\theta \\mapsto -\\frac{1}{\\tau N}\\sum_{k=1}^{\\tau}\\sum_{n=0}^{N-1} A^{\\pi_{\\theta_i}}_{\\vartheta_i}(s_{n,k},a_{n,k})\\log \\phi_\\theta(x_{n,k}|s_{n,k})",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["tau", "N"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 14",
+      "confidence": 0.95
+    },
+    {
+      "name": "Value loss (MSE)",
+      "latex": "\\vartheta \\mapsto \\frac{1}{\\tau N}\\sum_{k=1}^{\\tau}\\sum_{n=0}^{N-1}\\left(V^{\\pi_{\\theta_i}}_{\\vartheta}(s_{n,k}) - \\sum_{l=n}^{N-1} r(s_{l,k},a_{l,k})\\right)^2",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["tau", "N"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. 15",
+      "confidence": 0.95
+    },
+    {
+      "name": "Weighted volume imbalance (tactical traders)",
+      "latex": "I = \\frac{V^b - V^a}{V^b + V^a},\\quad V^b=\\sum_{k=1}^D v^{b,k}e^{-c(k-1)},\\ V^a=\\sum_{k=1}^D v^{a,k}e^{-c(k-1)}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["c", "D"],
+      "undefined_symbols": [],
+      "paper_section": "Section 5.2",
+      "confidence": 0.9
+    },
+    {
+      "name": "Dirichlet density (benchmark policy)",
+      "latex": "\\pi(a_0,\\dots,a_K) = \\frac{1}{B(\\alpha)}\\prod_{k=0}^K (a_k)^{\\alpha_k - 1}",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["alpha"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix B.2",
+      "confidence": 0.9
+    }
+  ],
+  "tensor_semantics": [
+    {"name": "state_market", "shape_notation": "[p^b, p^a, v^b_1..K-1, v^a_1..K-1, dM, dL, dC, dp]", "dtype": "float32", "tensor_type": "input", "module": "PolicyNetwork", "confidence": 0.85},
+    {"name": "state_private", "shape_notation": "[t, M(t), m(t), (l^i,q^i) for i in 1..m(t)]", "dtype": "float32", "tensor_type": "input", "module": "PolicyNetwork", "confidence": 0.85},
+    {"name": "action", "shape_notation": "[K+1] simplex vector (a_0,...,a_K)", "dtype": "float32", "tensor_type": "output", "module": "LogisticNormalTransform", "confidence": 0.95},
+    {"name": "mu_theta", "shape_notation": "[K]", "dtype": "float32", "tensor_type": "intermediate", "module": "PolicyNetwork", "confidence": 0.9},
+    {"name": "value_estimate", "shape_notation": "[1]", "dtype": "float32", "tensor_type": "output", "module": "ValueNetwork", "confidence": 0.9},
+    {"name": "covariance_matrix", "shape_notation": "[K, K] diagonal", "dtype": "float32", "tensor_type": "parameter", "module": "LogisticNormalTransform", "confidence": 0.9},
+    {"name": "reward", "shape_notation": "scalar per (state, action) pair", "dtype": "float32", "tensor_type": "intermediate", "module": "LimitOrderBookSimulator", "confidence": 0.9},
+    {"name": "order_book_volumes", "shape_notation": "[2, D] (bid, ask) x D price levels", "dtype": "int32", "tensor_type": "intermediate", "module": "LimitOrderBookSimulator", "confidence": 0.85}
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Adam",
+      "learning_rate": 0.0005,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.9
+    },
+    "lr_schedule": {
+      "type": "constant",
+      "warmup_steps": null,
+      "total_steps": 400,
+      "confidence": 0.7
+    },
+    "batch_size": 128,
+    "effective_batch_size": 1280,
+    "training_steps": 400,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "Variance (exploration) of the logistic-normal policy is annealed linearly from sigma_init=1.0 to sigma_final=0.1 over H=400 gradient steps (Eq. 12); this progressively shifts training from exploration to exploitation.",
+    "confidence": 0.85
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "Simulated market: Noise traders only", "split": "test (10,000 simulations, different random seed than training)", "size": 10000, "publicly_available": false},
+      {"name": "Simulated market: Noise & Tactical traders", "split": "test (10,000 simulations)", "size": 10000, "publicly_available": false},
+      {"name": "Simulated market: Noise & Tactical & Strategic traders", "split": "test (10,000 simulations)", "size": 10000, "publicly_available": false}
+    ],
+    "metrics": ["expected normalized reward (implementation shortfall, ticks per lot)", "standard deviation of normalized reward"],
+    "reported_results": [
+      {"metric": "E[reward]", "dataset": "Noise traders, 20 lots", "split": "test", "value": 0.61, "is_primary": true},
+      {"metric": "E[reward]", "dataset": "Noise traders, 60 lots", "split": "test", "value": -0.72, "is_primary": true},
+      {"metric": "E[reward]", "dataset": "Noise & Tactical, 20 lots", "split": "test", "value": 0.81, "is_primary": true},
+      {"metric": "E[reward]", "dataset": "Noise & Tactical, 60 lots", "split": "test", "value": -0.25, "is_primary": true},
+      {"metric": "E[reward]", "dataset": "Noise & Tactical & Strategic, 20 lots", "split": "test", "value": 1.13, "is_primary": true},
+      {"metric": "E[reward]", "dataset": "Noise & Tactical & Strategic, 60 lots", "split": "test", "value": 0.23, "is_primary": true}
+    ],
+    "baselines": [
+      "Submit and Leave (SL) — post entire position as a single limit order at t=0",
+      "Time-Weighted Average Price (TWAP) — split position into N equal blocks, one limit order per step",
+      "Dirichlet actor-critic RL algorithm (DR)"
+    ],
+    "compute": "AMD EPYC 7763 64-core CPU (128 threads), single NVIDIA RTX 4090 GPU (24GB VRAM), CUDA 12.8, driver 570.144; training times ~1.2-2 hours per configuration (Table 7)",
+    "special_conditions": [
+      "Deterministic policy used at evaluation time: LN uses h(mu_theta); DR uses Dirichlet mean E[a]=alpha/sum(alpha)",
+      "Evaluation uses a different random seed for market simulation than training to avoid overfitting to training simulations",
+      "10,000 Monte Carlo simulations used to compute all reported expected values and standard deviations"
+    ],
+    "confidence": 0.9
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "beta1/beta2 for Adam optimizer use PyTorch defaults (0.9, 0.999) since not explicitly stated",
+      "basis": "literature default / common practice, paper only cites Kingma & Ba (2017) and specifies lr=0.0005",
+      "confidence": 0.6,
+      "alternatives": ["custom tuned betas", "beta1=0.9, beta2=0.99"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Neural network framework is PyTorch, based on CleanRL PPO codebase reference",
+      "basis": "paper states implementation is 'based on the implementation of PPO by Huang et al. (2022)' whose CleanRL repo is PyTorch-based",
+      "confidence": 0.85,
+      "alternatives": ["JAX", "TensorFlow"],
+      "affects_section": "implementation_assumptions"
+    },
+    {
+      "assumption": "Reward is computed at each of the N=10 decision steps as net cash flow from market/limit fills within (t_n, t_{n+1}], normalized by M and initial bid price, matching Eq. 3",
+      "basis": "explicitly stated in Section 3.3",
+      "confidence": 0.95,
+      "alternatives": [],
+      "affects_section": "mathematical_spec"
+    },
+    {
+      "assumption": "Order cancellation priority within the algorithm's own orders always cancels the order with the worst (highest) queue position first when reallocating, matching the paper's stated rule",
+      "basis": "explicitly stated in Section 3.2 and illustrated in Figure 1",
+      "confidence": 0.95,
+      "alternatives": [],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Rounding of a(t)*M(t) to integers is done sequentially level-by-level (a_0, a_1, ..., a_{K-1}) ensuring the running sum never exceeds M(t)",
+      "basis": "explicitly stated in Section 3.2, exact rounding algorithm (e.g., largest remainder vs. sequential floor) not fully specified",
+      "confidence": 0.65,
+      "alternatives": ["largest-remainder apportionment", "stochastic rounding"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Vectorized environment uses 128 parallel CPU-simulated markets each collecting 10 trajectories per training iteration, giving tau=1280 trajectories total",
+      "basis": "explicitly stated in Appendix B.1 (Table 5, 'Vectorized sample collection')",
+      "confidence": 0.9,
+      "alternatives": [],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Orthogonal weight initialization gain is 0.01 for all layers except the final policy layer (gain 1e-5) and value network follows the same orthogonal scheme; exact per-layer gains for the value network are not explicitly restated",
+      "basis": "explicitly stated for policy network in Appendix B.1; value network initialization scheme is implied to be the same but not explicitly re-confirmed",
+      "confidence": 0.7,
+      "alternatives": ["Xavier/Glorot init for value network", "Kaiming init"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "K=6 (simplex dimension: market order + 5 limit-order tick levels + 1 no-order action) used for all three simulated markets",
+      "basis": "explicitly stated in Section 6.3 (Table 6)",
+      "confidence": 0.95,
+      "alternatives": [],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "Random seeds for reproducibility are not explicitly given in the paper; a fixed seed convention (e.g., seed=0 for training, seed=1 for eval) is assumed for the reference implementation",
+      "basis": "not stated in paper, standard reproducibility practice",
+      "confidence": 0.4,
+      "alternatives": ["multiple seeds averaged", "seed reported in released code at https://github.com/moritzweiss/rlte"],
+      "affects_section": "implementation_assumptions"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 3.2 (action space / rounding of allocations)",
+      "description": "The exact tie-breaking/rounding procedure converting continuous simplex allocations a(t)*M(t) into integer lot allocations is described only at a high level ('round sequentially, assuring total allocated orders do not exceed M(t)'); the precise algorithm (e.g. floor vs. round, order of tie-breaking among equal fractional parts) is not fully specified.",
+      "primary_assumption": "Sequential floor-then-remainder-distribution scheme processing levels 0..K-1 in order",
+      "alternatives": ["Largest-remainder method (Hamilton apportionment)", "stochastic rounding proportional to fractional part"],
+      "confidence": 0.6
+    },
+    {
+      "location": "Appendix B.1 (value network initialization)",
+      "description": "Weight initialization details (orthogonal init with gain 0.01 for non-final layers, 1e-5 for final policy layer) are stated for the policy network; it is not fully explicit whether the same gains apply identically to the value network's hidden and output layers.",
+      "primary_assumption": "Value network uses orthogonal init with gain 0.01 for all layers including output",
+      "alternatives": ["Different gain for value output layer", "standard PyTorch default init for value net"],
+      "confidence": 0.65
+    },
+    {
+      "location": "Section 4.4 / Appendix C.1 (GAE lambda)",
+      "description": "The paper uses lambda_GAE=1 (i.e., full Monte-Carlo return minus baseline) as the primary advantage estimator, with lambda=0.95 tested only in a small-trajectory-count ablation (Appendix C.1) using tau=320 rather than the main tau=1280 setting; it's ambiguous whether other lambda values were tried in the main tau=1280 configuration.",
+      "primary_assumption": "Main results (Table 1) use lambda_GAE=1 with tau=1280",
+      "alternatives": ["lambda tuned per market"],
+      "confidence": 0.8
+    },
+    {
+      "location": "Appendix A.1 (order size distributions)",
+      "description": "Order sizes for noise/tactical traders follow 1 + delta*|Z| with Z standard normal, capped at 5 std devs and rounded to nearest integer; the exact rounding convention (round-half-up vs. round-half-to-even) at the cap boundary is not specified.",
+      "primary_assumption": "Standard round-half-up to nearest integer, capped at floor(1+5*delta)",
+      "alternatives": ["round-half-to-even (banker's rounding)"],
+      "confidence": 0.6
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.85,
+    "mathematical_spec": 0.92,
+    "tensor_semantics": 0.82,
+    "training_pipeline": 0.8,
+    "evaluation_protocol": 0.9,
+    "implementation_assumptions": 0.68,
+    "overall_sir_confidence": 0.83
+  }
+}

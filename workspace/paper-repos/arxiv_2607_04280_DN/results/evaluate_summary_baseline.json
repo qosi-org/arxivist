@@ -1,0 +1,12 @@
+{
+  "scenario": "baseline",
+  "n_stocks_evaluated": 0,
+  "delta_mean": NaN,
+  "delta_se": NaN,
+  "c_mean": NaN,
+  "n_meta_total": 0,
+  "beta_mean": NaN,
+  "alpha_mean": NaN,
+  "ggps_delta_pred": NaN,
+  "fglw_delta_pred": NaN
+}

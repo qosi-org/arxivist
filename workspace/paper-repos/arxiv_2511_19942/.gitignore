@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+checkpoints/*
+!checkpoints/.gitkeep
+.ipynb_checkpoints/
+*.egg-info/
