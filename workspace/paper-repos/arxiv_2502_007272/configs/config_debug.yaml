@@ -1,0 +1,28 @@
+# Fast smoke-test config. Uses 8-bit load + tiny batch so it can build on modest GPUs.
+model:
+  model_name: "GenerTeam/GENERator-eukaryote-1.2b-base"
+  num_classes: 2
+  load_in_8bit: true
+training:
+  optimizer: "adamw"
+  lr: 1.0e-5
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.95
+  batch_size: 2
+  epochs: 1
+  patience: 5
+data:
+  benchmark: "genomic_benchmarks"
+  task: "human_nontata_promoters"
+  data_dir: "data/"
+  max_len: 128
+evaluation:
+  metric: "accuracy"
+  split: "test"
+  cv_folds: 1
+hardware:
+  device: "auto"
+  num_workers: 0
+  seed: 42
+  deterministic: true

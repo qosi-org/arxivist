@@ -1,0 +1,151 @@
+{
+  "paper_id": "arxiv_2502_007272",
+  "plan_version": 1,
+  "created_at": "2026-07-16T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": true,
+    "cuda_min_version": "11.8",
+    "use_huggingface": true,
+    "config_library": "yaml",
+    "reasoning": "GENERator is a LLaMA decoder-only model released on the HuggingFace Hub (GenerTeam org, e.g. GENERator-eukaryote-1.2b-base) with a standard tokenizer. It loads via AutoModel/AutoModelForCausalLM + AutoTokenizer (no custom triton kernels, unlike DNABERT-2), so the reproduction fine-tunes the official weights. Targeting the paper's real setup (A100), per the requirement. CUDA required (1.2B params). YAML config for per-task hyperparameters."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/generator/models/classifier.py",
+      "description": "Loads official GENERator LLaMA backbone + a classification head on the last-token (<EOS>) embedding, per Appendix C.4.",
+      "sir_modules_mapped": ["TokenEmbedding", "RoPE", "LlamaDecoderLayer", "LMHead"],
+      "classes": [
+        {"name": "GENERatorClassifier", "base_class": "nn.Module", "public_methods": [
+          {"name": "from_pretrained", "signature": "from_pretrained(cls, model_name: str, num_classes: int, device: str, load_in_8bit: bool) -> 'GENERatorClassifier'", "returns": "model"},
+          {"name": "forward", "signature": "forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor", "returns": "logits [B, num_classes]"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/generator/models/vep.py",
+      "description": "Zero-shot variant effect prediction: token->nucleotide marginalization + log-likelihood ratio (Sec 4.5).",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "VEPScorer", "base_class": "object", "public_methods": [{"name": "score_variant", "signature": "score_variant(self, seq: str, pos: int, ref: str, alt: str) -> float", "returns": "VEP log-likelihood ratio"}]}]
+    },
+    {
+      "path": "src/generator/data/tokenizer.py",
+      "description": "Wrapper over the official GENERator 6-mer tokenizer (AutoTokenizer).",
+      "sir_modules_mapped": ["SixMerTokenizer"],
+      "classes": [{"name": "GenomicTokenizer", "base_class": "object", "public_methods": [{"name": "encode_batch", "signature": "encode_batch(self, seqs: List[str], max_len: int) -> Dict[str, torch.Tensor]", "returns": "input_ids + attention_mask"}]}]
+    },
+    {
+      "path": "src/generator/data/benchmarks.py",
+      "description": "Loaders for Genomic Benchmarks (default) + NT tasks + Gener tasks, configurable.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "GenomicDataset", "base_class": "torch.utils.data.Dataset", "public_methods": [{"name": "__getitem__", "signature": "__getitem__(self, idx: int) -> Tuple[str, int]", "returns": "(sequence, label)"}]}]
+    },
+    {
+      "path": "src/generator/training/trainer.py",
+      "description": "Fine-tuning loop per Appendix C.4 (AdamW betas 0.9/0.95 wd 0.1, reduce-on-plateau + early stopping patience 5, 10-fold CV support).",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "Trainer", "base_class": "object", "public_methods": [{"name": "fit", "signature": "fit(self) -> Dict[str, float]", "returns": "best test metrics"}]}]
+    },
+    {
+      "path": "src/generator/evaluation/metrics.py",
+      "description": "accuracy, MCC, weighted-F1, AUROC/AUPRC, sequence-recovery accuracy.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/generator/utils/config.py",
+      "description": "YAML loader + seed + benchmark task registry (metric + num_classes per task).",
+      "sir_modules_mapped": [],
+      "classes": []
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "Downstream classification forward",
+      "input": {"name": "input_ids", "shape": "[B, L]", "dtype": "int64"},
+      "output": {"name": "logits", "shape": "[B, num_classes]", "dtype": "float32"},
+      "steps": [
+        "6-mer tokenize raw DNA -> input_ids [B, L], attention_mask [B, L]",
+        "GENERator LLaMA backbone (causal) -> hidden [B, L, D]",
+        "take last non-pad token (<EOS>) embedding -> pooled [B, D]  (Appendix C.4)",
+        "linear classifier head -> logits [B, num_classes]"
+      ]
+    },
+    {
+      "name": "Zero-shot VEP",
+      "input": {"name": "context", "shape": "[1, L]", "dtype": "int64"},
+      "output": {"name": "vep_score", "shape": "scalar", "dtype": "float32"},
+      "steps": [
+        "place variant site near sequence end; causal next-token prediction over 6-mer vocab",
+        "marginalize 6-mer token probs -> per-nucleotide prob at the variant position",
+        "VEP = log p(ref) - log p(alt)"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {"model_name": "GenerTeam/GENERator-eukaryote-1.2b-base", "num_classes": 2, "load_in_8bit": false, "pool": "last_token"},
+    "training": {"optimizer": "adamw", "lr": 1.0e-5, "weight_decay": 0.1, "beta1": 0.9, "beta2": 0.95, "batch_size": 64, "epochs": 10, "scheduler": "reduce_on_plateau", "patience": 5},
+    "data": {"benchmark": "genomic_benchmarks", "task": "human_nontata_promoters", "data_dir": "data/", "max_len": 512},
+    "evaluation": {"metric": "accuracy", "split": "test", "cv_folds": 10},
+    "hardware": {"device": "auto", "num_workers": 2, "seed": 42, "deterministic": false}
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": ">=2.1", "reason": "core framework"},
+      {"package": "transformers", "version": ">=4.44", "reason": "LlamaForCausalLM / AutoModel for GENERator + tokenizer"},
+      {"package": "accelerate", "version": ">=0.30", "reason": "device_map + large-model loading on A100"},
+      {"package": "datasets", "version": ">=2.14", "reason": "Genomic Benchmarks / NT tasks download"},
+      {"package": "genomic-benchmarks", "version": ">=0.0.9", "reason": "Genomic Benchmarks API"},
+      {"package": "huggingface_hub", "version": ">=0.19", "reason": "weights download"},
+      {"package": "scikit-learn", "version": ">=1.3", "reason": "MCC/F1/AUROC/AUPRC"},
+      {"package": "bitsandbytes", "version": ">=0.43", "reason": "optional 8-bit load for tighter GPUs"},
+      {"package": "pandas", "version": ">=2.0", "reason": "data handling"},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "config"},
+      {"package": "tqdm", "version": ">=4.66", "reason": "progress bars"},
+      {"package": "numpy", "version": ">=1.24", "reason": "arrays/seeding"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=7.4"},
+      {"package": "ruff", "version": ">=0.1"},
+      {"package": "jupyter", "version": ">=1.0"}
+    ]
+  },
+  "entrypoints": [
+    {"filename": "train.py", "purpose": "Fine-tune GENERator on a genomic classification task", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "YAML config"},
+      {"flag": "--task", "type": "str", "required": false, "default": null, "help": "override benchmark task"},
+      {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "random seed"},
+      {"flag": "--debug", "type": "bool", "required": false, "default": false, "help": "tiny subset + few steps"},
+      {"flag": "--dry-run", "type": "bool", "required": false, "default": false, "help": "build components, skip training"}
+    ]},
+    {"filename": "evaluate.py", "purpose": "Evaluate a checkpoint on the test split", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "config"},
+      {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "checkpoint path"}
+    ]},
+    {"filename": "vep.py", "purpose": "Zero-shot variant effect prediction score for a single SNV", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "config"},
+      {"flag": "--sequence", "type": "str", "required": true, "default": null, "help": "reference DNA context"},
+      {"flag": "--pos", "type": "int", "required": true, "default": null, "help": "0-based variant position"},
+      {"flag": "--ref", "type": "str", "required": true, "default": null, "help": "reference allele"},
+      {"flag": "--alt", "type": "str", "required": true, "default": null, "help": "alternative allele"}
+    ]},
+    {"filename": "data/download.py", "purpose": "Download benchmark datasets via API", "cli_args": [
+      {"flag": "--benchmark", "type": "str", "required": false, "default": "genomic_benchmarks", "help": "genomic_benchmarks | nt_tasks"},
+      {"flag": "--task", "type": "str", "required": false, "default": null, "help": "specific task; omit for all"},
+      {"flag": "--data-dir", "type": "str", "required": false, "default": "data/", "help": "output directory"}
+    ]}
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget", "curl"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {"severity": "High", "description": "GENERator-1B is 1.2B params (~5GB bf16). Full fine-tuning needs an A100-class GPU; will OOM on a 16GB T4.", "source": "sir.architecture / Table S12", "mitigation": "Target A100 per requirement; expose load_in_8bit + gradient checkpointing + small batch for tighter GPUs."},
+    {"severity": "Medium", "description": "Per-task optimal LR/BS come from a grid search (Tables S8-S11); a single run must fix one point (SIR conf 0.7).", "source": "sir.ambiguities", "mitigation": "Default to lr 1e-5 / bs 64 (a frequent optimum); expose in config with # ASSUMED comment."},
+    {"severity": "Low", "description": "HF repo id / exact class name for GENERator must be confirmed at load time.", "source": "sir.implementation_assumptions", "mitigation": "Loader tries AutoModelForCausalLM then AutoModel; hidden size read from config, never hardcoded."},
+    {"severity": "Low", "description": "6-mer tokenizer special-token set not fully enumerated (vocab 4128).", "source": "sir.ambiguities", "mitigation": "Use the tokenizer bundled with the released weights."}
+  ]
+}
