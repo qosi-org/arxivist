@@ -1,0 +1,73 @@
+{
+  "paper_id": "arxiv_2303_01500",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Dropout Reduces Underfitting",
+    "authors": ["Zhuang Liu", "Mingyu Ding", "Xiaoyu Yao", "others"],
+    "arxiv_id": "2303.01500",
+    "year": 2023,
+    "venue": "arXiv"
+  },
+  "summary": "Studies dropout as a tool to reduce underfitting. Proposes early dropout (active only in initial training phases) to improve model fit, and late dropout to prevent overfitting. Analyzes gradient dynamics and provides comprehensive empirical evaluation on ImageNet-1K with Vision Transformers.",
+  "modules": [
+    {
+      "name": "EarlyDropout",
+      "type": "regularizer",
+      "description": "Dropout applied only during early training epochs to reduce underfitting",
+      "confidence": 0.95
+    },
+    {
+      "name": "LateDropout",
+      "type": "regularizer",
+      "description": "Dropout applied only in later training to prevent overfitting",
+      "confidence": 0.95
+    },
+    {
+      "name": "StandardDropout",
+      "type": "regularizer",
+      "description": "Baseline dropout applied throughout training",
+      "confidence": 0.98
+    }
+  ],
+  "equations": [
+    {"id": "eq_gdv", "latex": "GDV = \\frac{1}{|G| (|G|-1)} \\sum_{g_i, g_j \\in G, i < j} \\frac{1}{2} (1 - \\cos(g_i, g_j))", "desc": "Gradient direction variance", "confidence": 0.92},
+    {"id": "eq_gde", "latex": "GDE = \\frac{1}{|G|} \\sum_{g_{step} \\in G} \\frac{1}{2} (1 - \\frac{\\langle g_{step}, \\bar{g} \\rangle}{|g_{step}|_2 |\\bar{g}|_2})", "desc": "Gradient direction error", "confidence": 0.92},
+    {"id": "eq_weight_map", "latex": "w(x) = w_c(x) + w_0 \\exp(-(d_1(x) + d_2(x))^2 / (2\\sigma^2))", "desc": "Separation-border weight map", "confidence": 0.85}
+  ],
+  "training": {
+    "hyperparameters": {
+      "base_lr": {"value": 0.001, "confidence": 0.9},
+      "early_dropout_epochs": {"value": 50, "confidence": 0.9},
+      "dropout_rate": {"value": 0.1, "confidence": 0.95},
+      "batch_size": {"value": 4096, "confidence": 0.95},
+      "optimizer": {"value": "SGD with momentum", "confidence": 0.9}
+    },
+    "data_augmentation": "Random crops, horizontal flips, color jittering, elastic deformations",
+    "confidence": 0.9
+  },
+  "evaluation": {
+    "datasets": ["ImageNet-1K", "VOC-2007/2012", "Caltech-101/256"],
+    "metrics": {
+      "imagenet1k_early_dropout": 76.7,
+      "imagenet1k_baseline": 76.3,
+      "voc2012_improvement": "+1%"
+    },
+    "confidence": 0.92
+  },
+  "confidence_annotations": {
+    "overall": 0.92,
+    "modules": 0.95,
+    "equations": 0.89,
+    "training": 0.9,
+    "evaluation": 0.92
+  },
+  "assumptions": [
+    "Gradient direction variance metric assumes normalized gradients",
+    "Early/late dropout effectiveness depends on model size and dataset",
+    "ViT-T/S/B model variants tested; scaling assumptions explicit"
+  ],
+  "ambiguities": [
+    "Optimal dropout scheduling curve may vary by architecture",
+    "Computational cost analysis incomplete for very large models"
+  ]
+}
