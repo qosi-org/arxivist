@@ -1,0 +1,5 @@
+pair_id,tree_a_path,tree_b_path,species,spr_label,split
+p001,data/toy/trees/tree_upgma_1.nwk,data/toy/trees/tree_nj_1.nwk,Clostridium,1,train
+p002,data/toy/trees/tree_upgma_2.nwk,data/toy/trees/tree_nj_2.nwk,Clostridium,2,train
+p003,data/toy/trees/tree_upgma_1.nwk,data/toy/trees/tree_upgma_2.nwk,Clostridium,1,val
+p004,data/toy/trees/tree_nj_1.nwk,data/toy/trees/tree_nj_2.nwk,Clostridium,1,test

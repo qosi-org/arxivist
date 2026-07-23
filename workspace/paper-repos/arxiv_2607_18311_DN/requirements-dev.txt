@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest==8.0.2
+black==24.2.0
+ruff==0.3.0
+jupyterlab==4.1.2
