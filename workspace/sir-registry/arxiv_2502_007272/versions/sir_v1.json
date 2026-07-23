@@ -1,0 +1,111 @@
+{
+  "paper_id": "arxiv_2502_007272",
+  "sir_version": 1,
+  "provenance": {
+    "title": "GENERator: A Long-Context Generative Genomic Foundation Model",
+    "authors": ["Wei Wu", "Qiuyi Li", "Yuanyuan Zhang", "Zhihao Zhan", "Ruipu Chen", "Mingyang Li", "Kun Fu", "Junyan Qi", "Yongzhou Bao", "Chao Wang", "Yiheng Zhu", "Zhiyun Zhang", "Jian Tang", "Fuli Feng", "Jieping Ye", "Yuwen Liu", "Hui Xiong", "Zheng Wang"],
+    "affiliations": ["Alibaba Cloud Computing", "Zhongguancun Academy", "USTC", "Chinese Academy of Agricultural Sciences", "HKUST(GZ)", "Mila", "CMU"],
+    "arxiv_id": "2502.07272",
+    "doi": null,
+    "submission_date": "2025-02-11",
+    "abstract": "GENERator is a generative genomic foundation model for long-context DNA modeling (context up to 98k nucleotides), pre-trained on 386 billion nucleotides of eukaryotic DNA from RefSeq. It uses a LLaMA decoder-only architecture with 6-mer tokenization and an autoregressive next-token objective. It matches or exceeds SOTA on sequence recovery, zero-shot variant effect prediction, and fine-tuned genomic benchmarks, and enables prompt-guided cis-regulatory element design.",
+    "domain": "Multimodal",
+    "key_claims": [
+      "Long-context (98k nt) generative genomic model pre-trained on 386B nucleotides of eukaryotic DNA",
+      "6-mer tokenization outperforms single-nucleotide and BPE for autoregressive genomic LM",
+      "GENERator-1B surpasses Evo2-1B on sequence recovery; 3B approaches Evo2-7B, with ~19-44x faster generation",
+      "Functional (gene-centric) pre-training beats indiscriminate all-sequence training on downstream tasks",
+      "Prompt-guided CRE design produces enhancers/silencers exceeding natural activity range (UMI-STARR-seq validated)"
+    ],
+    "parsed_at": "2026-07-16T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "GENERator-eukaryote-1.2b-base (LLaMA decoder, 26 layers, d_model 2048)",
+    "modules": [
+      {"name": "SixMerTokenizer", "operation_type": "tokenization", "input_shape": "[B] raw DNA str", "output_shape": "[B, L] int64", "parameters": {"scheme": "6-mer non-overlapping", "vocab_size": 4128, "phase_offset_randomized": "0-5 nt"}, "paper_section": "Sec 4.2, Table S12", "confidence": 0.9, "notes": "6-mer chosen empirically (Fig 2C); vocab 4128 includes special tokens."},
+      {"name": "TokenEmbedding", "operation_type": "embedding", "input_shape": "[B, L]", "output_shape": "[B, L, D]", "parameters": {"D": 2048, "vocab": 4128}, "paper_section": "Table S12", "confidence": 0.95, "notes": null},
+      {"name": "RoPE", "operation_type": "positional_encoding", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"type": "RoPE"}, "paper_section": "Table S12", "confidence": 0.95, "notes": "Rotary positional encoding (Su et al.)."},
+      {"name": "LlamaDecoderLayer", "operation_type": "transformer_decoder", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"n_layer": 26, "n_heads": 32, "n_kv_heads": 4, "intermediate_size": 5632, "activation": "SiLU", "attention": "causal + FlashAttention"}, "paper_section": "Table S12", "confidence": 0.95, "notes": "GQA with 4 KV heads; SiLU MLP."},
+      {"name": "LMHead", "operation_type": "linear", "input_shape": "[B, L, D]", "output_shape": "[B, L, vocab]", "parameters": {"vocab": 4128}, "paper_section": "Table S12", "confidence": 0.9, "notes": "Next-6mer-token prediction head."}
+    ],
+    "connections": [
+      {"from": "SixMerTokenizer", "to": "TokenEmbedding", "tensor_name": "token_ids"},
+      {"from": "TokenEmbedding", "to": "LlamaDecoderLayer", "tensor_name": "hidden"},
+      {"from": "LlamaDecoderLayer", "to": "LMHead", "tensor_name": "hidden"}
+    ],
+    "variants": [
+      {"name": "GENERator-1B", "differences": {"layers": 26, "hidden": 2048, "intermediate": 5632, "vocab": 4128, "context_tokens": 16384, "context_bp": 98304, "params": "1.2B"}},
+      {"name": "GENERator-3B", "differences": {"layers": 30, "hidden": 3072, "intermediate": 8448, "vocab": 4128, "context_tokens": 16384, "context_bp": 98304, "params": "3B"}}
+    ]
+  },
+  "mathematical_spec": [
+    {"name": "Causal LM loss (next 6-mer token)", "latex": "\\mathcal{L} = -\\sum_{t} \\log p_\\theta(x_t \\mid x_{<t})", "role": "loss", "used_in": "training", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 4.3", "confidence": 0.95},
+    {"name": "VEP log-likelihood ratio", "latex": "\\mathrm{VEP}(R \\to A) = \\log \\frac{p(s_i = R \\mid S_{\\setminus i})}{p(s_i = A \\mid S_{\\setminus i})}", "role": "objective", "used_in": "inference", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 4.5", "confidence": 0.9},
+    {"name": "Token->nucleotide marginalization", "latex": "p(s_i = X) = \\sum_{t \\in T_i} p(t)\\, \\mathbb{I}(t_j = X)", "role": "other", "used_in": "inference", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 4.5", "confidence": 0.9},
+    {"name": "Base-level contribution (in-silico mutagenesis)", "latex": "\\mathcal{C}(i) = f(S) - \\frac{1}{3}\\sum_{x \\neq s_i} f(S_{i\\to x})", "role": "other", "used_in": "inference", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 4.5.3", "confidence": 0.85}
+  ],
+  "tensor_semantics": [
+    {"name": "token_ids", "shape_notation": "[B, L]", "dtype": "int64", "tensor_type": "input", "module": "TokenEmbedding", "confidence": 0.95},
+    {"name": "hidden", "shape_notation": "[B, L, 2048]", "dtype": "bfloat16", "tensor_type": "intermediate", "module": "LlamaDecoderLayer", "confidence": 0.9},
+    {"name": "logits", "shape_notation": "[B, L, 4128]", "dtype": "float32", "tensor_type": "output", "module": "LMHead", "confidence": 0.9}
+  ],
+  "training_pipeline": {
+    "optimizer": {"name": "AdamW", "learning_rate": 4e-4, "beta1": 0.9, "beta2": 0.95, "weight_decay": 0.1, "confidence": 0.95},
+    "lr_schedule": {"type": "linear warmup (2000 steps) + cosine decay to 10% peak", "warmup_steps": 2000, "total_steps": 185000, "confidence": 0.9},
+    "batch_size": 128,
+    "effective_batch_size": 128,
+    "training_steps": 185000,
+    "epochs": 6,
+    "mixed_precision": "bf16",
+    "gradient_clipping": 1.0,
+    "data_augmentation": ["random 6-mer phase offset 0-5 nt per sequence"],
+    "curriculum": "Functional sequence (gene-centric) pre-training on 386B nt; global batch 2M tokens, max seq 16384 tokens",
+    "confidence": 0.92
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "RefSeq eukaryotic functional sequences (pretrain)", "split": "pretrain", "size": null, "publicly_available": true},
+      {"name": "Genomic Benchmarks", "split": "10-fold CV", "size": null, "publicly_available": true},
+      {"name": "Nucleotide Transformer tasks (original + revised)", "split": "10-fold CV", "size": null, "publicly_available": true},
+      {"name": "Gener tasks (gene + taxonomic classification)", "split": "10-fold CV", "size": null, "publicly_available": true},
+      {"name": "ClinVar (VEP, via GPN-MSA)", "split": "test", "size": null, "publicly_available": true},
+      {"name": "DeepSTARR (CRE activity)", "split": "held-out", "size": null, "publicly_available": true}
+    ],
+    "metrics": ["sequence recovery accuracy", "MCC", "accuracy", "weighted F1", "AUROC", "AUPRC", "Pearson r"],
+    "reported_results": [
+      {"metric": "sequence_recovery_accuracy", "dataset": "SequenceRecovery/overall", "split": "test", "value": 0.515, "is_primary": true},
+      {"metric": "sequence_recovery_accuracy", "dataset": "SequenceRecovery/mammalian", "split": "test", "value": 0.684, "is_primary": false},
+      {"metric": "AUROC", "dataset": "ClinVar/VEP", "split": "test", "value": 0.910, "is_primary": false},
+      {"metric": "AUPRC", "dataset": "ClinVar/VEP", "split": "test", "value": 0.930, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_nontata_promoters", "split": "test", "value": 0.958, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_vs_worm", "split": "test", "value": 0.980, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/coding_vs_intergenomic", "split": "test", "value": 0.963, "is_primary": false},
+      {"metric": "MCC", "dataset": "NucleotideTransformer/promoter_all", "split": "test", "value": 0.962, "is_primary": false},
+      {"metric": "weighted_f1", "dataset": "GenerTasks/taxonomic_cls", "split": "test", "value": 0.999, "is_primary": false},
+      {"metric": "pearson_r", "dataset": "DeepSTARR/Hk", "split": "test", "value": 0.80, "is_primary": false}
+    ],
+    "baselines": ["Evo2-1B", "Evo2-7B", "HyenaDNA", "DNABERT-2", "Nucleotide Transformer", "NT-v2", "Caduceus", "GROVER", "Enformer"],
+    "compute": "Pretrain 1B: 11,793 A100-hours (368h x 32 GPUs, MFU 46%); 3B ~2.5x. Downstream on V100/A100.",
+    "special_conditions": ["10-fold CV averaged", "LR/BS grid search per task", "causal LM uses <EOS> token embedding for classification head", "6144bp input / 30bp prediction for sequence recovery"],
+    "confidence": 0.95
+  },
+  "implementation_assumptions": [
+    {"assumption": "Load official GENERator weights from HuggingFace (GenerTeam org) rather than pretraining", "basis": "pretraining costs ~11.8k A100-hours; weights are public", "confidence": 0.9, "alternatives": ["pretrain from scratch (infeasible)"], "affects_section": "architecture"},
+    {"assumption": "Downstream classification head on <EOS> token embedding + linear layer", "basis": "explicitly stated in Appendix C.4 for causal LMs", "confidence": 0.9, "alternatives": ["mean pooling"], "affects_section": "architecture"},
+    {"assumption": "HF model class is LlamaForCausalLM / AutoModel (LLaMA framework)", "basis": "Table S12 states LLaMA decoder", "confidence": 0.85, "alternatives": ["custom modeling code"], "affects_section": "architecture"}
+  ],
+  "ambiguities": [
+    {"location": "Downstream fine-tuning", "description": "Per-task optimal LR/BS come from grid search (Tables S8-S11); a single reproduction run must pick one.", "primary_assumption": "lr 1e-5, bs 64 (a common optimum in the tables)", "alternatives": ["2e-5/128", "5e-5/256"], "confidence": 0.7},
+    {"location": "Tokenizer special tokens", "description": "Vocab 4128 = 4096 6-mers + 32 special tokens; exact special-token set not enumerated in the main text.", "primary_assumption": "BOS/EOS/PAD/UNK + reserved", "alternatives": [], "confidence": 0.75}
+  ],
+  "confidence_annotations": {
+    "architecture": 0.92,
+    "mathematical_spec": 0.9,
+    "tensor_semantics": 0.9,
+    "training_pipeline": 0.92,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.85,
+    "overall_sir_confidence": 0.91
+  }
+}

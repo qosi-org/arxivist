@@ -1,0 +1,35 @@
+# GENERator reproduction config
+# Source: SIR arxiv_2502_007272. Hyperparameters from paper Appendix B / C.4.
+
+model:
+  model_name: "GenerTeam/GENERator-eukaryote-1.2b-base"   # official LLaMA decoder, 1.2B
+  num_classes: 2                                           # set per task by the registry
+  load_in_8bit: false                                      # true -> fit on tighter GPUs (needs bitsandbytes)
+                                                           # pooling is last-token (<EOS>) per Appendix C.4
+
+training:
+  optimizer: "adamw"                                       # C.4
+  lr: 1.0e-5                                                # ASSUMED: a frequent grid-search optimum (Tables S8-S11); SIR conf 0.7
+  weight_decay: 0.1                                         # matches pre-training (Appendix B)
+  beta1: 0.9
+  beta2: 0.95                                               # Appendix B (AdamW beta2=0.95)
+  batch_size: 64                                            # ASSUMED: common optimum; paper grid-searches {64,128,256,512}
+  epochs: 10
+  patience: 5                                               # early stopping (C.4)
+
+data:
+  benchmark: "genomic_benchmarks"                          # genomic_benchmarks | nt_tasks
+  task: "human_nontata_promoters"                          # paper Table S5 accuracy = 0.958
+  data_dir: "data/"
+  max_len: 512
+
+evaluation:
+  metric: "accuracy"                                       # set automatically from the task registry
+  split: "test"
+  cv_folds: 10                                             # paper averages 10-fold CV; single-fold by default here
+
+hardware:
+  device: "auto"                                           # auto | cuda | cpu  (1.2B needs an A100-class GPU)
+  num_workers: 2
+  seed: 42
+  deterministic: false

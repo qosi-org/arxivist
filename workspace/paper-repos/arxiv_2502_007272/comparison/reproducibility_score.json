@@ -1,0 +1,42 @@
+{
+  "paper_id": "arxiv_2502_007272",
+  "comparison_date": "2026-07-23",
+  "reproducibility_score": 0.858,
+  "score_confidence": "medium",
+  "metrics_compared": 1,
+  "metrics_matched": 1,
+  "arxivist_sir_version": 1,
+  "metric_comparisons": [
+    {
+      "metric": "accuracy",
+      "dataset": "GenomicBenchmarks/human_nontata_promoters",
+      "split": "test",
+      "paper_value": 0.958,
+      "user_value": 0.8963,
+      "absolute_deviation": -0.0617,
+      "deviation_pct": -6.44,
+      "direction": "below",
+      "severity": "moderate",
+      "root_causes": [
+        {"cause": "Single fold vs paper's 10-fold cross-validation average", "probability": "High", "suggested_fix": "Run 10-fold CV and average (config cv_folds=10)."},
+        {"cause": "LR/BS were the # ASSUMED grid-search default (1e-5 / 64), not the per-task optimum", "probability": "High", "suggested_fix": "Grid-search lr in {1e-5..5e-3} x bs {64,128,256,512} per Appendix C.4."},
+        {"cause": "No early-stop model selection benefit realized (best was epoch 7, but training continued)", "probability": "Low", "suggested_fix": "Best-by-val checkpoint is already saved; already applied."}
+      ]
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 1,
+    "significant": 0,
+    "critical": 0,
+    "unmatched": 0
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 1,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": false
+}

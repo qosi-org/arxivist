@@ -1,6 +1,6 @@
 {
   "index_version": 1,
-  "total_papers": 4,
+  "total_papers": 5,
   "papers": [
     {
       "paper_id": "arxiv_2605_06564",
@@ -47,6 +47,17 @@
       "has_notebook": true,
       "has_comparison": true,
       "last_updated": "2026-07-11T00:00:00Z"
+    },
+    {
+      "paper_id": "arxiv_2502_007272",
+      "title": "GENERator: A Long-Context Generative Genomic Foundation Model",
+      "domain": "Multimodal",
+      "sir_version": 1,
+      "sir_confidence": 0.91,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": true,
+      "last_updated": "2026-07-23T00:00:00Z"
     }
   ]
 }
