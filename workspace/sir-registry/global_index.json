@@ -1,7 +1,19 @@
 {
   "index_version": 1,
-  "total_papers": 7,
+  "total_papers": 8,
   "papers": [
+    {
+      "paper_id": "arxiv_2307_005628",
+      "title": "DNAGPT: A Generalized Pre-trained Tool for Versatile DNA Sequence Analysis Tasks",
+      "domain": "Multimodal",
+      "sir_version": 1,
+      "sir_confidence": 0.88,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": true,
+      "pipeline_complete": true,
+      "last_updated": "2026-07-24T00:00:00Z"
+    },
     {
       "paper_id": "arxiv_2403_003234",
       "title": "Caduceus: Bi-Directional Equivariant Long-Range DNA Sequence Modeling",

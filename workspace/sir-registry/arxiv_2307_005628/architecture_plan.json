@@ -1,0 +1,156 @@
+{
+  "paper_id": "arxiv_2307_005628",
+  "plan_version": 1,
+  "created_at": "2026-07-24T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": "11.8",
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "DNAGPT is a CUSTOM GPT architecture (dual Sequential/Numerical embeddings, dual Classification/Regression heads, a bespoke token language, and a 3-task pre-training loss) whose contribution IS the architecture. Official weights are .pth files hosted on Google Drive / Tencent Weiyun (NOT the HuggingFace Hub) and are loaded via the authors' own model class in TencentAILabHealthcare/DNAGPT (test.py), so there is no AutoModel path. The reproduction therefore (a) re-implements the DNAGPT architecture + token language + combined loss from scratch in plain PyTorch so it is fully unit-testable on CPU (no GPU or custom kernels needed), and (b) provides an official-weights loading path (state_dict key-mapping) + a GSR fine-tuning harness for reproducing the paper's Table S2 numbers on a GPU. Pure PyTorch, no custom CUDA kernels, so cuda_required=false for the architecture/tests; GPU only speeds up fine-tuning."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/dnagpt/models/dnagpt.py",
+      "description": "The DNAGPT model: Sequential + Numerical embeddings -> GPT decoder stack (causal) -> Classification + Regression heads. From-scratch, CPU-runnable. Exposes forward(seq_ids, numbers) -> (class_logits, reg_values) and from_pretrained(path) for the official .pth.",
+      "sir_modules_mapped": ["SequentialEmbedding", "NumericalEmbedding", "GPTDecoderLayer", "ClassificationHead", "RegressionHead"],
+      "classes": [
+        {"name": "DNAGPT", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, seq_ids: torch.Tensor, numbers: torch.Tensor = None, number_positions: torch.Tensor = None) -> Dict[str, torch.Tensor]", "returns": "{'class_logits':[B,T,V], 'reg_values':[B,T,1], 'hidden':[B,T,D]}"},
+          {"name": "from_pretrained", "signature": "from_pretrained(cls, ckpt_path: str, config: DNAGPTConfig, device: str) -> 'DNAGPT'", "returns": "model with official weights loaded (state_dict key-mapped)"}
+        ]},
+        {"name": "DNAGPTConfig", "base_class": "dataclass", "public_methods": []}
+      ]
+    },
+    {
+      "path": "src/dnagpt/models/blocks.py",
+      "description": "GPT decoder block (causal masked multi-head self-attention + FFN + LayerNorm), Sequential/Numerical embedding modules, and the Classification/Regression heads.",
+      "sir_modules_mapped": ["GPTDecoderLayer", "SequentialEmbedding", "NumericalEmbedding", "ClassificationHead", "RegressionHead"],
+      "classes": [
+        {"name": "GPTBlock", "base_class": "nn.Module", "public_methods": [{"name": "forward", "signature": "forward(self, x: torch.Tensor, attn_mask: torch.Tensor) -> torch.Tensor", "returns": "[B,T,D]"}]},
+        {"name": "NumericalEmbedding", "base_class": "nn.Module", "public_methods": [{"name": "forward", "signature": "forward(self, numbers: torch.Tensor) -> torch.Tensor", "returns": "[B,M,D]"}]},
+        {"name": "RegressionHead", "base_class": "nn.Module", "public_methods": [{"name": "forward", "signature": "forward(self, h: torch.Tensor) -> torch.Tensor", "returns": "[B,T,1]"}]}
+      ]
+    },
+    {
+      "path": "src/dnagpt/data/tokenizer.py",
+      "description": "The DNAGPT token language: non-overlapping k-mer sequence tokens (A/C/G/T/N), number tokens, instruction tokens (per-species + classification/number), connection tokens ('+','='), classification tokens ('A'/'N' = True/False), reserved tokens. Encodes the fine-tuning templates from Fig 2b.",
+      "sir_modules_mapped": ["NonOverlapKmerTokenizer"],
+      "classes": [{"name": "DNAGPTTokenizer", "base_class": "object", "public_methods": [
+        {"name": "encode_sequence", "signature": "encode_sequence(self, seq: str) -> List[int]", "returns": "non-overlap k-mer token ids"},
+        {"name": "build_classification_example", "signature": "build_classification_example(self, species: str, seq: str, label: bool) -> Dict", "returns": "token ids for a GSR classification template"},
+        {"name": "gc_content", "signature": "gc_content(seq: str) -> float", "returns": "GC ratio in [0,1]"}
+      ]}]
+    },
+    {
+      "path": "src/dnagpt/data/gsr.py",
+      "description": "GSR (genomic signal & region) dataset loader following DeepGSR: PAS/TIS for human/mouse/bovine/fruit fly, 300bp flanks, motif removed, 6:1.5:2.5 split. Binary classification.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "GSRDataset", "base_class": "torch.utils.data.Dataset", "public_methods": [{"name": "__getitem__", "signature": "__getitem__(self, idx: int) -> Tuple[str, int]", "returns": "(sequence, label)"}]}]
+    },
+    {
+      "path": "src/dnagpt/training/losses.py",
+      "description": "Combined pre-training loss L = lambda*MSE + CE (lambda=0.01), plus task-specific heads for GC regression, sequence-order CE, next-token CE.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/dnagpt/training/trainer.py",
+      "description": "GSR fine-tuning loop (AdamW, cosine+warmup, 10 epochs, lr = 1/3 pretrain, wd 1e-1, bs 8) with early stopping; classification head + CE.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "Trainer", "base_class": "object", "public_methods": [{"name": "fit", "signature": "fit(self) -> Dict[str, float]", "returns": "best test metrics (acc/f1/mcc)"}]}]
+    },
+    {
+      "path": "src/dnagpt/evaluation/metrics.py",
+      "description": "ACC, F1, MCC, precision, recall (GSR); r2 (mRNA); Wasserstein + correlation helpers (generation).",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/dnagpt/utils/config.py",
+      "description": "YAML config loader + seeding + DNAGPT variant registry (H/M/S-512/B-512 dims) + GSR task registry.",
+      "sir_modules_mapped": [],
+      "classes": []
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "GSR classification forward",
+      "input": {"name": "seq_ids", "shape": "[B, L]", "dtype": "int64"},
+      "output": {"name": "logits", "shape": "[B, 2]", "dtype": "float32"},
+      "steps": [
+        "non-overlap 6-mer tokenize DNA + prepend species instruction token -> seq_ids",
+        "SequentialEmbedding -> [B, L, D]",
+        "GPT causal decoder x12 -> hidden [B, L, D]",
+        "take final-token hidden -> classification head -> logits [B, 2] (True/False via 'A'/'N' tokens)"
+      ]
+    },
+    {
+      "name": "Combined pre-training step",
+      "input": {"name": "mixed_tokens", "shape": "[B, T]", "dtype": "int64/float"},
+      "output": {"name": "loss", "shape": "scalar", "dtype": "float32"},
+      "steps": [
+        "encode DNA (+ optional numbers) via token language",
+        "forward -> class_logits (seq/special) + reg_values (numbers)",
+        "CE over sequence/order tokens + MSE over GC/number tokens",
+        "L = 0.01 * MSE + CE"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {"variant": "M", "ckpt_path": "checkpoints/dna_gpt0.1b_m.pth", "n_layer": 12, "hidden": 768, "n_heads": 12, "seq_len": 512, "k": 6, "from_scratch_if_missing": true},
+    "training": {"optimizer": "adamw", "lr": 3.0e-5, "weight_decay": 0.1, "beta1": 0.9, "beta2": 0.98, "batch_size": 8, "epochs": 10, "scheduler": "cosine_warmup", "warmup_epochs": 3, "grad_clip": 1.0, "early_stopping_patience": 3},
+    "data": {"task": "human_pas_aataaa", "data_dir": "data/", "flank_bp": 300, "max_len": 606},
+    "evaluation": {"metric": "accuracy", "split": "test"},
+    "hardware": {"device": "auto", "num_workers": 2, "seed": 42, "deterministic": false}
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": ">=2.1", "reason": "core framework (from-scratch model, no custom kernels)"},
+      {"package": "numpy", "version": ">=1.24", "reason": "arrays/seeding"},
+      {"package": "scikit-learn", "version": ">=1.3", "reason": "ACC/F1/MCC/precision/recall + r2"},
+      {"package": "scipy", "version": ">=1.10", "reason": "Wasserstein distance (generation eval)"},
+      {"package": "pandas", "version": ">=2.0", "reason": "data handling"},
+      {"package": "gdown", "version": ">=5.0", "reason": "download official .pth checkpoints from Google Drive"},
+      {"package": "biopython", "version": ">=1.81", "reason": "parse genome FASTA / cDNA for GSR extraction"},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "config"},
+      {"package": "tqdm", "version": ">=4.66", "reason": "progress bars"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=7.4"},
+      {"package": "ruff", "version": ">=0.1"},
+      {"package": "jupyter", "version": ">=1.0"}
+    ]
+  },
+  "entrypoints": [
+    {"filename": "train.py", "purpose": "Fine-tune DNAGPT on a GSR recognition task", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "YAML config"},
+      {"flag": "--task", "type": "str", "required": false, "default": null, "help": "override GSR task"},
+      {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "random seed"},
+      {"flag": "--debug", "type": "bool", "required": false, "default": false, "help": "tiny subset + few steps"},
+      {"flag": "--dry-run", "type": "bool", "required": false, "default": false, "help": "build components, skip training"}
+    ]},
+    {"filename": "evaluate.py", "purpose": "Evaluate a fine-tuned checkpoint on the GSR test split", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "config"},
+      {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "checkpoint path"}
+    ]},
+    {"filename": "data/download.py", "purpose": "Download official DNAGPT weights (Google Drive) and/or GSR datasets", "cli_args": [
+      {"flag": "--weights", "type": "str", "required": false, "default": "dna_gpt0.1b_m", "help": "dna_gpt0.1b_h | dna_gpt0.1b_m | dna_gpt3b_m"},
+      {"flag": "--data-dir", "type": "str", "required": false, "default": "data/", "help": "output directory"}
+    ]}
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget", "curl"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {"severity": "High", "description": "Official weights are on Google Drive / Weiyun (not HF Hub) and load via the authors' custom class; state_dict keys may not match a from-scratch re-implementation, so exact-weight reproduction of Table S2 needs a key-mapping step that must be validated against the real checkpoint.", "source": "sir.implementation_assumptions", "mitigation": "Ship a from-scratch model whose module names mirror the paper; provide from_pretrained() with a documented key-map + strict=False fallback. The architecture + token language + loss are fully unit-tested on CPU regardless of weights; GSR fine-tuning from scratch is also runnable (lower accuracy) if weights can't be mapped."},
+    {"severity": "Medium", "description": "GSR data (DeepGSR PAS/TIS) requires downloading per-organism genomes/cDNA and reproducing the 300bp-flank + motif-removal preprocessing, which is nontrivial.", "source": "sir.evaluation_protocol / S1.4.1", "mitigation": "data/download.py + a documented extraction script; a small synthetic GSR generator lets the pipeline + tests run without the full download."},
+    {"severity": "Medium", "description": "Numerical embedding / regression head MLP shapes are unspecified (SIR conf 0.6).", "source": "sir.ambiguities", "mitigation": "Use a sensible 2-layer MLP with GELU; mark # ASSUMED; the sequence-classification path (GSR reproduction target) does not depend on these."},
+    {"severity": "Low", "description": "AdamW 'momentum 0.937' in Fig S3 is unusual alongside betas.", "source": "sir.ambiguities", "mitigation": "Use standard AdamW betas (0.9, 0.98); ignore the momentum field with a # ASSUMED note."}
+  ]
+}

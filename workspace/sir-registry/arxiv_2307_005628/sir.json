@@ -1,0 +1,117 @@
+{
+  "paper_id": "arxiv_2307_005628",
+  "sir_version": 1,
+  "provenance": {
+    "title": "DNAGPT: A Generalized Pre-trained Tool for Versatile DNA Sequence Analysis Tasks",
+    "authors": ["Daoan Zhang", "Weitong Zhang", "Yu Zhao", "Jianguo Zhang", "Bing He", "Chenchen Qin", "Jianhua Yao"],
+    "affiliations": ["Southern University of Science and Technology", "Tencent AI Lab (Shenzhen)", "City University of Hong Kong", "University of Rochester"],
+    "arxiv_id": "2307.05628",
+    "doi": null,
+    "submission_date": "2023-07-11",
+    "abstract": "DNAGPT is a generalized GPT-based DNA pre-training model trained on over 200 billion base pairs from all mammals. It augments the classic GPT decoder with (1) a binary classification pre-training task (DNA sequence order), (2) a numerical regression pre-training task (guanine-cytosine content prediction), and (3) a comprehensive token language that encodes sequence, number, and task/instruction information in one token space. Dedicated sequential + numerical embedding layers and classification + regression decoding heads let a single model process both DNA sequence and numerical data. It outperforms task-specific models on genomic signal & region (GSR) recognition, mRNA abundance regression, and artificial human genome generation.",
+    "domain": "Multimodal",
+    "key_claims": [
+      "A single GPT-based model jointly handles DNA sequence AND numerical data via dual embeddings (Sequential/Numerical) and dual heads (Classification/Regression)",
+      "Two DNA-specific pre-training tasks beyond next-token prediction: GC-content regression (MSE) and sequence-order binary classification (CE)",
+      "A hierarchical token language (sequence/number/instruction/connection/reserved tokens) unifies diverse task formats (classification, regression, generation) in one token space",
+      "Non-overlapping k-mer tokenization gives N/k tokens (k-fold efficiency vs overlapped k-mers)",
+      "DNAGPT beats DeepGSR/GSRNET on GSR recognition, Xpresso on mRNA abundance (r2 0.59->0.62 human), and GAN/RBM on artificial human genome generation; more pre-training data (human -> 9 species -> all mammals) improves downstream performance"
+    ],
+    "parsed_at": "2026-07-24T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "DNAGPT-M (0.1B): 12-layer GPT decoder, hidden 768, 12 heads, unidirectional attention, seq len 4096 (24,576 bp), 9-species pretrain",
+    "modules": [
+      {"name": "NonOverlapKmerTokenizer", "operation_type": "tokenization", "input_shape": "[B] raw DNA str", "output_shape": "[B, N/k] int64", "parameters": {"k": 6, "overlap": false, "vocab_bases": "A,C,G,T,N", "seq_vocab_size": 19530, "note": "5^6+5^5+5^4+5^3+5^2+5^1 = 19530 sequence tokens"}, "paper_section": "Methods / S1.3", "confidence": 0.9, "notes": "Non-overlapped k-mers: shift == k, yields N/k tokens."},
+      {"name": "SequentialEmbedding", "operation_type": "embedding", "input_shape": "[B, L] seq tokens", "output_shape": "[B, L, D]", "parameters": {"D": 768, "vocab": "seq + special/instruction/connection/reserved tokens"}, "paper_section": "Sec 2.1, Fig 1c/d", "confidence": 0.88, "notes": "Embeds DNA-sequence + special tokens (Kmers separation then embedding layers)."},
+      {"name": "NumericalEmbedding", "operation_type": "embedding", "input_shape": "[B, M] number values (float)", "output_shape": "[B, M, D]", "parameters": {"D": 768, "impl": "MLP"}, "paper_section": "Sec 2.1, Fig 1d", "confidence": 0.85, "notes": "Numbers sent directly into an MLP-based numerical embedding, co-trained with DNA embeddings; concatenated with sequence embeddings before the GPT."},
+      {"name": "GPTDecoderLayer", "operation_type": "transformer_decoder", "input_shape": "[B, T, D]", "output_shape": "[B, T, D]", "parameters": {"n_layer": 12, "n_heads": 12, "hidden": 768, "attention": "masked (causal) self-attention", "mlp": "feed-forward", "norm": "LayerNorm (pre/post)", "bias": false, "dropout": 0.0}, "paper_section": "Sec 2.1, Fig 1c, Fig S3", "confidence": 0.9, "notes": "Classic GPT block x12 (0.1B). 3B variant: 60 layers, hidden 2048, 64 heads."},
+      {"name": "ClassificationHead", "operation_type": "linear", "input_shape": "[B, T, D]", "output_shape": "[B, T, vocab]", "parameters": {"impl": "Kmers separation + embedding layers (tied-style)", "targets": "sequence/special tokens"}, "paper_section": "Sec 2.1, Fig 1d", "confidence": 0.85, "notes": "Decodes sequence/special tokens; CE loss."},
+      {"name": "RegressionHead", "operation_type": "mlp", "input_shape": "[B, T, D]", "output_shape": "[B, T, 1]", "parameters": {"impl": "MLPs", "targets": "number tokens"}, "paper_section": "Sec 2.1, Fig 1d", "confidence": 0.85, "notes": "Decodes number tokens; MSE loss."}
+    ],
+    "connections": [
+      {"from": "NonOverlapKmerTokenizer", "to": "SequentialEmbedding", "tensor_name": "seq_token_ids"},
+      {"from": "SequentialEmbedding", "to": "GPTDecoderLayer", "tensor_name": "seq_embeddings"},
+      {"from": "NumericalEmbedding", "to": "GPTDecoderLayer", "tensor_name": "num_embeddings"},
+      {"from": "GPTDecoderLayer", "to": "ClassificationHead", "tensor_name": "hidden (sequence/special split)"},
+      {"from": "GPTDecoderLayer", "to": "RegressionHead", "tensor_name": "hidden (number split)"}
+    ],
+    "variants": [
+      {"name": "DNAGPT-H", "differences": {"layers": 12, "hidden": 768, "heads": 12, "params": "0.1B", "seq_len": 4096, "seq_bp": 24576, "pretrain": "human reference genome (~3B bp)"}},
+      {"name": "DNAGPT-M", "differences": {"layers": 12, "hidden": 768, "heads": 12, "params": "0.1B", "seq_len": 4096, "seq_bp": 24576, "pretrain": "9 species (~10.16B bp)"}},
+      {"name": "DNAGPT-S-512", "differences": {"layers": 12, "hidden": 768, "heads": 12, "params": "0.1B", "seq_len": 512, "seq_bp": 3072, "pretrain": "all mammals (~200B bp)"}},
+      {"name": "DNAGPT-B-512", "differences": {"layers": 60, "hidden": 2048, "heads": 64, "params": "3B", "seq_len": 512, "seq_bp": 3072, "pretrain": "all mammals (~200B bp)"}}
+    ]
+  },
+  "mathematical_spec": [
+    {"name": "Combined pre-training loss", "latex": "\\mathcal{L} = \\lambda \\cdot \\mathrm{MSE\\_loss} + \\mathrm{CrossEntropy\\_loss}", "role": "loss", "used_in": "training", "hyperparameters": [{"symbol": "lambda", "value": 0.01}], "undefined_symbols": [], "paper_section": "Sec 3.2, Eq 1", "confidence": 0.95},
+    {"name": "Next-token prediction (CE)", "latex": "\\mathcal{L}_{NTP} = -\\sum_t \\log p_\\theta(x_t \\mid x_{<t})", "role": "loss", "used_in": "training", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 3.1", "confidence": 0.9},
+    {"name": "GC-content regression (MSE)", "latex": "\\mathcal{L}_{GC} = (\\hat{y}_{GC} - y_{GC})^2, \\quad y_{GC} = \\frac{\\#G + \\#C}{\\#\\mathrm{bases}}", "role": "loss", "used_in": "training", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 3.1", "confidence": 0.9},
+    {"name": "Sequence-order prediction (CE, self-supervised)", "latex": "\\mathcal{L}_{ord} = \\mathrm{CE}(\\hat{o}, o), \\quad o \\in \\{\\text{reversed}, \\text{not reversed}\\}", "role": "loss", "used_in": "training", "hyperparameters": [{"symbol": "flip_prob", "value": 0.5}], "undefined_symbols": [], "paper_section": "Sec 3.1", "confidence": 0.9}
+  ],
+  "tensor_semantics": [
+    {"name": "seq_token_ids", "shape_notation": "[B, L]", "dtype": "int64", "tensor_type": "input", "module": "SequentialEmbedding", "confidence": 0.9},
+    {"name": "number_values", "shape_notation": "[B, M]", "dtype": "float32", "tensor_type": "input", "module": "NumericalEmbedding", "confidence": 0.85},
+    {"name": "hidden", "shape_notation": "[B, T, 768]", "dtype": "float32", "tensor_type": "intermediate", "module": "GPTDecoderLayer", "confidence": 0.9},
+    {"name": "class_logits", "shape_notation": "[B, T, vocab]", "dtype": "float32", "tensor_type": "output", "module": "ClassificationHead", "confidence": 0.85},
+    {"name": "reg_values", "shape_notation": "[B, T, 1]", "dtype": "float32", "tensor_type": "output", "module": "RegressionHead", "confidence": 0.85}
+  ],
+  "training_pipeline": {
+    "optimizer": {"name": "AdamW", "learning_rate": 1e-4, "beta1": 0.9, "beta2": 0.98, "weight_decay": 1e-2, "momentum": 0.937, "confidence": 0.92},
+    "lr_schedule": {"type": "cosine decay (pretrain) / cosine with warmup (finetune)", "warmup_steps": "1 epoch (0.1B) / 10000 steps (512 models)", "total_steps": null, "confidence": 0.9},
+    "batch_size": 8,
+    "effective_batch_size": "8 (grad accumulation 5 in pretrain -> 40; 1 in finetune)",
+    "training_steps": null,
+    "epochs": 15,
+    "mixed_precision": "float16 (0.1B) / bfloat16 (3B); finetune float32",
+    "gradient_clipping": 1.0,
+    "data_augmentation": ["random sequence flip with prob 0.5", "drop sequences with N-ratio > 0.05", "non-overlapped k-mer sampling"],
+    "curriculum": "3 joint pretraining tasks (NTP + GC regression + sequence order). DNAGPT-H 15 epochs on ~3B bp (8xV100, ~1 day); DNAGPT-S-512 2 epochs on ~200B bp (~1 week).",
+    "confidence": 0.9
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "Mammalian reference genomes (pretrain, all mammals)", "split": "pretrain", "size": "~200B bp", "publicly_available": true},
+      {"name": "DeepGSR GSR datasets (PAS + TIS: human/mouse/bovine/fruit fly)", "split": "6:1.5:2.5 train/val/test", "size": "~12k-30k positives per organism/signal", "publicly_available": true},
+      {"name": "Xpresso mRNA abundance (human 18,377 / mouse 21,856 promoters)", "split": "16377/1000/1000 (human)", "size": null, "publicly_available": true},
+      {"name": "1000 Genomes (artificial genome generation)", "split": "5008 haplotypes, 10000-SNP region chr15", "size": null, "publicly_available": true},
+      {"name": "Nucleotide Transformer downstream tasks (histone/promoter)", "split": "per NT", "size": null, "publicly_available": true}
+    ],
+    "metrics": ["accuracy", "F1", "MCC", "precision", "recall", "r2 (coefficient of determination)", "Wasserstein distance", "correlation (allele freq / LD)"],
+    "reported_results": [
+      {"metric": "accuracy", "dataset": "GSR/Human_PAS_AATAAA (DNAGPT-M)", "split": "test", "value": 0.9151, "is_primary": true},
+      {"metric": "mcc", "dataset": "GSR/Human_PAS_AATAAA (DNAGPT-M)", "split": "test", "value": 0.8299, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GSR/Human_TIS_ATG (DNAGPT-M)", "split": "test", "value": 0.9746, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GSR/Human_PAS_AATAAA (DNAGPT-B-512)", "split": "test", "value": 0.9320, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GSR/Human_TIS_ATG (DNAGPT-B-512)", "split": "test", "value": 0.9802, "is_primary": false},
+      {"metric": "mcc", "dataset": "NT/Promoter_all (DNAGPT-B-512)", "split": "test", "value": 0.93, "is_primary": false},
+      {"metric": "r2", "dataset": "Xpresso/human_mRNA_abundance (DNAGPT-M)", "split": "test", "value": 0.62, "is_primary": false},
+      {"metric": "r2", "dataset": "Xpresso/mouse_mRNA_abundance (DNAGPT-M)", "split": "test", "value": 0.73, "is_primary": false}
+    ],
+    "baselines": ["DeepGSR", "GSRNET", "DNABERT (modified)", "Nucleotide Transformer (500M/2.5B)", "Xpresso", "GAN", "RBM"],
+    "compute": "Pretrain: 0.1B on 8xV100 32GB (~1 day for H); S-512 ~1 week; 3B on 16xV100. Deepspeed + FSDP. Finetune fits on a single GPU.",
+    "special_conditions": ["GSR motif removed in preprocessing (model must use flanking non-coding context)", "300 bp before+after GSR concatenated (seq len 603 TIS / 606 PAS)", "negative samples from chromosome with GC nearest to genome average", "finetune 10 epochs, lr = 1/3 of pretrain lr", "mRNA task: joint sequence+number input, regression head, r2 metric"],
+    "confidence": 0.92
+  },
+  "implementation_assumptions": [
+    {"assumption": "Load official DNAGPT weights (dna_gpt0.1b_m.pth) from the authors' TencentAILabHealthcare/DNAGPT repo (Google Drive / Weiyun) rather than pretraining", "basis": "pretraining on 200B bp across many V100s is infeasible; official .pth checkpoints + code are public", "confidence": 0.85, "alternatives": ["pretrain from scratch (infeasible)"], "affects_section": "architecture"},
+    {"assumption": "Weights are custom .pth (not on HF Hub); loading uses the authors' custom model class, not AutoModel", "basis": "repo ships test.py + custom modeling; checkpoints hosted on Google Drive/Weiyun", "confidence": 0.85, "alternatives": ["re-implement architecture from scratch and load state_dict by key mapping"], "affects_section": "architecture"},
+    {"assumption": "GSR recognition = binary classification via classification head on the sequence; ACC/F1/MCC reported", "basis": "Sec 4.1 / S1.5.2 / Table S2-S4", "confidence": 0.9, "alternatives": [], "affects_section": "evaluation"},
+    {"assumption": "Non-overlap 6-mer tokenization with A/C/G/T/N vocab (19,530 sequence tokens)", "basis": "S1.3 explicit token count", "confidence": 0.88, "alternatives": ["other k"], "affects_section": "data"}
+  ],
+  "ambiguities": [
+    {"location": "Numerical embedding / regression head exact MLP shapes", "description": "Paper says 'MLPs' for numerical embed + regression head but does not give layer sizes.", "primary_assumption": "2-layer MLP D->D->1 (regression) and 1->D->D (embed) with GELU", "alternatives": ["single linear"], "confidence": 0.6},
+    {"location": "Attention betas ordering", "description": "Fig S3 lists betas (0.9, 0.98) with momentum 0.937 (unusual to have both). Standard AdamW has no momentum field.", "primary_assumption": "Use AdamW betas (0.9, 0.98); ignore 'momentum' (likely a config artifact)", "alternatives": ["SGD-like momentum"], "confidence": 0.65},
+    {"location": "Downstream finetune LR per model", "description": "0.1B models use 3e-5, 3B uses 3e-6, S-512 uses 1e-5 on NT (Fig S4).", "primary_assumption": "3e-5 for the 0.1B GSR reproduction", "alternatives": ["1e-5", "3e-6"], "confidence": 0.85}
+  ],
+  "confidence_annotations": {
+    "architecture": 0.87,
+    "mathematical_spec": 0.92,
+    "tensor_semantics": 0.86,
+    "training_pipeline": 0.9,
+    "evaluation_protocol": 0.92,
+    "implementation_assumptions": 0.84,
+    "overall_sir_confidence": 0.88
+  }
+}

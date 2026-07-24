@@ -1,0 +1,33 @@
+# Debug config: tiny from-scratch model, synthetic data, 1 epoch — fast smoke test.
+model:
+  variant: "M"
+  ckpt_path: "checkpoints/none.pth"   # absent -> from-scratch
+  k: 6
+
+training:
+  optimizer: "adamw"
+  lr: 3.0e-5
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.98
+  batch_size: 8
+  epochs: 1
+  scheduler: "cosine_warmup"
+  warmup_epochs: 0
+  grad_clip: 1.0
+  early_stopping_patience: 1
+
+data:
+  task: "human_pas_aataaa"
+  data_dir: "data/"
+  max_len: 120
+
+evaluation:
+  metric: "accuracy"
+  split: "test"
+
+hardware:
+  device: "auto"
+  num_workers: 0
+  seed: 42
+  deterministic: false
