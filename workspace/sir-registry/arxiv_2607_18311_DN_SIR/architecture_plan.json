@@ -1,0 +1,333 @@
+{
+  "paper_id": "arxiv_2607_18311",
+  "plan_version": 1,
+  "created_at": "2026-07-22T09:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "The paper explicitly specifies PyTorch Geometric (Fey & Lenssen) for graph construction and GINConv layers, and PyTorch/Adam for optimization (Sec 4.1-4.3). Dataset is small (388 pairs, trees up to 9,500 nodes) so CUDA is beneficial but not required; the pipeline scalability test in the paper itself ran on CPU (Xeon Silver VM). Plain YAML is sufficient given the modest, flat hyperparameter surface (no nested sweep/multirun needs), so Hydra/OmegaConf would be over-engineering."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/spr_gnn/data/newick_parser.py",
+      "description": "Parses Newick strings into directed graphs rooted at the in-degree-zero vertex, then duplicates edges to form the bidirectional PyG graph.",
+      "sir_modules_mapped": ["NewickParser"],
+      "classes": [
+        {
+          "name": "NewickToGraph",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "parse", "signature": "parse(newick_str: str) -> networkx.DiGraph", "returns": "rooted directed graph"},
+            {"name": "to_bidirectional_edge_index", "signature": "to_bidirectional_edge_index(graph: networkx.DiGraph) -> torch.LongTensor", "returns": "[2, E] edge_index with both directions"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/data/node_features.py",
+      "description": "Extracts the 3 continuous per-node features (degree, is_leaf, root_distance) and the categorical taxonomic/species id used by the embedding layer.",
+      "sir_modules_mapped": ["NodeFeatureExtractor"],
+      "classes": [
+        {
+          "name": "NodeFeatureExtractor",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "extract", "signature": "extract(graph: networkx.DiGraph, species_id: int) -> tuple[torch.FloatTensor, torch.LongTensor]", "returns": "([N,3] continuous features, [N] categorical ids)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/data/dataset.py",
+      "description": "PyG Dataset/DataLoader wrapper over the 388 labelled tree pairs (train/val/test split, seed 42), caching parsed PyG Data objects in memory per Sec 4.3.",
+      "sir_modules_mapped": ["FeatureConcatenation"],
+      "classes": [
+        {
+          "name": "TreePairDataset",
+          "base_class": "torch.utils.data.Dataset",
+          "public_methods": [
+            {"name": "__len__", "signature": "__len__(self) -> int", "returns": "number of labelled pairs"},
+            {"name": "__getitem__", "signature": "__getitem__(self, idx: int) -> tuple[torch_geometric.data.Data, torch_geometric.data.Data, float]", "returns": "(tree_a graph, tree_b graph, spr_label)"}
+          ]
+        },
+        {
+          "name": "TreePairDataModule",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "setup", "signature": "setup(self, master_csv_path: str, seed: int = 42) -> None", "returns": "None"},
+            {"name": "train_dataloader", "signature": "train_dataloader(self, batch_size: int) -> torch.utils.data.DataLoader", "returns": "DataLoader"},
+            {"name": "val_dataloader", "signature": "val_dataloader(self, batch_size: int) -> torch.utils.data.DataLoader", "returns": "DataLoader"},
+            {"name": "test_dataloader", "signature": "test_dataloader(self, batch_size: int) -> torch.utils.data.DataLoader", "returns": "DataLoader"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/models/embedding.py",
+      "description": "Trainable species/taxonomic identifier embedding, vocab sized dynamically to max_id+1.",
+      "sir_modules_mapped": ["TaxonomicEmbeddingLayer"],
+      "classes": [
+        {
+          "name": "TaxonomicEmbedding",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "forward(self, node_ids: torch.LongTensor) -> torch.FloatTensor", "returns": "[N,16] embedded ids"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/models/gin_encoder.py",
+      "description": "GIN encoder: N_LAYERS GINConv blocks (Linear-ReLU-Linear MLP, BatchNorm1d, ReLU), hidden_dim=128. num_gin_layers is a config flag (default 2, per SIR body-text reading) because Fig. 5 shows 3 -- kept swappable per the low-confidence (0.6) SIR flag.",
+      "sir_modules_mapped": ["GINLayer_1", "GINLayer_2"],
+      "classes": [
+        {
+          "name": "GINEncoder",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "forward(self, x: torch.FloatTensor, edge_index: torch.LongTensor, batch: torch.LongTensor) -> torch.FloatTensor", "returns": "[num_graphs, 128] pooled graph embedding via global add pool"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/models/siamese_gin.py",
+      "description": "Top-level model: shared-weight GINEncoder applied to both trees, concatenation, and MLP regression head (256->128->64->1, dropout 0.3), with output clamped at zero.",
+      "sir_modules_mapped": ["FeatureConcatenation", "GlobalAddPooling", "PairConcatenation", "MLPRegressionHead"],
+      "classes": [
+        {
+          "name": "SiameseGINRegressor",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "forward(self, tree_a: torch_geometric.data.Batch, tree_b: torch_geometric.data.Batch) -> torch.FloatTensor", "returns": "[num_graphs] predicted SPR distances, clamped >= 0"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/training/losses.py",
+      "description": "Huber loss wrapper (delta assumed 1.0 per SIR implementation_assumptions, exposed as a config value).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "HuberRegressionLoss",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "forward(self, pred: torch.FloatTensor, target: torch.FloatTensor) -> torch.FloatTensor", "returns": "scalar loss"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/training/trainer.py",
+      "description": "Training loop: Adam(lr=1e-4, weight_decay=1e-4), ReduceLROnPlateau (patience=10), early stopping (patience=25), seed=42 splits.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "Trainer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "fit", "signature": "fit(self, model, train_loader, val_loader, config) -> dict", "returns": "training history dict"},
+            {"name": "save_checkpoint", "signature": "save_checkpoint(self, path: str) -> None", "returns": "None"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/evaluation/metrics.py",
+      "description": "MAE / RMSE / MAPE / R^2 computation plus calibration-plot and deviation-histogram data prep, matching Sec 5.3 / Fig 7-8.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "RegressionMetrics",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "compute", "signature": "compute(self, preds: np.ndarray, targets: np.ndarray) -> dict", "returns": "{'mae':.., 'rmse':.., 'mape':.., 'r2':..}"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/spr_gnn/utils/config.py",
+      "description": "YAML config loader/validator with dataclass-style access.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "Config",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "load", "signature": "load(cls, path: str) -> 'Config'", "returns": "Config instance"}
+          ]
+        }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "SiameseGINRegressor.forward",
+      "input": {"name": "tree_a, tree_b (PyG Batch pair)", "shape": "[N_a,19]/[N_b,19] node features + edge_index", "dtype": "float32/int64"},
+      "output": {"name": "predicted_spr_distance", "shape": "[num_graphs]", "dtype": "float32"},
+      "steps": [
+        "x_a = concat(continuous_features_a [N_a,3], species_embedding(node_ids_a) [N_a,16]) -> [N_a,19]",
+        "x_b = concat(continuous_features_b [N_b,3], species_embedding(node_ids_b) [N_b,16]) -> [N_b,19]",
+        "h_a = GINEncoder(x_a, edge_index_a, batch_a) -> [num_graphs,128]  (shared weights)",
+        "h_b = GINEncoder(x_b, edge_index_b, batch_b) -> [num_graphs,128]  (shared weights, same module instance as h_a)",
+        "pair = concat(h_a, h_b) -> [num_graphs,256]",
+        "y = Linear(256,128) -> ReLU -> Dropout(0.3) -> Linear(128,64) -> ReLU -> Dropout(0.3) -> Linear(64,1) -> [num_graphs,1]",
+        "y = clamp(y, min=0.0) -> [num_graphs]"
+      ]
+    },
+    {
+      "name": "GINEncoder.forward",
+      "input": {"name": "x, edge_index, batch", "shape": "[N,19] / [2,E] / [N]", "dtype": "float32/int64/int64"},
+      "output": {"name": "graph_embedding", "shape": "[num_graphs,128]", "dtype": "float32"},
+      "steps": [
+        "for layer in range(num_gin_layers):  # default 2 (config-swappable, see risk assessment)",
+        "    h = GINConv(mlp=Linear-ReLU-Linear, eps=learnable)(h, edge_index) -> [N,128]",
+        "    h = BatchNorm1d(h) -> [N,128]",
+        "    h = ReLU(h) -> [N,128]",
+        "graph_embedding = global_add_pool(h, batch) -> [num_graphs,128]"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "node_feature_dim_continuous": 3,
+      "species_embedding_dim": 16,
+      "num_gin_layers": "2  # ASSUMED: SIR confidence 0.6 -- body text says 2, Fig.5 shows 3; swappable via this flag",
+      "gin_hidden_dim": 128,
+      "mlp_head_dims": [256, 128, 64, 1],
+      "dropout": 0.3
+    },
+    "training": {
+      "optimizer": "adam",
+      "learning_rate": 0.0001,
+      "weight_decay": 0.0001,
+      "adam_beta1": "0.9  # ASSUMED: not stated in paper, PyTorch default",
+      "adam_beta2": "0.999  # ASSUMED: not stated in paper, PyTorch default",
+      "lr_scheduler": "reduce_on_plateau",
+      "lr_patience": 10,
+      "lr_factor": 0.5,
+      "early_stopping_patience": 25,
+      "max_epochs": "200  # ASSUMED: not stated in paper, bounded by early stopping",
+      "batch_size": "32  # ASSUMED: not stated in paper",
+      "huber_delta": "1.0  # ASSUMED: not stated in paper, PyTorch nn.HuberLoss default",
+      "seed": 42,
+      "clamp_min": 0.0
+    },
+    "data": {
+      "train_val_test_split": [0.70, 0.15, 0.15],
+      "split_seed": 42,
+      "master_pairs_csv": "data/master_pairs.csv",
+      "dataset_source": "Zenodo DOI 10.5281/zenodo.20476872 (Castanheira, Bugalho, Vaz -- 864 trees, 388 labelled pairs)",
+      "species": ["Clostridium", "Salmonella", "Vibrio", "Streptococcus pneumoniae"]
+    },
+    "evaluation": {
+      "metrics": ["mae", "rmse", "mape", "r2"],
+      "cross_validation": "stratified, report mean +/- std",
+      "regimes": ["in_distribution", "cross_species", "size_extrapolation"]
+    },
+    "hardware": {
+      "device": "cuda_if_available_else_cpu",
+      "precision": "float32",
+      "num_workers": 4
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": "2.2.0", "reason": "core tensor ops and autograd"},
+      {"package": "torch-geometric", "version": "2.5.0", "reason": "GINConv, global_add_pool, Data/Batch objects (explicitly used by the paper)"},
+      {"package": "biopython", "version": "1.83", "reason": "Newick parsing (Bio.Phylo), matches paper's stated tooling"},
+      {"package": "networkx", "version": "3.2.1", "reason": "intermediate directed-graph representation before conversion to PyG edge_index"},
+      {"package": "numpy", "version": "1.26.4", "reason": "numerical arrays"},
+      {"package": "pandas", "version": "2.2.1", "reason": "master pairs CSV / results tables"},
+      {"package": "scikit-learn", "version": "1.4.1", "reason": "R^2, MAE/RMSE convenience metrics, stratified split utilities"},
+      {"package": "pyyaml", "version": "6.0.1", "reason": "config.yaml loading"},
+      {"package": "matplotlib", "version": "3.8.3", "reason": "calibration plot (Fig 7) and deviation histograms (Fig 8) reproduction"},
+      {"package": "tqdm", "version": "4.66.2", "reason": "training progress bars"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": "8.0.2"},
+      {"package": "black", "version": "24.2.0"},
+      {"package": "ruff", "version": "0.3.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Train the Siamese GIN regressor end-to-end from a config file.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": false, "default": "configs/config.yaml", "help": "Path to YAML config"},
+        {"flag": "--data-dir", "type": "str", "required": false, "default": "data/", "help": "Directory containing the downloaded Zenodo dataset"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "outputs/", "help": "Where to write checkpoints and logs"},
+        {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "Random seed"}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Evaluate a trained checkpoint on in-distribution, cross-species, and size-extrapolation test regimes and reproduce Table 2 / Fig 7-8.",
+      "cli_args": [
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to trained model checkpoint"},
+        {"flag": "--config", "type": "str", "required": false, "default": "configs/config.yaml", "help": "Path to YAML config"},
+        {"flag": "--regime", "type": "str", "required": false, "default": "all", "help": "One of in_distribution|cross_species|size_extrapolation|all"}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Predict the SPR distance for a single user-supplied pair of Newick tree files.",
+      "cli_args": [
+        {"flag": "--tree-a", "type": "str", "required": true, "default": null, "help": "Path to first Newick (.nwk) tree file"},
+        {"flag": "--tree-b", "type": "str", "required": true, "default": null, "help": "Path to second Newick (.nwk) tree file"},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to trained model checkpoint"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime",
+    "system_deps": ["git", "build-essential", "libxml2-dev"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --config configs/config.yaml"
+  },
+  "risk_assessment": [
+    {
+      "severity": "Medium",
+      "description": "GIN layer count is ambiguous: paper text says 2 layers, Figure 5 diagrams 3. Getting this wrong changes receptive field and parameter count, directly affecting reported R^2.",
+      "source": "SIR ambiguities[0], confidence 0.6",
+      "mitigation": "Expose num_gin_layers as a config flag (default 2, per text). GINEncoder is written generically over a layer count so both values are one-line swappable; recommend running both and comparing against Table 2 numbers to disambiguate empirically."
+    },
+    {
+      "severity": "Medium",
+      "description": "Batch size, total training epochs, and Adam beta1/beta2 are not stated anywhere in the paper.",
+      "source": "SIR implementation_assumptions[0,1,2], training_pipeline confidence 0.55",
+      "mitigation": "Use literature defaults (batch_size=32, max_epochs=200 bounded by early stopping patience=25, betas=(0.9,0.999)), all exposed in config.yaml with '# ASSUMED' comments so they can be tuned to match Table 2 without touching code."
+    },
+    {
+      "severity": "Low",
+      "description": "Huber loss delta (transition threshold) not given a numeric value.",
+      "source": "SIR mathematical_spec[2], confidence 0.55",
+      "mitigation": "Default delta=1.0 (PyTorch default) exposed as config.training.huber_delta; SPR distances range from 0 to ~2000 so this may need tuning -- flagged in README."
+    },
+    {
+      "severity": "Medium",
+      "description": "Full dataset (864 trees / 388 labelled pairs) is hosted externally on Zenodo (DOI 10.5281/zenodo.20476872), not bundled in this repo; download requires network access and may be slow/unavailable.",
+      "source": "SIR provenance.key_claims[1], evaluation_protocol.datasets[0]",
+      "mitigation": "data/download_dataset.py script fetches and caches the Zenodo archive; repo includes a tiny synthetic smoke-test fixture (data/toy/) so the pipeline can be sanity-checked without the full download."
+    },
+    {
+      "severity": "Low",
+      "description": "The paper does not specify GPU/CPU wall-clock training time or hardware for the GNN training itself (only for the labelling-pipeline stress test).",
+      "source": "SIR evaluation_protocol.compute",
+      "mitigation": "No mitigation needed for correctness; noted in README as a reproducibility gap outside this repo's control."
+    },
+    {
+      "severity": "Low",
+      "description": "Categorical taxonomic identifier semantics (per-species vs. per-isolate) are inferred rather than stated outright.",
+      "source": "SIR implementation_assumptions[4], confidence 0.55",
+      "mitigation": "NodeFeatureExtractor.extract() takes an explicit species_id argument and treats it as per-species by default; documented as swappable to per-isolate indexing if the released Zenodo dataset schema clarifies otherwise."
+    }
+  ]
+}

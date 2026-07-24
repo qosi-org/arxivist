@@ -1,0 +1,50 @@
+{
+  "paper_id": "arxiv_2607_18311",
+  "title": "Approximating SPR Distance Between Phylogenetic Trees with Graph Neural Networks",
+  "authors": [
+    "Renata Martins Castanheira",
+    "Miguel Bugalho",
+    "C\u00e1tia Vaz"
+  ],
+  "domain": "Other",
+  "arxiv_id": "2607.18311",
+  "version": 1,
+  "created_at": "2026-07-22T08:40:35Z",
+  "last_updated": "2026-07-22T18:34:20Z",
+  "sir_confidence": 0.75,
+  "stages_with_data": [
+    "stage_1_paper_parser",
+    "stage_2_sir_registry",
+    "stage_3_architecture_planner",
+    "stage_4_code_generator",
+    "stage_5_notebook_generator",
+    "stage_6_results_comparator"
+  ],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2607_18311/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-22T08:40:35Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-22T09:20:00Z",
+      "reason": "Stages 3-5 completed: architecture plan, full repo, notebooks",
+      "changed_sections": [
+        "architecture_plan",
+        "repo"
+      ]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-22T18:34:20Z",
+      "reason": "Stage 6 comparison run against debug smoke-test results (synthetic toy data, not real Zenodo dataset)",
+      "changed_sections": [
+        "comparison"
+      ]
+    }
+  ]
+}
