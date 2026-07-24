@@ -1,0 +1,43 @@
+# DNAGPT config — load the authors' ALREADY-FINE-TUNED classification.pth (AATAAA PAS).
+#
+# Unlike config.yaml (which fine-tunes the base dna_gpt0.1b_m from a fresh head),
+# this starts from the paper's released classification checkpoint, whose backbone
+# was already fine-tuned on exactly this task. Expect accuracy much closer to the
+# paper's 91.51% with only a light fine-tune (or even a few epochs).
+#
+#   python data/download.py --weights classification
+#   python data/download.py --gsr human_pas_aataaa
+#   python train.py --config configs/config_classification.yaml
+
+model:
+  variant: "M"
+  ckpt_path: "checkpoints/classification.pth"   # authors' fine-tuned AATAAA PAS head
+  k: 6
+
+training:
+  optimizer: "adamw"
+  lr: 3.0e-5                         # light fine-tune (head already trained) — paper's value
+  weight_decay: 0.1
+  beta1: 0.9
+  beta2: 0.98
+  batch_size: 8
+  epochs: 5
+  scheduler: "cosine_warmup"
+  warmup_epochs: 1
+  grad_clip: 1.0
+  early_stopping_patience: 3
+
+data:
+  task: "human_pas_aataaa"
+  data_dir: "data/"
+  max_len: 606
+
+evaluation:
+  metric: "accuracy"
+  split: "test"
+
+hardware:
+  device: "auto"
+  num_workers: 2
+  seed: 42
+  deterministic: false

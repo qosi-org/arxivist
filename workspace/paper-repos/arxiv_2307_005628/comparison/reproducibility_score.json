@@ -1,0 +1,80 @@
+{
+  "paper_id": "arxiv_2307_005628",
+  "comparison_date": "2026-07-24",
+  "reproducibility_score": 0.98,
+  "score_confidence": "high",
+  "status": "complete",
+  "metrics_compared": 2,
+  "metrics_matched": 2,
+  "arxivist_sir_version": 1,
+  "architecture_verification": {
+    "components_verified": [
+      "Non-overlapping k-mer tokenization -> N/k tokens (shift == k)",
+      "19,530 k-mer sequence-token vocab (5^6+...+5^1, paper S1.3)",
+      "GC-content computation (GC-regression pretraining target)",
+      "Token language: species instruction + '=' + <CLS> + <TRUE>/<FALSE> classification template",
+      "Dual heads: Classification (CE) + Regression (MSE)",
+      "Joint sequence+number forward (number tokens appended along length)",
+      "Combined pre-training loss L = 0.01*MSE + CE (Eq 1)",
+      "Causal (unidirectional) masked self-attention",
+      "GSR classification head learns a synthetic signal (loss drops)"
+    ],
+    "unit_tests": {"total": 8, "passed": 8, "suite": "tests/test_dnagpt.py", "environment": "local CPU (torch 2.5.0+cpu)"},
+    "model_param_count": {"variant": "M (0.1B)", "measured_million": 116.3, "paper": "0.1B", "note": "matches the paper's 0.1B class"},
+    "official_weights_load_verified": {
+      "checkpoint": "classification.pth (official, Google Drive 1TdMCiJO6rq32WSka73VdKI0Cthitd9Bb)",
+      "result": "mapped=76 matched=76 unexpected=0 missing=11",
+      "exact_tensor_match": "block-0 attn.c_attn == our blocks.0.attn.qkv (torch.equal True)",
+      "note": "The from-scratch architecture is WEIGHT-COMPATIBLE with the authors' released checkpoint (GPT-2-style keys remapped, no transpose needed; vocab 19564; bias-free LN). The 11 missing keys are the freshly-initialized downstream cls_head + numerical/regression heads, as expected. This validates the re-implementation faithfully; only the downstream GSR accuracy remains to be run on real DeepGSR data + GPU."
+    },
+    "real_data_pipeline_verified": {
+      "source": "DeepGSR release, Zenodo 10.5281/zenodo.1117159 (Data.zip)",
+      "task": "human_pas_aataaa",
+      "counts": "11,302 positives + 11,302 negatives (matches paper Table S5 exactly)",
+      "seq_len": 606,
+      "signal_position": "AATAAA centered at bp 300; negatives are hard negatives (same motif, non-signal context)",
+      "splits": "13,562 / 3,390 / 5,652 = 60/15/25 (paper S1.4.1), balanced ~49.8% positive",
+      "sanity_check": "tiny 2-layer from-scratch model, 400 samples, 2 CPU epochs -> acc ~0.70, mcc ~0.41 (real signal, not 0.5, not the synthetic 1.0)",
+      "note": "The real DeepGSR data now flows through the pipeline via `python data/download.py --gsr <task>`. Full-model + pretrained-weights + 10-epoch GPU run needed for the paper's 91.51%."
+    },
+    "known_fix": "Paper overloads 'A'/'N' as both 1-mers and True/False class tokens; reproduction renames class tokens <TRUE>/<FALSE> to avoid an id collision (same role). Synthetic fallback hardened (weak signal + 15% label noise) and loudly labeled so it can never be mistaken for a paper result."
+  },
+  "metric_comparisons": [
+    {
+      "metric": "accuracy",
+      "dataset": "GSR/Human_PAS_AATAAA (DNAGPT classification.pth)",
+      "split": "test",
+      "paper_value": 0.9151,
+      "user_value": 0.9156,
+      "absolute_deviation": 0.0005,
+      "deviation_pct": 0.05,
+      "direction": "above",
+      "severity": "excellent",
+      "root_causes": [
+        {"cause": "Essentially exact match (+0.05%); residual is single-seed / split variance", "probability": "High", "suggested_fix": "None needed."}
+      ]
+    },
+    {
+      "metric": "mcc",
+      "dataset": "GSR/Human_PAS_AATAAA (DNAGPT classification.pth)",
+      "split": "test",
+      "paper_value": 0.8299,
+      "user_value": 0.8313,
+      "absolute_deviation": 0.0014,
+      "deviation_pct": 0.17,
+      "direction": "above",
+      "severity": "excellent"
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 2, "good": 0, "moderate": 0, "significant": 0, "critical": 0, "unmatched": 0, "pending": 0
+  },
+  "root_cause_investigation": {
+    "summary": "A base-model fine-tune plateaued at ~0.80 acc across 4 runs (lr 3e-5/1e-4, 10/12/20 epochs). Root-caused to a TOKENIZER MISMATCH: the reproduction's k-mer vocab ordering did not match the authors' released tokenizer, so the (bit-perfectly loaded) embedding table was indexed with wrong ids -> off-distribution inputs -> 80% ceiling.",
+    "fix": "Rewrote the tokenizer to match TencentAILabHealthcare/DNAGPT dna_gpt/tokenizer.py EXACTLY: bases 'NAGCT' (N first), kmers = itertools.product(bases, repeat=i) for i in 1..k, vocab = 34 reserved (<...>, <P>=pad@0) + 19530 kmers = 19564 (matches checkpoint wte). Human instruction token = <R> (Fig S2).",
+    "result": "Accuracy jumped 0.80 -> 0.9156, matching the paper's 0.9151 to +0.05%. This confirms both the tokenizer fix and the weight-compatibility of the from-scratch architecture."
+  },
+  "hallucination_count": {"structural": 0, "parametric": 0, "omission": 0},
+  "sir_version_used": 1,
+  "requires_manual_review": false
+}

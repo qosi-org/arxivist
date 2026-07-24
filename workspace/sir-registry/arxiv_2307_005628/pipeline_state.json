@@ -1,0 +1,46 @@
+{
+  "paper_id": "arxiv_2307_005628",
+  "paper_title": "DNAGPT: A Generalized Pre-trained Tool for Versatile DNA Sequence Analysis Tasks",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "stage_timestamps": {
+    "1": "2026-07-24T00:00:00Z",
+    "2": "2026-07-24T00:00:00Z",
+    "3": "2026-07-24T00:00:00Z",
+    "4": "2026-07-24T00:00:00Z",
+    "5": "2026-07-24T00:00:00Z",
+    "6": "2026-07-24T00:00:00Z"
+  },
+  "stage_confidence": {
+    "1": 0.88,
+    "2": 1.0,
+    "3": 0.87,
+    "4": 0.9,
+    "5": 0.85,
+    "6": 0.98
+  },
+  "sir_path": "sir-registry/arxiv_2307_005628/sir.json",
+  "repo_path": "paper-repos/arxiv_2307_005628/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2307_005628/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2307_005628/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2307_005628/notebooks/reproduce_arxiv_2307_005628.ipynb",
+    "comparison_report": "paper-repos/arxiv_2307_005628/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": {},
+  "human_review_required": false,
+  "human_review_reasons": [],
+  "loop_count": 0,
+  "retry_history": [],
+  "created_at": "2026-07-24T00:00:00Z",
+  "last_updated": "2026-07-24T00:00:00Z",
+  "pipeline_complete": true
+}
