@@ -1,0 +1,19 @@
+torch>=2.1
+# Pin: the Hub's Caduceus modeling code predates the tie_weights() API changes in
+# transformers >=4.5x. 4.44.2 loads the official weights cleanly. (A compat shim in
+# src/caduceus/__init__.py covers newer versions best-effort, but pinning is reliable.)
+transformers>=4.38,<4.46
+accelerate>=0.30
+genomic-benchmarks>=0.0.9
+datasets>=2.14
+huggingface_hub>=0.19
+scikit-learn>=1.3
+pandas>=2.0
+pyyaml>=6.0
+tqdm>=4.66
+numpy>=1.24
+# The official Caduceus forward pass uses the Mamba CUDA kernels (GPU only).
+# Install these on a CUDA machine; the CPU reference path (rc_equivariance.py)
+# and unit tests run without them.
+mamba-ssm>=1.2 ; platform_system == "Linux"
+causal-conv1d>=1.2 ; platform_system == "Linux"

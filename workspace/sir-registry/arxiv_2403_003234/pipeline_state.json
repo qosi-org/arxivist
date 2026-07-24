@@ -1,0 +1,46 @@
+{
+  "paper_id": "arxiv_2403_003234",
+  "paper_title": "Caduceus: Bi-Directional Equivariant Long-Range DNA Sequence Modeling",
+  "current_stage": 6,
+  "stages_completed": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "stage_timestamps": {
+    "1": "2026-07-24T00:00:00Z",
+    "2": "2026-07-24T00:00:00Z",
+    "3": "2026-07-24T00:00:00Z",
+    "4": "2026-07-24T00:00:00Z",
+    "5": "2026-07-24T00:00:00Z",
+    "6": "2026-07-24T00:00:00Z"
+  },
+  "stage_confidence": {
+    "1": 0.86,
+    "2": 1.0,
+    "3": 0.86,
+    "4": 0.9,
+    "5": 0.85,
+    "6": 0.94
+  },
+  "sir_path": "sir-registry/arxiv_2403_003234/sir.json",
+  "repo_path": "paper-repos/arxiv_2403_003234/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2403_003234/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2403_003234/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2403_003234/notebooks/reproduce_arxiv_2403_003234.ipynb",
+    "comparison_report": "paper-repos/arxiv_2403_003234/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": {},
+  "human_review_required": false,
+  "human_review_reasons": [],
+  "loop_count": 0,
+  "retry_history": [],
+  "created_at": "2026-07-24T00:00:00Z",
+  "last_updated": "2026-07-24T00:00:00Z",
+  "pipeline_complete": true
+}

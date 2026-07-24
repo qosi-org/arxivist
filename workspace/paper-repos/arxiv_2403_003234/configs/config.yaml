@@ -1,0 +1,43 @@
+# Caduceus reproduction config — Genomic Benchmarks fine-tuning (Sec 5.2.1)
+#
+# Loads the official pretrained Caduceus from the HuggingFace Hub and fine-tunes
+# a mean-pool + linear head. Default variant is Caduceus-Ph (best overall on
+# Genomic Benchmarks, Table 1) with post-hoc conjoining at inference.
+
+model:
+  # Small 1k-seqlen checkpoint for fast fine-tuning on Genomic Benchmarks.
+  # Other options (kuleshov-group org):
+  #   caduceus-ps_seqlen-1k_d_model-118_n_layer-4_lr-8e-3   (Caduceus-PS)
+  #   caduceus-ph_seqlen-131k_d_model-256_n_layer-16        (long-range / VEP)
+  model_name: "kuleshov-group/caduceus-ph_seqlen-1k_d_model-118_n_layer-4_lr-8e-3"
+  variant: "ph"          # "ph" (post-hoc conjoining) | "ps" (parameter sharing)
+  num_classes: 2
+  pool: "mean"
+
+training:
+  optimizer: "adamw"
+  lr: 1.0e-3             # ASSUMED: paper grid-searches {1e-3, 2e-3} per task (Table 5)
+  weight_decay: 0.0
+  batch_size: 128        # paper uses 256; 128 fits tighter GPUs
+  epochs: 10             # Genomic Benchmarks fine-tune for 10 epochs (App D.1)
+  scheduler: "cosine"
+  early_stopping_patience: 3
+  rc_aug: true           # RC data augmentation (Caduceus-Ph)
+
+data:
+  benchmark: "genomic_benchmarks"
+  task: "human_nontata_promoters"
+  data_dir: "data/"
+  max_len: 500
+
+evaluation:
+  metric: "accuracy"
+  split: "test"
+  cv_folds: 5            # paper: 5-fold CV on Genomic Benchmarks
+  conjoin: true          # post-hoc conjoining (RC-ensemble) at inference
+
+hardware:
+  device: "auto"
+  num_workers: 2
+  seed: 42
+  deterministic: false
