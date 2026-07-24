@@ -1,0 +1,34 @@
+# Debug config: tiny subset + 1 epoch, for a fast smoke test of the pipeline.
+model:
+  model_name: "kuleshov-group/caduceus-ph_seqlen-1k_d_model-118_n_layer-4_lr-8e-3"
+  variant: "ph"
+  num_classes: 2
+  pool: "mean"
+
+training:
+  optimizer: "adamw"
+  lr: 1.0e-3
+  weight_decay: 0.0
+  batch_size: 8
+  epochs: 1
+  scheduler: "cosine"
+  early_stopping_patience: 1
+  rc_aug: true
+
+data:
+  benchmark: "genomic_benchmarks"
+  task: "human_nontata_promoters"
+  data_dir: "data/"
+  max_len: 200
+
+evaluation:
+  metric: "accuracy"
+  split: "test"
+  cv_folds: 5
+  conjoin: true
+
+hardware:
+  device: "auto"
+  num_workers: 0
+  seed: 42
+  deterministic: false

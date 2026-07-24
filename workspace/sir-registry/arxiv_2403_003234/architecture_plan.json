@@ -1,0 +1,166 @@
+{
+  "paper_id": "arxiv_2403_003234",
+  "plan_version": 1,
+  "created_at": "2026-07-24T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": true,
+    "cuda_min_version": "11.8",
+    "use_huggingface": true,
+    "config_library": "yaml",
+    "reasoning": "Caduceus is released on the HuggingFace Hub (kuleshov-group org: caduceus-ph_seqlen-131k_d_model-256_n_layer-16, caduceus-ps_*, etc.) with custom modeling code (trust_remote_code=True). Its core is the Mamba selective-SSM block, whose official forward pass depends on the fused CUDA kernels in mamba-ssm + causal-conv1d, so a GPU (A100/A6000/T4) is required for the real path. The reproduction fine-tunes the official pretrained weights on Genomic Benchmarks (mean-pool + linear head), matching Sec 5.2.1. YAML config for per-task hyperparameters. A pure-PyTorch BiMamba/MambaDNA reference implementation is also shipped so the architecture (RC equivariance, weight tying) can be unit-tested on CPU without the CUDA kernels."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/caduceus/models/rc_equivariance.py",
+      "description": "Reference PyTorch implementations of the RC operation, BiMamba (weight-tied bi-directional), and MambaDNA (channel-split RC-equivariant wrapper), plus RC-equivariant embedding and LM head. Used for unit-testing the equivariance property (Thm 3.1) on CPU; the fine-tuning path uses the official HF weights.",
+      "sir_modules_mapped": ["RCEquivariantEmbedding", "BiMamba", "MambaDNA", "RCEquivariantLMHead"],
+      "classes": [
+        {"name": "BiMamba", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "y [B, L, D] = mamba(x) + flip(mamba(flip(x)))"}
+        ]},
+        {"name": "MambaDNA", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "concat(M(x_a), RC(M(RC(x_b)))) [B, L, D]"}
+        ]},
+        {"name": "RCEquivariantEmbedding", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, ids: torch.Tensor) -> torch.Tensor", "returns": "concat(Emb(X), RC(Emb(RC(X)))) [B, L, D]"}
+        ]},
+        {"name": "RCEquivariantLMHead", "base_class": "nn.Module", "public_methods": [
+          {"name": "forward", "signature": "forward(self, h: torch.Tensor) -> torch.Tensor", "returns": "LM(h_a) + flip_chan(LM(h_b)) [B, L, vocab]"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/caduceus/models/classifier.py",
+      "description": "Loads the official Caduceus backbone from the HF Hub (AutoModel, trust_remote_code=True) and attaches a mean-pool + linear classification head per Sec 5.2.1. Handles Caduceus-PS channel-split averaging (RC-invariance) and Caduceus-Ph post-hoc conjoining (RC-ensemble at inference).",
+      "sir_modules_mapped": ["Mamba", "BiMamba", "MambaDNA"],
+      "classes": [
+        {"name": "CaduceusClassifier", "base_class": "nn.Module", "public_methods": [
+          {"name": "from_pretrained", "signature": "from_pretrained(cls, model_name: str, num_classes: int, variant: str, device: str) -> 'CaduceusClassifier'", "returns": "model"},
+          {"name": "forward", "signature": "forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor = None, conjoin: bool = False) -> torch.Tensor", "returns": "logits [B, num_classes]"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/caduceus/data/tokenizer.py",
+      "description": "Char-level DNA tokenizer (A/C/G/T/N + special tokens) matching the Caduceus recipe, with a reverse_complement helper for RC data augmentation and conjoining.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "CharTokenizer", "base_class": "object", "public_methods": [
+        {"name": "encode_batch", "signature": "encode_batch(self, seqs: List[str], max_len: int) -> Dict[str, torch.Tensor]", "returns": "input_ids + attention_mask"},
+        {"name": "reverse_complement", "signature": "reverse_complement(seq: str) -> str", "returns": "RC string"}
+      ]}]
+    },
+    {
+      "path": "src/caduceus/data/benchmarks.py",
+      "description": "Genomic Benchmarks loader (default) with optional RC data augmentation; task registry maps task -> (num_classes, metric).",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "GenomicDataset", "base_class": "torch.utils.data.Dataset", "public_methods": [
+        {"name": "__getitem__", "signature": "__getitem__(self, idx: int) -> Tuple[str, int]", "returns": "(sequence, label)"}
+      ]}]
+    },
+    {
+      "path": "src/caduceus/training/trainer.py",
+      "description": "Fine-tuning loop: AdamW, cosine schedule, early stopping on val metric, 5-fold CV support (Sec 5.2.1 / App D.1). RC data augmentation toggle for Caduceus-Ph.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "Trainer", "base_class": "object", "public_methods": [
+        {"name": "fit", "signature": "fit(self) -> Dict[str, float]", "returns": "best val/test metrics"}
+      ]}]
+    },
+    {
+      "path": "src/caduceus/evaluation/metrics.py",
+      "description": "top-1 accuracy, MCC, F1, AUROC.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/caduceus/utils/config.py",
+      "description": "YAML loader + seeding + Genomic Benchmarks task registry (metric + num_classes per task).",
+      "sir_modules_mapped": [],
+      "classes": []
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "Downstream classification forward (Caduceus-Ph)",
+      "input": {"name": "input_ids", "shape": "[B, L]", "dtype": "int64"},
+      "output": {"name": "logits", "shape": "[B, num_classes]", "dtype": "float32"},
+      "steps": [
+        "char-tokenize DNA -> input_ids [B, L]",
+        "Caduceus backbone (BiMamba stack) -> hidden [B, L, D]",
+        "mean-pool over length -> pooled [B, D]",
+        "linear head -> logits [B, num_classes]",
+        "inference only: also run on RC(seq), average the two logits (post-hoc conjoining)"
+      ]
+    },
+    {
+      "name": "RC-equivariance unit check (MambaDNA reference)",
+      "input": {"name": "x", "shape": "[B, L, D]", "dtype": "float32"},
+      "output": {"name": "equivariance_gap", "shape": "scalar", "dtype": "float32"},
+      "steps": [
+        "y1 = RC(MambaDNA(x))",
+        "y2 = MambaDNA(RC(x))",
+        "assert allclose(y1, y2)  (Thm 3.1)"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {"model_name": "kuleshov-group/caduceus-ph_seqlen-1k_d_model-118_n_layer-4_lr-8e-3", "variant": "ph", "num_classes": 2, "pool": "mean"},
+    "training": {"optimizer": "adamw", "lr": 1.0e-3, "weight_decay": 0.0, "batch_size": 128, "epochs": 10, "scheduler": "cosine", "early_stopping_patience": 3, "rc_aug": true},
+    "data": {"benchmark": "genomic_benchmarks", "task": "human_nontata_promoters", "data_dir": "data/", "max_len": 500},
+    "evaluation": {"metric": "accuracy", "split": "test", "cv_folds": 5, "conjoin": true},
+    "hardware": {"device": "auto", "num_workers": 2, "seed": 42, "deterministic": false}
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "torch", "version": ">=2.1", "reason": "core framework"},
+      {"package": "transformers", "version": ">=4.38", "reason": "AutoModel + trust_remote_code for Caduceus custom modeling code"},
+      {"package": "mamba-ssm", "version": ">=1.2", "reason": "selective-scan CUDA kernel for the official Caduceus forward pass"},
+      {"package": "causal-conv1d", "version": ">=1.2", "reason": "fused causal conv kernel required by mamba-ssm"},
+      {"package": "accelerate", "version": ">=0.30", "reason": "device placement"},
+      {"package": "genomic-benchmarks", "version": ">=0.0.9", "reason": "Genomic Benchmarks API/download"},
+      {"package": "datasets", "version": ">=2.14", "reason": "dataset loading"},
+      {"package": "huggingface_hub", "version": ">=0.19", "reason": "weights download"},
+      {"package": "scikit-learn", "version": ">=1.3", "reason": "MCC/F1/AUROC + CV splits"},
+      {"package": "pandas", "version": ">=2.0", "reason": "data handling"},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "config"},
+      {"package": "tqdm", "version": ">=4.66", "reason": "progress bars"},
+      {"package": "numpy", "version": ">=1.24", "reason": "arrays/seeding"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=7.4"},
+      {"package": "ruff", "version": ">=0.1"},
+      {"package": "jupyter", "version": ">=1.0"}
+    ]
+  },
+  "entrypoints": [
+    {"filename": "train.py", "purpose": "Fine-tune Caduceus on a Genomic Benchmarks classification task", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "YAML config"},
+      {"flag": "--task", "type": "str", "required": false, "default": null, "help": "override benchmark task"},
+      {"flag": "--seed", "type": "int", "required": false, "default": 42, "help": "random seed"},
+      {"flag": "--debug", "type": "bool", "required": false, "default": false, "help": "tiny subset + few steps"},
+      {"flag": "--dry-run", "type": "bool", "required": false, "default": false, "help": "build components, skip training"}
+    ]},
+    {"filename": "evaluate.py", "purpose": "Evaluate a checkpoint on the test split (with optional post-hoc conjoining)", "cli_args": [
+      {"flag": "--config", "type": "str", "required": true, "default": "configs/config.yaml", "help": "config"},
+      {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "checkpoint path"}
+    ]},
+    {"filename": "data/download.py", "purpose": "Download Genomic Benchmarks datasets via API", "cli_args": [
+      {"flag": "--benchmark", "type": "str", "required": false, "default": "genomic_benchmarks", "help": "genomic_benchmarks"},
+      {"flag": "--task", "type": "str", "required": false, "default": null, "help": "specific task; omit for all"},
+      {"flag": "--data-dir", "type": "str", "required": false, "default": "data/", "help": "output directory"}
+    ]}
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["git", "wget", "curl", "build-essential"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {"severity": "High", "description": "The official Caduceus forward pass depends on mamba-ssm + causal-conv1d fused CUDA kernels, which need a CUDA GPU and can be finicky to build (must match torch/CUDA versions). Will not run on CPU-only.", "source": "sir.implementation_assumptions", "mitigation": "Target a CUDA GPU (Colab T4/A100). Ship a pure-PyTorch BiMamba/MambaDNA reference for CPU unit tests of the architecture. Notebook installs mamba-ssm/causal-conv1d with pinned wheels and degrades gracefully to the reference path for the equivariance demo."},
+    {"severity": "Medium", "description": "Genomic Benchmarks tasks are grid-searched over LR {1e-3, 2e-3} per task (Table 5); a single run must fix one point (SIR conf 0.7).", "source": "sir.ambiguities", "mitigation": "Default lr 1e-3, exposed in config with # ASSUMED comment; reproduce one task (human_nontata_promoters / human_vs_worm) rather than all 8."},
+    {"severity": "Low", "description": "Exact HF repo id / variant (ph vs ps, seqlen, d_model) must be confirmed at load time.", "source": "sir.implementation_assumptions", "mitigation": "Loader takes model_name from config; hidden size read from model config, never hardcoded; tries the 1k-seqlen small checkpoint by default for fast fine-tuning."},
+    {"severity": "Low", "description": "Caduceus-PS channel-split averaging vs Caduceus-Ph conjoining differ; using the wrong post-processing hurts accuracy.", "source": "sir.architecture", "mitigation": "variant flag in config drives pooling/conjoining logic; default Caduceus-Ph (best overall on Genomic Benchmarks)."}
+  ]
+}

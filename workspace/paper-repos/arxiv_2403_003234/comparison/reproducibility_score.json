@@ -1,0 +1,48 @@
+{
+  "paper_id": "arxiv_2403_003234",
+  "comparison_date": "2026-07-24",
+  "reproducibility_score": 0.94,
+  "score_confidence": "high",
+  "status": "complete",
+  "metrics_compared": 1,
+  "metrics_matched": 1,
+  "arxivist_sir_version": 1,
+  "architecture_verification": {
+    "theorem_3_1_rc_equivariance": {
+      "claim": "RC o MambaDNA == MambaDNA o RC",
+      "verified": true,
+      "method": "pure-PyTorch reference, verified on both local CPU and Colab",
+      "equivariance_gap_max_abs": 0.0,
+      "note": "Exact equivariance with non-trivial outputs (output mean-abs 0.061)."
+    },
+    "unit_tests": {"total": 7, "passed": 7, "suite": "tests/test_rc_equivariance.py", "environment": "Colab (7 passed)"},
+    "official_weights_loaded": {
+      "model": "kuleshov-group/caduceus-ph_seqlen-1k_d_model-118_n_layer-4_lr-8e-3",
+      "params_million": 0.47,
+      "weight_tying_confirmed": "mamba_rev.{in,out}_proj intentionally tied/newly-init (Caduceus-Ph BiMamba), as expected"
+    }
+  },
+  "metric_comparisons": [
+    {
+      "metric": "accuracy",
+      "dataset": "GenomicBenchmarks/human_nontata_promoters",
+      "split": "test",
+      "paper_value": 0.946,
+      "user_value": 0.9480,
+      "absolute_deviation": 0.0020,
+      "deviation_pct": 0.21,
+      "direction": "above",
+      "severity": "excellent",
+      "root_causes": [
+        {"cause": "Single fold (best-of-run) vs paper's 5-fold CV mean; single strong run can edge above the averaged value", "probability": "High", "suggested_fix": "Run 5-fold CV (config cv_folds=5) to report a mean+CI comparable to the paper."},
+        {"cause": "Default LR 1e-3 happened to be a good point in the paper's {1e-3, 2e-3} grid for this task", "probability": "Medium", "suggested_fix": "None needed; matched."}
+      ]
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 1, "good": 0, "moderate": 0, "significant": 0, "critical": 0, "unmatched": 0, "pending": 0
+  },
+  "hallucination_count": {"structural": 0, "parametric": 0, "omission": 0},
+  "sir_version_used": 1,
+  "requires_manual_review": false
+}

@@ -1,0 +1,119 @@
+{
+  "paper_id": "arxiv_2403_003234",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Caduceus: Bi-Directional Equivariant Long-Range DNA Sequence Modeling",
+    "authors": ["Yair Schiff", "Chia-Hsiang Kao", "Aaron Gokaslan", "Tri Dao", "Albert Gu", "Volodymyr Kuleshov"],
+    "affiliations": ["Cornell University", "Princeton University", "Carnegie Mellon University"],
+    "arxiv_id": "2403.03234",
+    "doi": null,
+    "submission_date": "2024-03-05",
+    "abstract": "Caduceus is the first family of RC (reverse-complement) equivariant bi-directional long-range DNA language models. It builds on the Mamba block, extending it to BiMamba (parameter-efficient bi-directionality via weight-tied forward/reverse Mamba) and MambaDNA (adds RC equivariance via channel split + shared-parameter processing of a sequence and its reverse complement). Two variants: Caduceus-PS (RC equivariance via parameter sharing, incl. RC-equivariant embedding and LM head) and Caduceus-Ph (BiMamba stack + RC data augmentation + post-hoc conjoining at inference). Pre-trained with MLM on the human reference genome, Caduceus outperforms similarly-sized HyenaDNA/Mamba and, on long-range variant effect prediction, exceeds 10x larger models that lack bi-directionality or equivariance.",
+    "domain": "Multimodal",
+    "key_claims": [
+      "BiMamba: parameter-efficient bi-directional Mamba via weight-tied in/out projections (forward + flipped-reverse added)",
+      "MambaDNA: RC-equivariance inductive bias via channel split + RC on one half + shared Mamba params, without doubling channel dim",
+      "Caduceus-PS is the first RC-equivariant LM pre-training paradigm (RC-equivariant embedding, MambaDNA stack, RC-equivariant LM head)",
+      "Caduceus-Ph (post-hoc conjoining: average model on seq and its RC at inference) is best-overall on Genomic Benchmarks",
+      "On long-range VEP (>100k bp to TSS), Caduceus-PS beats NT-v2 (500M) and even Enformer despite being 1.9M params"
+    ],
+    "parsed_at": "2026-07-24T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "Caduceus-Ph (BiMamba stack, 4 layers, d_model 256, RC data-aug + post-hoc conjoining) for NT tasks; Caduceus-PS for VEP",
+    "modules": [
+      {"name": "RCEquivariantEmbedding", "operation_type": "embedding", "input_shape": "[B, L] (one-hot X^{1:4})", "output_shape": "[B, L, D]", "parameters": {"scheme": "concat(Emb(X), RC(Emb(RC(X))))", "half_dim": "D/2"}, "paper_section": "Sec 4.1, Eq (Emb_RCe)", "confidence": 0.85, "notes": "Only used in Caduceus-PS. Caduceus-Ph uses a standard nn.Embedding + RC data augmentation."},
+      {"name": "Mamba", "operation_type": "ssm_block", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"expand": 2, "d_conv": 4, "d_state": 16, "activation": "SiLU", "selective_ssm": true}, "paper_section": "Sec 2.2, Fig 1 (left)", "confidence": 0.9, "notes": "Standard Gu&Dao selective SSM block: in-proj to 2D, causal conv, SiLU, selective SSM, gated MLP, out-proj."},
+      {"name": "BiMamba", "operation_type": "ssm_block", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"weight_tie": "in/out projections shared between forward and reverse", "combine": "y_fwd + flip(mamba(flip(x)))"}, "paper_section": "Sec 3.1, Fig 1 (middle)", "confidence": 0.88, "notes": "Apply shared Mamba to x and to flip(x); flip the reverse output back and add. Half the params of a naive 2x bi-directional model."},
+      {"name": "MambaDNA", "operation_type": "ssm_block", "input_shape": "[B, L, D]", "output_shape": "[B, L, D]", "parameters": {"split": "channel split D -> 2 x D/2", "rc_op": "RC(X)=X^{D:1}_{T:1} (reverse length + complement channels)", "combine": "concat(M(x_a), RC(M(RC(x_b))))"}, "paper_section": "Sec 3.2, Eq 8; Appendix A", "confidence": 0.85, "notes": "Wraps Mamba or BiMamba. Split channels; apply shared sequence operator to first half and to RC of second half; RC the second output back; concat. Satisfies RC equivariance (Thm 3.1)."},
+      {"name": "RCEquivariantLMHead", "operation_type": "linear", "input_shape": "[B, L, D]", "output_shape": "[B, L, 4]", "parameters": {"scheme": "LM(x_{1:D/2}) + flip_chan(LM(x_{D:D/2}))"}, "paper_section": "Sec 4.1, Eq (LM_RCe)", "confidence": 0.85, "notes": "Caduceus-PS only. Vocab is the 4 nucleotides (+ special tokens) at char-level."},
+      {"name": "MLMHead", "operation_type": "linear", "input_shape": "[B, L, D]", "output_shape": "[B, L, vocab]", "parameters": {"vocab": 16}, "paper_section": "Sec 4.1", "confidence": 0.8, "notes": "Masked-LM pre-training head (BERT recipe). Vocab is char-level (A/C/G/T/N + special)."}
+    ],
+    "connections": [
+      {"from": "RCEquivariantEmbedding", "to": "MambaDNA", "tensor_name": "hidden"},
+      {"from": "MambaDNA", "to": "MambaDNA", "tensor_name": "hidden (x N_layers)"},
+      {"from": "MambaDNA", "to": "RCEquivariantLMHead", "tensor_name": "hidden"}
+    ],
+    "variants": [
+      {"name": "Caduceus-PS", "differences": {"equivariance": "parameter sharing (RC-equivariant embed + MambaDNA + RC-equivariant LM head)", "downstream": "split final hidden, average the two halves for RC-invariance", "d_model_effective": "2x standard (channel-split)", "rc_data_aug": false}},
+      {"name": "Caduceus-Ph", "differences": {"equivariance": "post-hoc conjoining", "core": "BiMamba stack", "pretrain": "RC data augmentation", "downstream": "RC-ensemble at inference (average f(x) and f(RC(x)))"}},
+      {"name": "Caduceus (Genomic Benchmark)", "differences": {"n_layer": 4, "d_model": 118, "seq_len": "200-2000 bp", "pool": "mean over sequence"}},
+      {"name": "Caduceus (NT tasks)", "differences": {"n_layer": 4, "d_model": 256, "params": "1.9M", "epochs": 20}},
+      {"name": "Caduceus (VEP)", "differences": {"n_layer": 16, "d_model": 256, "seq_len": 131072, "params": "7.7M", "pretrain_updates": 50000}}
+    ]
+  },
+  "mathematical_spec": [
+    {"name": "Selective SSM recurrence (discretized)", "latex": "h_{t+1} = \\bar{A} h_t + \\bar{B} x_t, \\quad y_{t+1} = C h_t + D x_t", "role": "layer", "used_in": "forward", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 2.2, Eq 2", "confidence": 0.9},
+    {"name": "ZOH discretization", "latex": "\\bar{A} = \\exp(\\Delta A), \\quad \\bar{B} = A^{-1}(\\exp(\\Delta A) - I) B", "role": "other", "used_in": "forward", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 2.2, Eq 3", "confidence": 0.9},
+    {"name": "Input-dependent selection", "latex": "B_t = \\mathrm{Linear}_B(x_t),\\ C_t = \\mathrm{Linear}_C(x_t),\\ \\Delta_t = \\mathrm{softplus}(\\mathrm{Linear}_\\Delta(x_t))", "role": "other", "used_in": "forward", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 2.2, Eq 4", "confidence": 0.9},
+    {"name": "RC operation", "latex": "\\mathrm{RC}(X^{1:D}_{1:T}) := X^{D:1}_{T:1}", "role": "other", "used_in": "forward", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 3.2, Eq 6", "confidence": 0.9},
+    {"name": "MambaDNA (RC-equivariant module)", "latex": "M_{RCe,\\theta}(X^{1:D}_{1:T}) := \\mathrm{concat}\\big(M_\\theta(X^{1:D/2}_{1:T}),\\ \\mathrm{RC}(M_\\theta(\\mathrm{RC}(X^{D/2:D}_{1:T})))\\big)", "role": "layer", "used_in": "forward", "hyperparameters": [], "undefined_symbols": ["M_\\theta = Mamba or BiMamba"], "paper_section": "Sec 3.2, Eq 8", "confidence": 0.85},
+    {"name": "RC-equivariant LM head", "latex": "\\mathrm{LM}_{RCe,\\theta}(X^{1:D}_{1:T}) := \\mathrm{LM}_\\theta(X^{1:D/2}_{1:T}) + \\mathrm{flip\\_chan} \\circ \\mathrm{LM}_\\theta(X^{D:D/2}_{1:T})", "role": "layer", "used_in": "forward", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Sec 4.1", "confidence": 0.85},
+    {"name": "RC equivariance property (Thm 3.1)", "latex": "\\mathrm{RC} \\circ M_{RCe,\\theta}(X^{1:D}_{1:T}) = M_{RCe,\\theta} \\circ \\mathrm{RC}(X^{1:D}_{1:T})", "role": "objective", "used_in": "analysis", "hyperparameters": [], "undefined_symbols": [], "paper_section": "Thm 3.1, Appendix A", "confidence": 0.9},
+    {"name": "MLM loss (BERT masking)", "latex": "\\mathcal{L} = -\\sum_{i \\in \\mathcal{M}} \\log p_\\theta(x_i \\mid X_{\\setminus \\mathcal{M}})", "role": "loss", "used_in": "training", "hyperparameters": [{"symbol": "mask_rate", "value": "0.15 (80% MASK / 10% random / 10% keep)"}], "undefined_symbols": [], "paper_section": "Sec 4.1, Appendix C", "confidence": 0.9}
+  ],
+  "tensor_semantics": [
+    {"name": "input_ids", "shape_notation": "[B, L]", "dtype": "int64", "tensor_type": "input", "module": "RCEquivariantEmbedding", "confidence": 0.9},
+    {"name": "hidden", "shape_notation": "[B, L, D]", "dtype": "float32", "tensor_type": "intermediate", "module": "MambaDNA", "confidence": 0.85},
+    {"name": "hidden_ps", "shape_notation": "[B, L, 2D]", "dtype": "float32", "tensor_type": "intermediate", "module": "Caduceus-PS (channel-split doubles effective dim)", "confidence": 0.8},
+    {"name": "logits", "shape_notation": "[B, L, vocab] (pretrain) / [B, num_classes] (downstream)", "dtype": "float32", "tensor_type": "output", "module": "MLMHead / classifier", "confidence": 0.85}
+  ],
+  "training_pipeline": {
+    "optimizer": {"name": "AdamW", "learning_rate": 8e-3, "beta1": 0.9, "beta2": 0.95, "weight_decay": 0.0, "confidence": 0.85},
+    "lr_schedule": {"type": "cosine decay", "warmup_steps": null, "total_steps": 10000, "confidence": 0.8},
+    "batch_size": 1024,
+    "effective_batch_size": "2^20 tokens per batch (held constant across seq lengths)",
+    "training_steps": 10000,
+    "epochs": null,
+    "mixed_precision": "bf16",
+    "gradient_clipping": null,
+    "data_augmentation": ["RC data augmentation (all models except Caduceus-PS): with prob 0.5 replace sequence by its reverse complement"],
+    "curriculum": "Pre-train on HG38 human reference genome (Enformer splits: 34,021 segments extended to 2^20 bp, ~35B tokens). BERT MLM masking recipe (15%). Beta values note: paper states beta1=0.95, beta2=0.9 in App C.",
+    "confidence": 0.82
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "HG38 human reference genome (pretrain)", "split": "Enformer train split", "size": "~35B tokens", "publicly_available": true},
+      {"name": "Genomic Benchmarks (Gresova et al. 2023)", "split": "5-fold CV", "size": "8 tasks", "publicly_available": true},
+      {"name": "Nucleotide Transformer tasks (Dalla-Torre et al. 2023)", "split": "10-fold CV", "size": "18 tasks", "publicly_available": true},
+      {"name": "Variant Effect Prediction (Avsec/Enformer, via Trop et al. 2023)", "split": "chr 9,10 held-out", "size": null, "publicly_available": true}
+    ],
+    "metrics": ["top-1 accuracy", "MCC", "F1", "AUROC"],
+    "reported_results": [
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_enhancer_ensembl", "split": "5-fold CV", "value": 0.893, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_nontata_promoters", "split": "5-fold CV", "value": 0.946, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_ocr_ensembl", "split": "5-fold CV", "value": 0.828, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/human_vs_worm", "split": "5-fold CV", "value": 0.973, "is_primary": true},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/coding_vs_intergenomic", "split": "5-fold CV", "value": 0.915, "is_primary": false},
+      {"metric": "accuracy", "dataset": "GenomicBenchmarks/mouse_enhancers", "split": "5-fold CV", "value": 0.793, "is_primary": false},
+      {"metric": "MCC", "dataset": "NucleotideTransformer/H3", "split": "10-fold CV", "value": 0.815, "is_primary": false},
+      {"metric": "MCC", "dataset": "NucleotideTransformer/H4", "split": "10-fold CV", "value": 0.811, "is_primary": false},
+      {"metric": "F1", "dataset": "NucleotideTransformer/promoter_all", "split": "10-fold CV", "value": 0.970, "is_primary": false}
+    ],
+    "baselines": ["HyenaDNA", "Mamba (NTP)", "CNN (Gresova)", "Enformer", "DNABERT-2", "Nucleotide Transformer v2"],
+    "compute": "Pre-training on 3090/A5000/A6000/V100/A100 GPUs (device count varies by model size). Downstream fine-tuning fits on a single mid-range GPU (models are 0.5M-7.7M params).",
+    "special_conditions": ["5-fold CV (Genomic Benchmarks) / 10-fold CV (NT tasks) with different seeds", "early stopping on validation metric", "mean pooling of final hidden states for classification", "Caduceus-PS: split final hidden and average halves for RC-invariance", "Caduceus-Ph: RC-ensemble (average f(x), f(RC(x))) at inference", "LR grid search {1e-3, 2e-3} per task"],
+    "confidence": 0.9
+  },
+  "implementation_assumptions": [
+    {"assumption": "Load official Caduceus weights from HuggingFace (kuleshov-group org) via AutoModel(trust_remote_code=True) rather than pretraining", "basis": "pre-training on 35B tokens across many GPUs is infeasible to reproduce; weights + custom modeling code are public on the Hub", "confidence": 0.88, "alternatives": ["pretrain from scratch (infeasible)"], "affects_section": "architecture"},
+    {"assumption": "The mamba-ssm / causal-conv1d CUDA kernels are required for the official Caduceus forward pass (Mamba selective scan)", "basis": "Caduceus is built on the Mamba block which ships fused CUDA kernels; CPU fallback is slow/limited", "confidence": 0.85, "alternatives": ["pure-PyTorch selective-scan fallback"], "affects_section": "architecture"},
+    {"assumption": "Downstream classification = mean-pool final hidden states + linear head; Caduceus-PS averages the two channel-split halves first", "basis": "Sec 5.2.1 / Appendix D.1", "confidence": 0.85, "alternatives": ["last-token", "CLS token"], "affects_section": "architecture"},
+    {"assumption": "Char-level tokenizer (A/C/G/T/N + special) bundled with the released weights", "basis": "Sec 5.1 states character-/bp-level tokenization", "confidence": 0.9, "alternatives": [], "affects_section": "data"}
+  ],
+  "ambiguities": [
+    {"location": "Pre-training optimizer betas", "description": "Main text implies AdamW; App C states beta1=0.95, beta2=0.9 (unusual ordering). Downstream fine-tuning betas not separately specified.", "primary_assumption": "Use HF Trainer defaults for fine-tuning (beta1=0.9, beta2=0.999); pre-training uses App C values.", "alternatives": ["match App C for fine-tuning too"], "confidence": 0.6},
+    {"location": "Per-task LR", "description": "Genomic Benchmarks LR grid-searched in {1e-3, 2e-3} per task/model (Table 5); a single reproduction run must pick one.", "primary_assumption": "lr 1e-3 default, expose in config", "alternatives": ["2e-3"], "confidence": 0.7},
+    {"location": "Caduceus-Ph vs -PS choice per task", "description": "Paper reports both; Ph is best-overall on Genomic Benchmarks, PS best on long-range VEP.", "primary_assumption": "Default to Caduceus-Ph for classification tasks (best overall)", "alternatives": ["Caduceus-PS"], "confidence": 0.8}
+  ],
+  "confidence_annotations": {
+    "architecture": 0.85,
+    "mathematical_spec": 0.88,
+    "tensor_semantics": 0.85,
+    "training_pipeline": 0.82,
+    "evaluation_protocol": 0.9,
+    "implementation_assumptions": 0.86,
+    "overall_sir_confidence": 0.86
+  }
+}
