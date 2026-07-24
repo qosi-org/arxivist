@@ -1,0 +1,41 @@
+{
+  "paper_id": "arxiv_2607_20168",
+  "title": "Quantum Kernels and the Cross-Section of Stock Returns: Anatomy of a Vanishing Advantage",
+  "authors": [
+    "Junchi Shen"
+  ],
+  "domain": "Tabular",
+  "arxiv_id": "2607.20168",
+  "version": 1,
+  "created_at": "2026-07-23T10:00:50Z",
+  "last_updated": "2026-07-24T05:31:52Z",
+  "sir_confidence": 0.71,
+  "stages_with_data": [
+    "stage_1_paper_parser",
+    "stage_2_sir_registry",
+    "stage_3_architecture_planner",
+    "stage_4_code_generator",
+    "stage_5_notebook_generator",
+    "stage_6_results_comparator"
+  ],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2607_20168/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-23T10:00:50Z",
+      "reason": "initial commit",
+      "changed_sections": []
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-24T05:31:52Z",
+      "reason": "Stages 3-6 completed: architecture plan, full repo (quantum+classical pipeline), notebook, Stage 6 comparison against synthetic smoke-test results",
+      "changed_sections": [
+        "architecture_plan",
+        "repo",
+        "comparison"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,437 @@
+{
+  "paper_id": "arxiv_2607_20168",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Quantum Kernels and the Cross-Section of Stock Returns: Anatomy of a Vanishing Advantage",
+    "authors": ["Junchi Shen"],
+    "affiliations": [],
+    "arxiv_id": "2607.20168",
+    "doi": null,
+    "submission_date": "2026-07-22",
+    "abstract": "Do quantum kernels improve cross-sectional stock return prediction? A controlled horse race on Chinese A-shares shares identical training subsamples, solver, and tuning budgets across a quantum fidelity kernel, a projected quantum kernel, and a classical RBF control, so only the kernel is exchanged. On a point-in-time universe over 170 walk-forward windows (2012-2025), no quantum advantage exists after budget-equalization and family-wise correction. A 60-window evaluation on a survivorship-screened universe reproduces the opposite (spurious) conclusion, which the paper decomposes. Interaction characteristics help nothing; a widened bandwidth grid reveals an interior optimum; and the geometric difference does not predict out-of-sample gains.",
+    "domain": "Tabular",
+    "key_claims": [
+      "On a point-in-time universe with 170 walk-forward windows (2012-2025), the quantum fidelity kernel is statistically indistinguishable from a budget-matched classical RBF kernel (delta-IC=+0.005, p=0.42), and no pairwise difference among eleven models survives family-wise (Holm) correction.",
+      "A budget-equalized 2x2 design (kernel type x training size, with a Nystrom extension of the quantum kernel to the full ~37,800-observation budget) shows quantum kernels matching but never beating equal-budget linear ridge regression at either training scale.",
+      "A 60-window evaluation on a survivorship/full-sample-screened static universe reverses the conclusion: the same fidelity quantum kernel appears dominant on stability metrics (highest ICIR, t-stat, hit rate, smallest drawdown) and significantly beats neural baselines -- an artifact traced to universe construction, insufficient power/multiplicity, and weak deep-learning baselines.",
+      "Twelve literature-catalogued pairwise interaction characteristics do not improve any model (linear, boosted trees, or quantum), and actively hurt the quantum kernel's rotation pool (delta-IC=-0.031, p=0.03) by displacing stronger primitive signals from scarce qubits.",
+      "A widened 8-point bandwidth grid finds the tuned optimum at an interior bandwidth (not the near-classical endpoint a coarse grid suggests), and the regularized geometric difference g (Huang et al. 2021), though always >>1, is uncorrelated with realized out-of-sample gains (rho=-0.20)."
+    ],
+    "parsed_at": "2026-07-23T10:00:50Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "Quantum Kernel Ridge Regression (QKRR) with fidelity kernel, under kernel-swap control vs. projected quantum kernel and classical RBF kernel",
+    "modules": [
+      {
+        "name": "CharacteristicConstructionAndStandardization",
+        "operation_type": "preprocessing",
+        "input_shape": "raw exchange snapshots + quarterly financial statements, daily, Jan 2010 - Mar 2026",
+        "output_shape": "[num_stocks_per_day, 27] (main study) or [num_stocks_per_day, 31] (diagnostic study) standardized characteristics",
+        "parameters": {
+          "winsorization": "+/-3 sigma",
+          "standardization": "cross-sectional, daily, over full market before universe restriction",
+          "fundamental_alignment": "announcement-date merge; TTM aggregation only if 4 quarters span <=380 days; YoY growth requires 330-400 day span; forward-fill <=250 trading days"
+        },
+        "paper_section": "3.1, Table 1",
+        "confidence": 0.9,
+        "notes": "27 characteristics reconstructible from raw data since 2010 (main study); +4 characteristics (RSRS, analyst revisions, variants) available only from 2020, for 31 total (diagnostic/short-sample study, Sec 6)."
+      },
+      {
+        "name": "UniverseConstruction_PointInTime",
+        "operation_type": "data_filtering",
+        "input_shape": "daily stock pool",
+        "output_shape": "top-450 stocks by trailing 20-day mean float market cap, 2011-2025 (1.66M pool stock-days)",
+        "parameters": {"trailing_price_coverage_threshold": "252-day coverage > 90%", "pool_size": 450},
+        "paper_section": "3.2 (main study universe)",
+        "confidence": 0.9,
+        "notes": "No information beyond day t enters -- constructible in real time. This is the 'clean' universe used for the main 170-window evaluation."
+      },
+      {
+        "name": "UniverseConstruction_StaticScreen",
+        "operation_type": "data_filtering",
+        "input_shape": "daily stock pool",
+        "output_shape": "fixed pool of 450 stocks with highest full-sample (2020-2025) price coverage",
+        "parameters": {"pool_size": 450, "screening_window": "full 2020-2025 sample (survivorship-conditioned)"},
+        "paper_section": "3.2 (diagnostic study universe)",
+        "confidence": 0.9,
+        "notes": "Deliberately unimplementable in real time (conditions on survival through the sample's end); used as the 'treatment arm' of the paper's natural experiment in research design (Sec 6)."
+      },
+      {
+        "name": "FactorRotationAndTop8Selection",
+        "operation_type": "feature_selection",
+        "input_shape": "[27 or 31] standardized characteristics per window",
+        "output_shape": "top-8 characteristics by |window rank IC|, sign-corrected",
+        "parameters": {
+          "active_set_threshold": "|IC| >= 0.015, minimum 6 kept",
+          "top8_size": 8,
+          "rebalance_frequency": "every 20 trading days",
+          "training_window": "trailing 252 trading days ending 20 days before rebalance date",
+          "cross_section_sampling": "every 3rd day within window"
+        },
+        "paper_section": "4.1",
+        "confidence": 0.9,
+        "notes": "The top-8 set is shared verbatim by all top-8 models (classical and quantum) -- this is the paper's main kernel-swap control input. The full active set (variable size >=6) is used only for classical full-set benchmarks (ridge, XGBoost full-set)."
+      },
+      {
+        "name": "BandwidthScaling",
+        "operation_type": "preprocessing",
+        "input_shape": "[8] top-8 z-scores clipped to [-3,3]",
+        "output_shape": "[8] rescaled inputs x~ = lambda * x",
+        "parameters": {
+          "production_grid": [0.05, 0.1, 0.2, 0.4],
+          "widened_diagnostic_grid": "8 points spanning lambda in [0.01, 1.6]",
+          "tuning_criterion": "validation rank IC (80/20 temporal split of the kernel subsample)"
+        },
+        "paper_section": "4.2, 8",
+        "confidence": 0.85,
+        "notes": "Bandwidth governs spectral decay/exponential concentration (Shaydulin & Wild 2022; Canatar et al. 2023; Thanasilp et al. 2024)."
+      },
+      {
+        "name": "QuantumFeatureMapCircuit",
+        "operation_type": "quantum_circuit (feature embedding)",
+        "input_shape": "[8] bandwidth-scaled input x~",
+        "output_shape": "quantum state |psi(x)> in a 2^8=256-dimensional complex Hilbert space",
+        "parameters": {
+          "num_qubits": 8,
+          "repetitions_R": 2,
+          "entanglement_topology": "ring (nearest-neighbor, indices mod n)",
+          "simulation": "exact statevector simulation via PennyLane (Bergholm et al. 2018), batched -- no hardware"
+        },
+        "paper_section": "4.2, Eq. (1)",
+        "confidence": 0.65,
+        "notes": "AMBIGUITY (see ambiguities[]): the single-qubit term exp(-i*x~_q*Z_q*H_q) uses H_q without explicit definition. Interpreted here as the standard IQP-style Hadamard-conjugated rotation (H . RZ(x~_q) . H = RX(x~_q) up to phase), matching Havlicek et al. (2019)-style encodings, but the paper does not spell this out."
+      },
+      {
+        "name": "FidelityKernelComputation",
+        "operation_type": "kernel_function",
+        "input_shape": "two quantum states |psi(x)>, |psi(x')>",
+        "output_shape": "scalar kernel value in [0,1]",
+        "parameters": {"formula": "kappa_Q(x,x') = |<psi(x)|psi(x')>|^2"},
+        "paper_section": "4.2",
+        "confidence": 0.92,
+        "notes": "Gram matrix follows from one inner-product matrix multiplication over all training states (paper's phrasing) -- i.e. batched overlap computation, not per-pair circuit re-execution."
+      },
+      {
+        "name": "ProjectedKernelComputation",
+        "operation_type": "kernel_function",
+        "input_shape": "quantum state |psi(x)>",
+        "output_shape": "Bloch feature vector phi(x) in R^24, then scalar kernel value",
+        "parameters": {
+          "bloch_vector_per_qubit": "(<X_q>, <Y_q>, <Z_q>), 3 values x 8 qubits = 24-dim",
+          "formula": "kappa_P(x,x') = exp(-gamma * ||phi(x) - phi(x')||^2)"
+        },
+        "paper_section": "4.2 (citing Huang et al. 2021)",
+        "confidence": 0.85,
+        "notes": "gamma is a kernel bandwidth hyperparameter; the paper does not explicitly state its tuning grid/procedure (flagged in ambiguities[])."
+      },
+      {
+        "name": "ClassicalRBFKernelControl",
+        "operation_type": "kernel_function",
+        "input_shape": "[8] top-8 inputs (same as quantum branch)",
+        "output_shape": "scalar kernel value",
+        "parameters": {"kernel": "standard RBF on the same top-8 inputs used by the quantum kernels"},
+        "paper_section": "4.3 (krr-rbf)",
+        "confidence": 0.9,
+        "notes": "This is the paper's kernel-swap control: identical inputs/subsample/solver/budget to the quantum kernels, isolating kernel geometry as the only varying factor."
+      },
+      {
+        "name": "KernelRidgeRegressionSolver",
+        "operation_type": "closed_form_solver",
+        "input_shape": "Gram matrix K [N,N], targets y [N]",
+        "output_shape": "dual coefficients alpha_hat [N]",
+        "parameters": {
+          "formula": "alpha_hat = (K + alpha*I)^-1 y",
+          "alpha_grid": [0.001, 0.01, 0.1, 1],
+          "training_subsample_size_N": 1536,
+          "subsampling": "stratified by date"
+        },
+        "paper_section": "4.3",
+        "confidence": 0.88,
+        "notes": "Applied identically across the fidelity/projected/RBF kernel-swap triplet. Subsampling required because exact KRR is O(N^3)."
+      },
+      {
+        "name": "NystromExtension",
+        "operation_type": "closed_form_solver (approximate, full-budget)",
+        "input_shape": "Gram matrix computed against the 1,536-observation subsample as landmarks, extended to ~37,800 window observations",
+        "output_shape": "predictions at full training budget",
+        "parameters": {"landmark_count": 1536, "full_budget_N": "~37,800", "bandwidth": "reuses the window's already-selected value from the subsample tuning step"},
+        "paper_section": "5.1, Table 4 (qkrr-nys)",
+        "confidence": 0.55,
+        "notes": "AMBIGUITY: the paper cites Williams & Seeger (2001) for the Nystrom method but does not give the extension's explicit linear-algebra formula in this paper -- implementation must reconstruct the standard Nystrom KRR approximation from the cited reference."
+      },
+      {
+        "name": "ClassicalBenchmarkSuite",
+        "operation_type": "baseline_models",
+        "input_shape": "top-8 set or full active set, ~37,800 full-window observations",
+        "output_shape": "per-model predictions",
+        "parameters": {
+          "ridge": "alpha=10 (Hoerl & Kennard 1970)",
+          "xgboost": "150 trees, depth 3, learning_rate 0.05 (Chen & Guestrin 2016)",
+          "mlp": "2 hidden layers, 64-32",
+          "nn3": "3 hidden layers 32-16-8, three-seed ensemble (Gu et al. 2020 / Leippold et al. 2022 architecture)",
+          "poly2ridge": "ridge on all pairwise products of top-8 characteristics (Kozak et al. 2020 style)",
+          "ridge_int": "ridge on active set + catalog interactions passing IC screen",
+          "xgb_x": "XGBoost on the interaction-extended set",
+          "qkrr_x": "fidelity QKRR whose top-8 rotation pool includes catalog interactions",
+          "hybrid": "rank-average of qkrr-fid and ridge"
+        },
+        "paper_section": "4.4",
+        "confidence": 0.88,
+        "notes": "Eleven models total appear in the main evaluation's pairwise-comparison family (Sec 5.2)."
+      }
+    ],
+    "connections": [
+      {"from": "CharacteristicConstructionAndStandardization", "to": "UniverseConstruction_PointInTime", "tensor_name": "daily standardized characteristics"},
+      {"from": "CharacteristicConstructionAndStandardization", "to": "UniverseConstruction_StaticScreen", "tensor_name": "daily standardized characteristics"},
+      {"from": "UniverseConstruction_PointInTime", "to": "FactorRotationAndTop8Selection", "tensor_name": "windowed characteristic panel"},
+      {"from": "UniverseConstruction_StaticScreen", "to": "FactorRotationAndTop8Selection", "tensor_name": "windowed characteristic panel"},
+      {"from": "FactorRotationAndTop8Selection", "to": "BandwidthScaling", "tensor_name": "top-8 z-scores x"},
+      {"from": "BandwidthScaling", "to": "QuantumFeatureMapCircuit", "tensor_name": "x~ (bandwidth-scaled)"},
+      {"from": "QuantumFeatureMapCircuit", "to": "FidelityKernelComputation", "tensor_name": "|psi(x)>"},
+      {"from": "QuantumFeatureMapCircuit", "to": "ProjectedKernelComputation", "tensor_name": "|psi(x)> (Bloch vectors extracted)"},
+      {"from": "BandwidthScaling", "to": "ClassicalRBFKernelControl", "tensor_name": "x~ (same rescaled top-8 inputs)"},
+      {"from": "FidelityKernelComputation", "to": "KernelRidgeRegressionSolver", "tensor_name": "Gram matrix K_fidelity [1536,1536]"},
+      {"from": "ProjectedKernelComputation", "to": "KernelRidgeRegressionSolver", "tensor_name": "Gram matrix K_projected [1536,1536]"},
+      {"from": "ClassicalRBFKernelControl", "to": "KernelRidgeRegressionSolver", "tensor_name": "Gram matrix K_rbf [1536,1536]"},
+      {"from": "FidelityKernelComputation", "to": "NystromExtension", "tensor_name": "landmark Gram matrix -> full-budget extension"},
+      {"from": "FactorRotationAndTop8Selection", "to": "ClassicalBenchmarkSuite", "tensor_name": "top-8 or full active-set characteristics, full ~37,800-obs window"}
+    ],
+    "variants": [
+      {
+        "name": "Kernel-swap triplet (main comparison)",
+        "differences": {"members": "qkrr-fid, qkrr-pqk, krr-rbf", "shared": "identical N=1536 subsample, solver, alpha/bandwidth search budget -- only the kernel differs"}
+      },
+      {
+        "name": "Budget 2x2 design",
+        "differences": {"members": "ridge-sub (N=1536), qkrr-nys (Nystrom, N~=37,800)", "purpose": "isolates kernel-type effect from training-budget effect"}
+      },
+      {
+        "name": "Interaction-augmented variant",
+        "differences": {"members": "poly2ridge, ridge-int, xgb-x, qkrr-x", "purpose": "tests whether literature-catalogued pairwise interactions (Table 2) help any model class"}
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Quantum feature-map encoding circuit",
+      "latex": "|\\psi(x)\\rangle = \\prod_{r=1}^{R}\\left[\\prod_{q=1}^{n} e^{-i\\tilde x_q \\tilde x_{q+1} Z_q Z_{q+1}} \\prod_{q=1}^{n} e^{-i\\tilde x_q Z_q H_q}\\right]|0\\rangle^{\\otimes n}",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["n=8 qubits", "R=2 repetitions", "bandwidth lambda (x~ = lambda*x)", "ring entanglement, indices mod n"],
+      "undefined_symbols": ["H_q -- not explicitly defined; interpreted as a Hadamard-conjugated single-qubit rotation (see architecture.QuantumFeatureMapCircuit.notes and ambiguities[])"],
+      "paper_section": "Section 4.2, Eq. (1)",
+      "confidence": 0.6
+    },
+    {
+      "name": "Fidelity quantum kernel",
+      "latex": "\\kappa_Q(x, x') = |\\langle \\psi(x) | \\psi(x') \\rangle|^2",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.2",
+      "confidence": 0.92
+    },
+    {
+      "name": "Projected quantum kernel (Huang et al. 2021)",
+      "latex": "\\phi_q(x) = (\\langle X_q \\rangle, \\langle Y_q \\rangle, \\langle Z_q \\rangle), \\quad \\phi(x) \\in \\mathbb{R}^{24}, \\quad \\kappa_P(x,x') = \\exp(-\\gamma \\|\\phi(x) - \\phi(x')\\|^2)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["gamma (bandwidth of the projected-kernel RBF; tuning procedure not explicitly stated)"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.2",
+      "confidence": 0.8
+    },
+    {
+      "name": "Kernel ridge regression closed-form solution",
+      "latex": "\\hat{\\alpha} = (K + \\alpha I)^{-1} y",
+      "role": "objective",
+      "used_in": "training",
+      "hyperparameters": ["alpha in {1e-3, 1e-2, 1e-1, 1}", "N=1536 stratified subsample per window"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.3",
+      "confidence": 0.92
+    },
+    {
+      "name": "Regularized geometric difference (Huang et al. 2021)",
+      "latex": "g(K_c \\| K_q) = \\sqrt{\\left\\| \\sqrt{K_q}\\left(K_c + \\lambda_g N I\\right)^{-1} \\sqrt{K_q} \\right\\|_\\infty}, \\quad \\lambda_g = 10^{-6}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["lambda_g = 1e-6", "computed on a 400-point subset per window"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.5, Eq. (2)",
+      "confidence": 0.85
+    }
+  ],
+  "tensor_semantics": [
+    {"name": "x (raw top-8 characteristics)", "shape_notation": "[8]", "dtype": "float32 (clipped to [-3,3])", "tensor_type": "input", "module": "BandwidthScaling", "confidence": 0.85},
+    {"name": "x~ (bandwidth-scaled)", "shape_notation": "[8]", "dtype": "float32", "tensor_type": "intermediate", "module": "BandwidthScaling", "confidence": 0.85},
+    {"name": "|psi(x)> (quantum state)", "shape_notation": "[2^8] = [256]", "dtype": "complex64", "tensor_type": "intermediate", "module": "QuantumFeatureMapCircuit", "confidence": 0.7},
+    {"name": "phi(x) (Bloch feature vector)", "shape_notation": "[24]", "dtype": "float32", "tensor_type": "intermediate", "module": "ProjectedKernelComputation", "confidence": 0.85},
+    {"name": "K (Gram matrix, subsample budget)", "shape_notation": "[1536, 1536]", "dtype": "float32", "tensor_type": "intermediate", "module": "KernelRidgeRegressionSolver", "confidence": 0.88},
+    {"name": "K (Gram matrix, full/Nystrom budget)", "shape_notation": "[~37800, 1536] (landmarks) -> [~37800,~37800] approx", "dtype": "float32", "tensor_type": "intermediate", "module": "NystromExtension", "confidence": 0.55},
+    {"name": "y (20-day forward returns)", "shape_notation": "[N]", "dtype": "float32", "tensor_type": "input", "module": "KernelRidgeRegressionSolver", "confidence": 0.9},
+    {"name": "alpha_hat (dual coefficients)", "shape_notation": "[N]", "dtype": "float32", "tensor_type": "intermediate", "module": "KernelRidgeRegressionSolver", "confidence": 0.88},
+    {"name": "predicted cross-sectional scores", "shape_notation": "[num_stocks_in_universe_at_t]", "dtype": "float32", "tensor_type": "output", "module": "KernelRidgeRegressionSolver / NystromExtension", "confidence": 0.85}
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "closed-form linear solve (no gradient descent) for all kernel/ridge models; standard gradient-based training for MLP/NN3/XGBoost benchmarks (optimizer unspecified for those)",
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.5
+    },
+    "lr_schedule": {
+      "type": "not applicable to KRR (closed-form); not specified for MLP/NN3 benchmarks",
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.3
+    },
+    "batch_size": "N=1536 stratified-by-date subsample (kernel models, per window); ~37,800 full window observations (classical full-budget models)",
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "walk-forward re-fitting every 20 trading days (170 windows main study 2012-2025; 60 windows diagnostic study 2021-2025) -- not a curriculum in the ML sense but a rolling re-estimation protocol",
+    "confidence": 0.55
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {
+        "name": "Point-in-time universe (main study)",
+        "split": "170 out-of-sample walk-forward windows, rebalanced every 20 trading days, 2012-2025",
+        "size": 1660000,
+        "publicly_available": false
+      },
+      {
+        "name": "Static-screen universe (diagnostic/short-sample study)",
+        "split": "60 out-of-sample walk-forward windows, 2021-2025",
+        "size": null,
+        "publicly_available": false
+      }
+    ],
+    "metrics": ["mean cross-sectional rank IC", "ICIR", "IC t-statistic", "hit rate", "portfolio Sharpe ratio", "max drawdown", "paired t-test p-value", "Wilcoxon signed-rank p-value", "Holm family-wise adjusted p-value", "regularized geometric difference g"],
+    "reported_results": [
+      {"metric": "mean IC", "dataset": "main study (point-in-time, 170 windows)", "split": "test", "value": 0.0499, "is_primary": true, "notes": "Poly(2) ridge (top-8), best model"},
+      {"metric": "mean IC", "dataset": "main study (point-in-time, 170 windows)", "split": "test", "value": 0.0494, "is_primary": true, "notes": "Ridge (top-8)"},
+      {"metric": "mean IC", "dataset": "main study (point-in-time, 170 windows)", "split": "test", "value": 0.0254, "is_primary": true, "notes": "QKRR fidelity"},
+      {"metric": "mean IC", "dataset": "main study (point-in-time, 170 windows)", "split": "test", "value": 0.0208, "is_primary": true, "notes": "KRR-RBF control"},
+      {"metric": "mean IC", "dataset": "main study (point-in-time, 170 windows)", "split": "test", "value": 0.0243, "is_primary": false, "notes": "NN3 (Gu et al. 2020)"},
+      {"metric": "mean IC", "dataset": "main study (point-in-time, 170 windows)", "split": "test", "value": 0.0168, "is_primary": false, "notes": "QKRR projected"},
+      {"metric": "delta_IC (fidelity QKRR vs RBF control)", "dataset": "main study", "split": "test", "value": 0.005, "is_primary": true, "notes": "p=0.42 paired t, p=0.66 Wilcoxon"},
+      {"metric": "delta_IC (fidelity QKRR vs ridge, top-8)", "dataset": "main study", "split": "test", "value": -0.022, "is_primary": true, "notes": "nominal p=0.043 paired t, p=0.027 Wilcoxon -- confounded by budget, see 2x2 design"},
+      {"metric": "delta_IC (fidelity QKRR vs NN3)", "dataset": "main study", "split": "test", "value": 0.001, "is_primary": false, "notes": "p=0.90"},
+      {"metric": "mean IC, N=1536 budget", "dataset": "2x2 budget design", "split": "test", "value": 0.0355, "is_primary": true, "notes": "Ridge (top-8), small-budget control"},
+      {"metric": "mean IC, N=1536 budget", "dataset": "2x2 budget design", "split": "test", "value": 0.0254, "is_primary": true, "notes": "QKRR fidelity"},
+      {"metric": "mean IC, N=1536 budget", "dataset": "2x2 budget design", "split": "test", "value": 0.0208, "is_primary": false, "notes": "KRR-RBF control"},
+      {"metric": "mean IC, N~=37800 budget", "dataset": "2x2 budget design", "split": "test", "value": 0.0494, "is_primary": true, "notes": "Ridge (top-8), full budget"},
+      {"metric": "mean IC, N~=37800 budget", "dataset": "2x2 budget design", "split": "test", "value": 0.0438, "is_primary": true, "notes": "QKRR fidelity via Nystrom extension"},
+      {"metric": "Holm-adjusted smallest p-value (main study, 10-pair family)", "dataset": "main study", "split": "test", "value": 0.43, "is_primary": true, "notes": "fidelity QKRR vs ridge -- nothing survives correction"},
+      {"metric": "mean IC", "dataset": "diagnostic study (static-screen, 60 windows)", "split": "test", "value": 0.0606, "is_primary": false, "notes": "Hybrid (QKRR+ridge), best model in diagnostic study"},
+      {"metric": "mean IC", "dataset": "diagnostic study (static-screen, 60 windows)", "split": "test", "value": 0.0512, "is_primary": true, "notes": "QKRR fidelity"},
+      {"metric": "ICIR", "dataset": "diagnostic study (static-screen, 60 windows)", "split": "test", "value": 0.488, "is_primary": true, "notes": "QKRR fidelity, highest ICIR in 16-model field"},
+      {"metric": "IC t-statistic", "dataset": "diagnostic study (static-screen, 60 windows)", "split": "test", "value": 3.78, "is_primary": true, "notes": "QKRR fidelity"},
+      {"metric": "hit rate", "dataset": "diagnostic study (static-screen, 60 windows)", "split": "test", "value": 0.80, "is_primary": true, "notes": "QKRR fidelity"},
+      {"metric": "max drawdown", "dataset": "diagnostic study (static-screen, 60 windows)", "split": "test", "value": -0.271, "is_primary": true, "notes": "QKRR fidelity, smallest (best) drawdown in field"},
+      {"metric": "mean IC after point-in-time universe rematch", "dataset": "diagnostic study, universe decomposition (Sec 6.2)", "split": "test", "value": 0.0184, "is_primary": true, "notes": "QKRR fidelity IC falls from 0.0512 to 0.0184 when matched to point-in-time universe"},
+      {"metric": "mean IC after point-in-time universe rematch", "dataset": "diagnostic study, universe decomposition (Sec 6.2)", "split": "test", "value": 0.0330, "is_primary": false, "notes": "Ridge IC falls from 0.0567 to 0.0330 under the same rematch"},
+      {"metric": "difference-in-differences estimate (quantum excess sensitivity to universe)", "dataset": "diagnostic study, universe decomposition", "split": "test", "value": 0.009, "is_primary": true, "notes": "p=0.71, bootstrap 95% CI [-0.039, +0.058] -- not statistically distinguishable"},
+      {"metric": "delta_IC (ridge with catalog interactions vs without)", "dataset": "interaction experiment", "split": "test", "value": -0.003, "is_primary": false, "notes": "p=0.33"},
+      {"metric": "delta_IC (poly(2) ridge vs linear top-8)", "dataset": "interaction experiment", "split": "test", "value": 0.0004, "is_primary": false, "notes": "p=0.94"},
+      {"metric": "delta_IC (qkrr-x vs unmodified qkrr-fid)", "dataset": "interaction experiment", "split": "test", "value": -0.031, "is_primary": true, "notes": "nominal p=0.032; does not survive Holm correction"},
+      {"metric": "mean regularized geometric difference g", "dataset": "diagnostic study bandwidth/geometry analysis", "split": "test", "value": 5.4, "is_primary": true, "notes": "median 3.4, never below 2.4"},
+      {"metric": "correlation (g vs realized quantum-minus-RBF IC differential)", "dataset": "diagnostic study bandwidth/geometry analysis", "split": "test", "value": -0.20, "is_primary": true, "notes": "geometric difference does not predict out-of-sample gains"},
+      {"metric": "mean validation IC by bandwidth (widened grid)", "dataset": "bandwidth diagnostic (widened 8-point grid, lambda in [0.01,1.6])", "split": "validation", "value": 0.163, "is_primary": false, "notes": "peak at lambda=0.2"}
+    ],
+    "baselines": ["ridge (top-8 and full set)", "XGBoost (top-8 and full set)", "MLP (64-32)", "NN3 (32-16-8 ensemble, Gu et al. 2020)", "poly2ridge", "ridge-int", "xgb-x", "KRR-RBF control", "QKRR projected", "equal-weight benchmark portfolio"],
+    "compute": "Exact statevector simulation via PennyLane (batched, Bergholm et al. 2018), n=8 qubits (256-dim state, classically tractable) -- explicitly no quantum hardware used; hardware/CPU/GPU specs for classical benchmarks and simulation runtime not stated.",
+    "special_conditions": [
+      "Kernel-swap control: fidelity, projected, and RBF kernels share identical N=1536 stratified subsample, ridge solver, and alpha/bandwidth search grid per window -- isolates kernel geometry as the only varying factor.",
+      "Budget-equalized 2x2 design (kernel type x training size) to disentangle kernel geometry effects from O(N^3) sample-size constraints.",
+      "Holm family-wise correction applied to both the 10-pair main-study family and the diagnostic study's 8-pair family.",
+      "Portfolio evaluation: long-only top-30% equal-weighted, rebalanced every 20 days, 23 bp one-way transaction cost."
+    ],
+    "confidence": 0.9
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "The H_q term in the encoding circuit (Eq. 1) is interpreted as a Hadamard-conjugated RZ rotation (i.e. effectively an RX(x~_q) rotation up to global phase), the standard IQP-style single-qubit encoding term, since the paper gives no explicit gate-level definition of H_q.",
+      "basis": "standard convention in IQP-style quantum feature maps (Havlicek et al. 2019)",
+      "confidence": 0.6,
+      "alternatives": ["H_q could denote a literal tensor-product operator Z_q (x) H_q acting jointly, which would be an unusual and non-standard construction", "H_q could be a per-qubit Hadamard gate applied as a separate circuit layer rather than fused into the exponent"],
+      "affects_section": "mathematical_spec[0] (Eq. 1), architecture.QuantumFeatureMapCircuit"
+    },
+    {
+      "assumption": "The Nystrom extension (qkrr-nys) is implemented via the standard Nystrom KRR approximation (Williams & Seeger 2001): landmark-based low-rank Gram matrix approximation using the 1,536-observation subsample as landmarks, since the paper cites the method but does not restate its formula.",
+      "basis": "cited reference (Williams & Seeger 2001)",
+      "confidence": 0.55,
+      "alternatives": ["a different Nystrom variant (e.g. with different regularization or landmark-selection scheme) could have been used"],
+      "affects_section": "architecture.NystromExtension"
+    },
+    {
+      "assumption": "The projected quantum kernel's bandwidth gamma is tuned per window on the same grid/procedure as the other hyperparameters (validation rank IC), since the paper states lambda's grid explicitly but not gamma's.",
+      "basis": "inferred by analogy with the paper's stated tuning procedure for lambda and alpha",
+      "confidence": 0.5,
+      "alternatives": ["gamma could be fixed a priori (e.g. median heuristic) rather than tuned per window"],
+      "affects_section": "mathematical_spec[2], architecture.ProjectedKernelComputation"
+    },
+    {
+      "assumption": "'Stratified by date' subsampling to N=1536 draws a roughly proportional number of observations from each date within the 252-day training window, rather than e.g. stratifying by some other variable (sector, market cap).",
+      "basis": "most natural reading of 'stratified by date' given the walk-forward, daily-panel setting",
+      "confidence": 0.55,
+      "alternatives": ["stratification could additionally condition on sector or size bucket, not stated"],
+      "affects_section": "architecture.KernelRidgeRegressionSolver"
+    },
+    {
+      "assumption": "MLP and NN3 benchmark models are trained with standard gradient-based optimization (e.g. Adam) since the paper specifies architecture (64-32; 32-16-8 ensemble) but not the optimizer, learning rate, or training-epoch budget.",
+      "basis": "common practice for the cited baseline architectures (Gu et al. 2020)",
+      "confidence": 0.5,
+      "alternatives": ["the original Gu et al. (2020) / Leippold et al. (2022) training recipes could differ in optimizer/schedule specifics"],
+      "affects_section": "training_pipeline, architecture.ClassicalBenchmarkSuite"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 4.2, Eq. (1)",
+      "description": "The single-qubit encoding term exp(-i*x~_q*Z_q*H_q) includes an H_q operator that is never defined in the paper. The most likely reading (standard IQP-style construction) is that this represents a Hadamard-conjugated Z-rotation, i.e. an effective X-basis rotation, but the paper's literal notation (Z_q and H_q as if both are simultaneous operators in the same exponent) is not standard circuit notation and could be read multiple ways.",
+      "primary_assumption": "H_q denotes Hadamard conjugation of the RZ(x~_q) gate (effectively RX(x~_q))",
+      "alternatives": ["a literal joint Z(x)H operator (non-standard, physically odd)", "H_q as a separate Hadamard layer applied before/after the RZ, not fused into one exponential"],
+      "confidence": 0.6
+    },
+    {
+      "location": "Section 4.2 / 4.5",
+      "description": "The projected quantum kernel's bandwidth parameter gamma is introduced but its tuning grid/procedure is never stated, unlike lambda (explicit grids given in Sec 4.2 and Sec 8) and alpha (explicit grid in Sec 4.3).",
+      "primary_assumption": "gamma is tuned per window via the same validation-rank-IC procedure as lambda and alpha",
+      "alternatives": ["gamma fixed via a median-heuristic or other closed-form rule, not cross-validated"],
+      "confidence": 0.5
+    },
+    {
+      "location": "Section 5.1, Table 4",
+      "description": "The Nystrom extension formula used to scale the fidelity QKRR to the full ~37,800-observation budget is not given explicitly in this paper; only the cited method (Williams & Seeger 2001) and the landmark set (the 1,536-observation subsample) are specified.",
+      "primary_assumption": "standard Nystrom KRR approximation as in the cited reference",
+      "alternatives": ["a nonstandard or modified Nystrom variant specific to this paper's implementation, not disclosed"],
+      "confidence": 0.55
+    },
+    {
+      "location": "Section 4.3",
+      "description": "'Stratified by date' subsampling procedure (to draw N=1536 from a ~37,800-observation window) is named but its exact allocation scheme (proportional per date? fixed count per date? additional strata beyond date?) is not detailed.",
+      "primary_assumption": "roughly proportional-to-date-size random sampling stratified only by date",
+      "alternatives": ["additional stratification by sector, size, or characteristic value, not stated"],
+      "confidence": 0.55
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.78,
+    "mathematical_spec": 0.72,
+    "tensor_semantics": 0.76,
+    "training_pipeline": 0.55,
+    "evaluation_protocol": 0.9,
+    "implementation_assumptions": 0.55,
+    "overall_sir_confidence": 0.71
+  }
+}

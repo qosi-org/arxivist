@@ -1,0 +1,342 @@
+{
+  "paper_id": "arxiv_2607_20168",
+  "plan_version": 1,
+  "created_at": "2026-07-23T10:20:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "No single ML framework covers this paper: it needs (a) PennyLane for exact statevector simulation of the 8-qubit encoding circuit (device='default.qubit', autograd/torch interface), (b) scikit-learn/XGBoost for the classical ridge/XGBoost benchmarks, and (c) a gradient-trained MLP/NN3 baseline. PyTorch is chosen as the schema-required 'primary' framework because it's the natural home for the MLP/NN3 baselines and because PennyLane's torch interface lets the same tensor stack flow through both the quantum circuit and any future gradient-based extensions; scikit-learn, XGBoost, and PennyLane are declared as first-class dependencies rather than folded into 'primary'. CUDA is not required -- n=8 qubits (256-dim statevector) and the classical models here are all comfortably CPU-tractable. Plain YAML suffices given the flat, enumerable hyperparameter grids (bandwidth/alpha/gamma) -- no nested sweep orchestration is needed beyond what a simple grid-search loop provides."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/qkernel_finance/data/characteristics.py",
+      "description": "Builds and standardizes the 27 (main study) / 31 (diagnostic study) firm characteristics from raw exchange snapshots and quarterly financial statements, with announcement-date alignment (Sec 3.1, Table 1).",
+      "sir_modules_mapped": ["CharacteristicConstructionAndStandardization"],
+      "classes": [
+        {
+          "name": "CharacteristicBuilder",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "build_market_characteristics", "signature": "build_market_characteristics(self, price_df, mktcap_df) -> pandas.DataFrame", "returns": "point-in-time market-based characteristics"},
+            {"name": "build_fundamental_characteristics", "signature": "build_fundamental_characteristics(self, financials_df) -> pandas.DataFrame", "returns": "announcement-date-aligned fundamental characteristics"},
+            {"name": "standardize", "signature": "standardize(self, panel_df: pandas.DataFrame) -> pandas.DataFrame", "returns": "cross-sectionally winsorized (+/-3 sigma) and standardized panel"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/qkernel_finance/data/universes.py",
+      "description": "Two universe constructions: point-in-time (constructible in real time) and static-screen (survivorship-conditioned) -- Sec 3.2.",
+      "sir_modules_mapped": ["UniverseConstruction_PointInTime", "UniverseConstruction_StaticScreen"],
+      "classes": [
+        {"name": "PointInTimeUniverse", "base_class": "object", "public_methods": [{"name": "eligible_stocks", "signature": "eligible_stocks(self, date, panel_df) -> list[str]", "returns": "top-450 by trailing 20-day mean float mktcap, 252-day coverage>90%"}]},
+        {"name": "StaticScreenUniverse", "base_class": "object", "public_methods": [{"name": "eligible_stocks", "signature": "eligible_stocks(self, panel_df) -> list[str]", "returns": "fixed top-450 by full-sample price coverage (2020-2025)"}]}
+      ]
+    },
+    {
+      "path": "src/qkernel_finance/data/interactions.py",
+      "description": "The twelve literature-catalogued pairwise interaction characteristics (Table 2), built as daily cross-sectional products of standardized components.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "InteractionCatalog", "base_class": "object", "public_methods": [{"name": "build", "signature": "build(self, standardized_panel: pandas.DataFrame) -> pandas.DataFrame", "returns": "12 re-winsorized, re-standardized interaction columns"}]}]
+    },
+    {
+      "path": "src/qkernel_finance/features/top8_selector.py",
+      "description": "Per-window rank-IC screen: active set (|IC|>=0.015, min 6) and top-8 subset shared verbatim by all top-8 models (Sec 4.1).",
+      "sir_modules_mapped": ["FactorRotationAndTop8Selection"],
+      "classes": [{"name": "FactorRotationSelector", "base_class": "object", "public_methods": [{"name": "select", "signature": "select(self, window_panel: pandas.DataFrame, window_returns: pandas.Series) -> tuple[list[str], list[str]]", "returns": "(active_set_columns, top8_columns), sign-corrected"}]}]
+    },
+    {
+      "path": "src/qkernel_finance/features/bandwidth.py",
+      "description": "Bandwidth rescaling x~ = lambda*x, with the production {0.05,0.1,0.2,0.4} and widened 8-point [0.01,1.6] grids (Sec 4.2, Sec 8).",
+      "sir_modules_mapped": ["BandwidthScaling"],
+      "classes": [{"name": "BandwidthScaler", "base_class": "object", "public_methods": [{"name": "scale", "signature": "scale(self, x: numpy.ndarray, lam: float) -> numpy.ndarray", "returns": "bandwidth-scaled inputs, clipped to [-3,3] before scaling"}]}]
+    },
+    {
+      "path": "src/qkernel_finance/quantum/feature_map.py",
+      "description": "The IQP-style 8-qubit, R=2 ring-entangled encoding circuit (Eq. 1), built in PennyLane with exact statevector simulation.",
+      "sir_modules_mapped": ["QuantumFeatureMapCircuit"],
+      "classes": [
+        {
+          "name": "QuantumFeatureMap",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "state", "signature": "state(self, x_tilde: numpy.ndarray) -> numpy.ndarray", "returns": "[256] complex statevector |psi(x)>"},
+            {"name": "gram_matrix", "signature": "gram_matrix(self, X_tilde: numpy.ndarray) -> numpy.ndarray", "returns": "[N,N] batched fidelity overlap matrix"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/qkernel_finance/quantum/kernels.py",
+      "description": "Fidelity kernel |<psi(x)|psi(x')>|^2 and projected (Bloch-vector) kernel exp(-gamma*||phi(x)-phi(x')||^2) (Sec 4.2).",
+      "sir_modules_mapped": ["FidelityKernelComputation", "ProjectedKernelComputation"],
+      "classes": [
+        {"name": "FidelityKernel", "base_class": "object", "public_methods": [{"name": "compute_gram", "signature": "compute_gram(self, X: numpy.ndarray, feature_map: QuantumFeatureMap) -> numpy.ndarray", "returns": "[N,N] Gram matrix"}]},
+        {"name": "ProjectedQuantumKernel", "base_class": "object", "public_methods": [
+          {"name": "bloch_features", "signature": "bloch_features(self, X: numpy.ndarray, feature_map: QuantumFeatureMap) -> numpy.ndarray", "returns": "[N,24] Bloch vectors"},
+          {"name": "compute_gram", "signature": "compute_gram(self, phi: numpy.ndarray, gamma: float) -> numpy.ndarray", "returns": "[N,N] RBF-on-Bloch-vectors Gram matrix"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/qkernel_finance/classical/rbf_kernel.py",
+      "description": "Classical RBF control kernel on the same top-8 inputs as the quantum branch (Sec 4.3, krr-rbf).",
+      "sir_modules_mapped": ["ClassicalRBFKernelControl"],
+      "classes": [{"name": "ClassicalRBFKernel", "base_class": "object", "public_methods": [{"name": "compute_gram", "signature": "compute_gram(self, X: numpy.ndarray, gamma: float) -> numpy.ndarray", "returns": "[N,N] Gram matrix"}]}]
+    },
+    {
+      "path": "src/qkernel_finance/classical/baselines.py",
+      "description": "Classical benchmark suite: ridge, XGBoost, MLP, NN3 ensemble, poly2ridge, ridge-int, xgb-x, qkrr-x rotation-pool variant, rank-average hybrid (Sec 4.4).",
+      "sir_modules_mapped": ["ClassicalBenchmarkSuite"],
+      "classes": [
+        {"name": "RidgeBaseline", "base_class": "object", "public_methods": [{"name": "fit_predict", "signature": "fit_predict(self, X_train, y_train, X_test, alpha: float = 10.0) -> numpy.ndarray", "returns": "predictions"}]},
+        {"name": "XGBoostBaseline", "base_class": "object", "public_methods": [{"name": "fit_predict", "signature": "fit_predict(self, X_train, y_train, X_test) -> numpy.ndarray", "returns": "predictions (150 trees, depth 3, lr 0.05)"}]},
+        {"name": "MLPBaseline", "base_class": "torch.nn.Module", "public_methods": [{"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "[B] predictions, 64-32 hidden layers"}]},
+        {"name": "NN3Baseline", "base_class": "torch.nn.Module", "public_methods": [{"name": "forward", "signature": "forward(self, x: torch.Tensor) -> torch.Tensor", "returns": "[B] predictions, 32-16-8, three-seed ensemble averaged externally"}]},
+        {"name": "Poly2RidgeBaseline", "base_class": "object", "public_methods": [{"name": "fit_predict", "signature": "fit_predict(self, X_train, y_train, X_test) -> numpy.ndarray", "returns": "predictions on all pairwise products of top-8 features"}]}
+      ]
+    },
+    {
+      "path": "src/qkernel_finance/models/krr.py",
+      "description": "Closed-form kernel ridge regression solve and the Nystrom full-budget extension (Sec 4.3, 5.1).",
+      "sir_modules_mapped": ["KernelRidgeRegressionSolver", "NystromExtension"],
+      "classes": [
+        {"name": "KernelRidgeRegression", "base_class": "object", "public_methods": [
+          {"name": "fit", "signature": "fit(self, K_train: numpy.ndarray, y_train: numpy.ndarray, alpha: float) -> numpy.ndarray", "returns": "[N] dual coefficients alpha_hat = (K+alpha*I)^-1 y"},
+          {"name": "predict", "signature": "predict(self, K_test_train: numpy.ndarray, alpha_hat: numpy.ndarray) -> numpy.ndarray", "returns": "[N_test] predictions"}
+        ]},
+        {"name": "NystromKRR", "base_class": "object", "public_methods": [
+          {"name": "fit", "signature": "fit(self, K_landmarks: numpy.ndarray, K_full_landmarks: numpy.ndarray, y_full: numpy.ndarray, alpha: float) -> numpy.ndarray", "returns": "approximate full-budget dual coefficients via landmark extension"}
+        ]}
+      ]
+    },
+    {
+      "path": "src/qkernel_finance/evaluation/walkforward.py",
+      "description": "Walk-forward windowing engine: 252-day trailing training windows, 20-day rebalancing, 170 (main) / 60 (diagnostic) windows (Sec 4.1).",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "WalkForwardEngine", "base_class": "object", "public_methods": [{"name": "iter_windows", "signature": "iter_windows(self, panel_df: pandas.DataFrame, study: str) -> Iterator[dict]", "returns": "yields per-window train/test slices and rebalance dates"}]}]
+    },
+    {
+      "path": "src/qkernel_finance/evaluation/metrics.py",
+      "description": "IC/ICIR/t-stat/hit-rate/Sharpe/drawdown, paired t-test, Wilcoxon, and Holm family-wise correction (Sec 4.5, 5.2).",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "PerformanceMetrics", "base_class": "object", "public_methods": [
+        {"name": "rank_ic", "signature": "rank_ic(self, predictions: numpy.ndarray, returns: numpy.ndarray) -> float", "returns": "Spearman rank IC for one rebalance date"},
+        {"name": "summarize", "signature": "summarize(self, ic_series: numpy.ndarray) -> dict", "returns": "{'mean_ic':.., 'icir':.., 't_stat':.., 'hit_rate':..}"},
+        {"name": "paired_significance", "signature": "paired_significance(self, ic_a: numpy.ndarray, ic_b: numpy.ndarray) -> dict", "returns": "{'paired_t_p':.., 'wilcoxon_p':..}"},
+        {"name": "holm_correct", "signature": "holm_correct(self, p_values: list[float]) -> list[float]", "returns": "family-wise Holm-adjusted p-values"}
+      ]}]
+    },
+    {
+      "path": "src/qkernel_finance/evaluation/geometry.py",
+      "description": "Regularized geometric difference g(Kc||Kq) diagnostic (Eq. 2, Sec 4.5).",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "GeometricDifference", "base_class": "object", "public_methods": [{"name": "compute", "signature": "compute(self, K_classical: numpy.ndarray, K_quantum: numpy.ndarray, lambda_g: float = 1e-6) -> float", "returns": "scalar g, computed on a 400-point subset per window"}]}]
+    },
+    {
+      "path": "src/qkernel_finance/utils/config.py",
+      "description": "YAML config loader/validator.",
+      "sir_modules_mapped": [],
+      "classes": [{"name": "Config", "base_class": "object", "public_methods": [{"name": "load", "signature": "load(cls, path: str) -> 'Config'", "returns": "Config instance"}]}]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "Quantum kernel-swap triplet, per window",
+      "input": {"name": "top-8 z-scores per stock", "shape": "[N=1536, 8]", "dtype": "float32"},
+      "output": {"name": "out-of-sample cross-sectional scores", "shape": "[num_stocks_in_universe_at_t]", "dtype": "float32"},
+      "steps": [
+        "x_tilde = BandwidthScaler.scale(x, lambda) -> [1536, 8]  (grid-searched per window)",
+        "psi = QuantumFeatureMap.state(x_tilde) for each row -> [1536, 256] complex statevectors (n=8 qubits, R=2, ring entanglement)",
+        "K_fidelity = FidelityKernel.compute_gram(psi) -> [1536, 1536]  (Eq. Fidelity kernel)",
+        "phi = ProjectedQuantumKernel.bloch_features(x_tilde, feature_map) -> [1536, 24]",
+        "K_projected = ProjectedQuantumKernel.compute_gram(phi, gamma) -> [1536, 1536]",
+        "K_rbf = ClassicalRBFKernel.compute_gram(x_tilde, gamma_rbf) -> [1536, 1536]  (same inputs, kernel-swap control)",
+        "alpha_hat = KernelRidgeRegression.fit(K_*, y, alpha) -> [1536]  (grid-searched alpha in {1e-3,1e-2,1e-1,1})",
+        "predictions = KernelRidgeRegression.predict(K_test_train, alpha_hat) -> [num_test_stocks]"
+      ]
+    },
+    {
+      "name": "Nystrom full-budget extension",
+      "input": {"name": "landmark Gram + full-window features", "shape": "[1536,1536] landmarks, [~37800, 8] full window", "dtype": "float32"},
+      "output": {"name": "full-budget out-of-sample scores", "shape": "[num_stocks_in_universe_at_t]", "dtype": "float32"},
+      "steps": [
+        "K_landmarks = FidelityKernel.compute_gram(psi_landmarks) -> [1536,1536]",
+        "K_full_landmarks = FidelityKernel.compute_gram(psi_full, psi_landmarks) -> [~37800, 1536]  (cross Gram, landmarks vs. full window)",
+        "alpha_hat_nystrom = NystromKRR.fit(K_landmarks, K_full_landmarks, y_full, alpha) -> [~37800]",
+        "predictions = K_test_full_landmarks @ alpha_hat_nystrom -> [num_test_stocks]"
+      ]
+    }
+  ],
+  "config_schema": {
+    "data": {
+      "characteristics_main_study": 27,
+      "characteristics_diagnostic_study": 31,
+      "winsorize_sigma": 3,
+      "raw_data_start": "2010-01-01",
+      "raw_data_end": "2026-03-31"
+    },
+    "universe": {
+      "point_in_time": {"trailing_coverage_days": 252, "coverage_threshold": 0.90, "pool_size": 450, "mktcap_window_days": 20},
+      "static_screen": {"pool_size": 450, "screening_period": "2020-2025  # ASSUMED to condition on full 2020-2025 sample coverage, per Sec 3.2 text"}
+    },
+    "walk_forward": {
+      "training_window_days": 252,
+      "rebalance_frequency_days": 20,
+      "cross_section_sample_every_n_days": 3,
+      "main_study_windows": 170,
+      "diagnostic_study_windows": 60,
+      "main_study_period": "2012-2025",
+      "diagnostic_study_period": "2021-2025"
+    },
+    "feature_selection": {
+      "active_set_ic_threshold": 0.015,
+      "active_set_min_size": 6,
+      "top8_size": 8
+    },
+    "quantum": {
+      "num_qubits": 8,
+      "repetitions_R": 2,
+      "entanglement": "ring",
+      "hq_gate_interpretation": "hadamard_conjugated_rz  # ASSUMED: SIR ambiguities[0], confidence 0.6 -- H_q undefined in paper",
+      "bandwidth_grid_production": [0.05, 0.1, 0.2, 0.4],
+      "bandwidth_grid_widened": "8 points in [0.01, 1.6]  # exact 8 values not enumerated in paper beyond 0.01/0.2/0.4/0.8/1.6 mentioned in text",
+      "gamma_projected_kernel": "tuned_per_window  # ASSUMED: SIR ambiguities[1], confidence 0.5 -- tuning procedure not stated",
+      "simulator": "pennylane.default_qubit (exact statevector, no hardware/noise)"
+    },
+    "krr": {
+      "alpha_grid": [0.001, 0.01, 0.1, 1.0],
+      "subsample_size_N": 1536,
+      "subsample_stratification": "by_date  # ASSUMED: SIR ambiguities[3], confidence 0.55 -- exact allocation scheme not detailed",
+      "nystrom_landmark_count": 1536,
+      "nystrom_formula": "standard_williams_seeger_2001  # ASSUMED: SIR ambiguities[2], confidence 0.55"
+    },
+    "classical_baselines": {
+      "ridge_alpha": 10.0,
+      "xgboost": {"n_estimators": 150, "max_depth": 3, "learning_rate": 0.05},
+      "mlp_hidden_dims": [64, 32],
+      "nn3_hidden_dims": [32, 16, 8],
+      "nn3_ensemble_seeds": 3,
+      "nn3_optimizer": "adam  # ASSUMED: not stated in paper, confidence 0.5",
+      "nn3_learning_rate": "1e-3  # ASSUMED: not stated in paper"
+    },
+    "evaluation": {
+      "metrics": ["mean_ic", "icir", "t_stat", "hit_rate", "sharpe", "max_drawdown"],
+      "significance_tests": ["paired_t", "wilcoxon"],
+      "multiplicity_correction": "holm",
+      "geometry_diagnostic_subset_size": 400,
+      "geometry_lambda_g": 1e-6,
+      "portfolio": {"top_pct": 0.30, "weighting": "equal", "rebalance_days": 20, "one_way_cost_bp": 23}
+    },
+    "hardware": {
+      "device": "cpu_only",
+      "precision": "float32 (complex64 for statevectors)",
+      "num_workers": 4
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "pennylane", "version": "0.36.0", "reason": "exact statevector simulation of the 8-qubit encoding circuit (explicitly cited by the paper, Bergholm et al. 2018)"},
+      {"package": "torch", "version": "2.2.0", "reason": "MLP/NN3 gradient-trained baselines"},
+      {"package": "scikit-learn", "version": "1.4.1", "reason": "Ridge, kernel utilities, train/val split helpers"},
+      {"package": "xgboost", "version": "2.0.3", "reason": "XGBoost baselines (150 trees, depth 3, lr 0.05)"},
+      {"package": "numpy", "version": "1.26.4", "reason": "Gram matrix / linear algebra"},
+      {"package": "scipy", "version": "1.12.0", "reason": "Wilcoxon signed-rank test, paired t-test"},
+      {"package": "statsmodels", "version": "0.14.1", "reason": "Holm-Bonferroni family-wise correction (multipletests)"},
+      {"package": "pandas", "version": "2.2.1", "reason": "daily panel data, walk-forward windowing"},
+      {"package": "pyyaml", "version": "6.0.1", "reason": "config.yaml loading"},
+      {"package": "matplotlib", "version": "3.8.3", "reason": "Fig. 1 (rolling IC) and Fig. 2 (geometric difference / validation IC) reproduction"},
+      {"package": "tqdm", "version": "4.66.2", "reason": "walk-forward progress bars"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": "8.0.2"},
+      {"package": "black", "version": "24.2.0"},
+      {"package": "ruff", "version": "0.3.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "run_study.py",
+      "purpose": "Run either the main (point-in-time, 170-window) or diagnostic (static-screen, 60-window) walk-forward study across the full model field (kernel-swap triplet + classical benchmarks).",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": false, "default": "configs/config.yaml", "help": "Path to YAML config"},
+        {"flag": "--study", "type": "str", "required": false, "default": "main", "help": "One of main|diagnostic"},
+        {"flag": "--data-dir", "type": "str", "required": false, "default": "data/", "help": "Directory containing the characteristic panel and universe files"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Where to write per-window IC series and predictions"},
+        {"flag": "--models", "type": "str", "required": false, "default": "all", "help": "Comma-separated model subset (e.g. qkrr-fid,krr-rbf,ridge) or 'all'"},
+        {"flag": "--debug", "type": "flag", "required": false, "default": false, "help": "Run on a handful of synthetic windows for a quick smoke test"}
+      ]
+    },
+    {
+      "filename": "compare_models.py",
+      "purpose": "Compute pairwise significance (paired t, Wilcoxon), Holm-adjust across a test family, and reproduce Table 3/4/5-style comparison tables from saved per-window IC series.",
+      "cli_args": [
+        {"flag": "--results-dir", "type": "str", "required": true, "default": null, "help": "Directory of per-window IC series produced by run_study.py"},
+        {"flag": "--output", "type": "str", "required": false, "default": "results/comparison_table.csv", "help": "Where to write the comparison table"}
+      ]
+    },
+    {
+      "filename": "run_bandwidth_geometry_diagnostic.py",
+      "purpose": "Reproduce Section 8's bandwidth-grid widening and geometric-difference (Eq. 2) analysis, and Figure 2's two panels.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": false, "default": "configs/config.yaml", "help": "Path to YAML config"},
+        {"flag": "--data-dir", "type": "str", "required": false, "default": "data/", "help": "Directory containing the characteristic panel"},
+        {"flag": "--output-dir", "type": "str", "required": false, "default": "results/", "help": "Where to write geometry/bandwidth diagnostic outputs"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.10-slim",
+    "system_deps": ["git", "build-essential", "libgomp1"],
+    "workdir": "/workspace",
+    "default_cmd": "python run_study.py --config configs/config.yaml --study main"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "The H_q gate in the encoding circuit (Eq. 1) is undefined in the paper. If the implementation's interpretation (Hadamard-conjugated RZ) is wrong, the entire quantum feature map -- and every downstream fidelity/projected kernel result -- would not match the paper's actual circuit.",
+      "source": "SIR ambiguities[0], mathematical_spec[0] confidence 0.6",
+      "mitigation": "Implemented as a swappable single-qubit gate function in QuantumFeatureMap so alternative interpretations (literal joint operator, separate Hadamard layer) can be substituted in one place; flagged prominently in code comments and README."
+    },
+    {
+      "severity": "High",
+      "description": "The underlying data (Chinese A-share exchange snapshots, quarterly financial statements, 2010-2026) is proprietary/vendor-sourced and not publicly bundled or released by the author (paper states materials are 'available from the author on request', not a public repo/dataset).",
+      "source": "Paper's Data and code availability statement; no public dataset URL or DOI given",
+      "mitigation": "This repo implements the full methodology against a synthetic data generator (see data/synthetic.py) so the pipeline is runnable and testable end-to-end without the real dataset; real reproduction requires the user to source equivalent China A-share data independently (e.g. via a commercial vendor or exchange data feed) and conform it to the schema in data/README_data.md."
+    },
+    {
+      "severity": "Medium",
+      "description": "Projected quantum kernel's bandwidth gamma has no stated tuning grid/procedure, unlike lambda and alpha.",
+      "source": "SIR ambiguities[1], confidence 0.5",
+      "mitigation": "Exposed as config.quantum.gamma_projected_kernel with a documented default tuning procedure (same validation-IC grid search as lambda); easy to swap for a fixed median-heuristic gamma if that later proves more faithful."
+    },
+    {
+      "severity": "Medium",
+      "description": "The Nystrom extension's exact formula is not restated in this paper, only cited (Williams & Seeger 2001).",
+      "source": "SIR ambiguities[2], confidence 0.55",
+      "mitigation": "Implemented as the standard Nystrom KRR approximation from the cited reference in NystromKRR; documented as an assumption in code and README."
+    },
+    {
+      "severity": "Medium",
+      "description": "'Stratified by date' subsampling to N=1536 has no detailed allocation scheme.",
+      "source": "SIR ambiguities[3], confidence 0.55",
+      "mitigation": "Implemented as proportional-to-date random sampling in the walk-forward engine, exposed as config.krr.subsample_stratification for easy substitution."
+    },
+    {
+      "severity": "Low",
+      "description": "Simulating an 8-qubit statevector for N=1536 observations per window, across 170 (main) + 60 (diagnostic) windows, plus a widened bandwidth grid, is a nontrivial but classically tractable compute budget (no hardware required, but not instantaneous either).",
+      "source": "Architecture plan tensor_flows / Sec 9 ('no hardware, deliberately so')",
+      "mitigation": "QuantumFeatureMap batches statevector computation via PennyLane's broadcasting; a --debug flag runs a small synthetic smoke test (few windows, few observations) for fast iteration."
+    },
+    {
+      "severity": "Low",
+      "description": "MLP/NN3 baseline optimizer, learning rate, and epoch budget are not stated in the paper.",
+      "source": "SIR implementation_assumptions[4], confidence 0.5",
+      "mitigation": "Adam, lr=1e-3, early-stopping on validation IC are used as reasonable defaults, exposed via config.classical_baselines."
+    }
+  ]
+}
