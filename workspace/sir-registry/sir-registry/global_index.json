@@ -1,0 +1,28 @@
+{
+  "index_version": 1,
+  "total_papers": 2,
+  "papers": [
+    {
+      "paper_id": "arxiv_2606_11859",
+      "title": "Scenario Generation for Time Series and Curves: A Comparison of Nonparametric and Semiparametric Bootstrap",
+      "domain": "Other",
+      "sir_version": 1,
+      "sir_confidence": 0.78,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": true,
+      "last_updated": "2026-07-16T00:10:00Z"
+    },
+    {
+      "paper_id": "arxiv_2603_18107",
+      "title": "ARTEMIS: A Neuro-Symbolic Framework for Economically Constrained Market Dynamics",
+      "domain": "Other",
+      "sir_version": 1,
+      "sir_confidence": 0.64,
+      "has_repo": true,
+      "has_notebook": true,
+      "has_comparison": true,
+      "last_updated": "2026-07-19T00:30:00Z"
+    }
+  ]
+}

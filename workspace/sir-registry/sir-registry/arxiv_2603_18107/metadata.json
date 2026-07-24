@@ -1,0 +1,48 @@
+{
+  "paper_id": "arxiv_2603_18107",
+  "title": "ARTEMIS: A Neuro-Symbolic Framework for Economically Constrained Market Dynamics",
+  "authors": ["Rahul D Ray"],
+  "domain": "Other",
+  "arxiv_id": "2603.18107v1",
+  "version": 1,
+  "created_at": "2026-07-17T00:00:00Z",
+  "last_updated": "2026-07-19T00:30:00Z",
+  "sir_confidence": 0.64,
+  "stages_with_data": ["sir", "architecture_plan", "repo", "notebooks", "comparison"],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2603_18107/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-17T00:00:00Z",
+      "reason": "initial commit",
+      "changed_sections": ["all"]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-17T01:00:00Z",
+      "reason": "Stage 4 code generation + end-to-end validation completed. Repo built (40 files: 6 ARTEMIS modules, 5 baselines, DSLOB generator, 5 CLI entrypoints). Validated via placeholder-seed DSLOB pipeline (real seed data unavailable). 1 OOM bug found and fixed in scripts/evaluate.py and scripts/plot_figures.py (unbatched full-dataset forward pass). 1 additional paper-internal inconsistency noticed (Time-IMM DirAcc: 96.0% in abstract vs 86.0% in Table 2) and documented in README for Stage 6 to formally catalogue.",
+      "changed_sections": ["stages_with_data", "repo_path validation"]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-19T00:00:00Z",
+      "reason": "Stage 5 notebook generation completed: primary reproduce notebook (21 cells) and exploratory notebook (13 cells) both generated and executed end-to-end via nbclient with zero errors after fixing 2 issues found during validation (a stray-escaped-quote syntax bug in the notebook build script; a d_z/d_w dimensional mismatch in the Component 3 physics-losses demo). Surfaced a Medium-severity finding for Stage 6: configs/config.yaml's default d_z=64/d_w=16 combo silently zeroes the market-price-of-risk loss for all real training runs using the shipped defaults.",
+      "changed_sections": ["stages_with_data", "notebook artifacts"]
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-19T00:30:00Z",
+      "reason": "Stage 6 results comparison completed. No user experimental results were submitted; DSLOB is structurally unreproducible (unnamed seed dataset per Section 3.4). No numeric reproducibility score computed (requires_manual_review: true, score: null). Full hallucination analysis performed: 3 structural findings (1 High -- DSLOB unreproducibility, a paper limitation; 1 Medium-High -- the d_z/d_w config bug, escalated after direct code verification; 1 Low, already fixed), 9 parametric findings (all pre-flagged ASSUMED hyperparameters), 0 omissions, plus 4 paper-internal inconsistencies formally catalogued.",
+      "changed_sections": ["has_comparison_report", "stages_with_data"]
+    }
+  ],
+  "extended_provenance": {
+    "affiliations": ["Department of Electronics and Electrical Engineering, BITS Pilani, Hyderabad Campus"],
+    "arxiv_url": "https://arxiv.org/abs/2603.18107",
+    "submission_date": "2026-03-18",
+    "source_file": "2603_18107v1.pdf",
+    "human_review_required": true,
+    "human_review_reason": "SIR confidence 0.64 (below 0.65 threshold); two paper-internal inconsistencies (XGBoost baseline claimed but never reported; DSLOB feature count discrepancy 59 vs 85); core architecture hyperparameters never numerically specified (latent dim, SDE step size, loss weights); paper's own Appendix A.4.1 self-flags the Feynman-Kac PDE regularizer as theoretically incomplete."
+  }
+}
