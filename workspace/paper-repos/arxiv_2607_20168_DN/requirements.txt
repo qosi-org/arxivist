@@ -1,0 +1,11 @@
+pennylane==0.36.0
+torch==2.2.0
+scikit-learn==1.4.1
+xgboost==2.0.3
+numpy==1.26.4
+scipy==1.12.0
+statsmodels==0.14.1
+pandas==2.2.1
+pyyaml==6.0.1
+matplotlib==3.8.3
+tqdm==4.66.2

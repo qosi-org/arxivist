@@ -1,0 +1,21 @@
+name: qkernel_finance
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pytorch=2.2.0
+  - scikit-learn=1.4.1
+  - numpy=1.26.4
+  - scipy=1.12.0
+  - statsmodels=0.14.1
+  - pandas=2.2.1
+  - pyyaml=6.0.1
+  - matplotlib=3.8.3
+  - tqdm=4.66.2
+  - pip
+  - pip:
+      - pennylane==0.36.0
+      - xgboost==2.0.3
+      - -r requirements-dev.txt

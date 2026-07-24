@@ -1,0 +1,124 @@
+{
+  "paper_id": "arxiv_2607_20168",
+  "comparison_date": "2026-07-24T05:31:52Z",
+  "arxivist_sir_version": 1,
+  "reproducibility_score": 0.16,
+  "score_confidence": "low",
+  "metrics_compared": 12,
+  "metrics_matched": 12,
+  "deviation_summary": {
+    "excellent": 1,
+    "good": 0,
+    "moderate": 2,
+    "significant": 0,
+    "critical": 9,
+    "unmatched": 0
+  },
+  "hallucination_count": {
+    "structural": 0,
+    "parametric": 5,
+    "omission": 2
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": true,
+  "caveat": "This score reflects a debug-mode smoke test on a synthetic 20-60-ticker fixture with an artificially injected return signal, over 3 windows with N=32 subsamples -- NOT a genuine reproduction attempt on the paper's real (proprietary, unreleased) China A-share dataset with 170 windows and N=1536. A score of 0.16 here means 'wrong dataset + tiny sample', not 'broken implementation'. Re-run Stage 6 after real training on sourced China A-share data for a meaningful score.",
+  "metric_comparisons": [
+    {"metric": "mean_ic", "model": "qkrr-fid", "paper_value": 0.0254, "user_value": 0.1271, "deviation_pct": 400.4, "direction": "above", "severity": "critical"},
+    {"metric": "mean_ic", "model": "krr-rbf", "paper_value": 0.0208, "user_value": 0.1183, "deviation_pct": 468.8, "direction": "above", "severity": "critical"},
+    {"metric": "mean_ic", "model": "ridge_top8", "paper_value": 0.0494, "user_value": 0.1816, "deviation_pct": 267.6, "direction": "above", "severity": "critical"},
+    {"metric": "icir", "model": "qkrr-fid", "paper_value": 0.171, "user_value": 0.490, "deviation_pct": 186.5, "direction": "above", "severity": "critical"},
+    {"metric": "icir", "model": "krr-rbf", "paper_value": 0.161, "user_value": 0.795, "deviation_pct": 393.8, "direction": "above", "severity": "critical"},
+    {"metric": "icir", "model": "ridge_top8", "paper_value": 0.247, "user_value": 0.958, "deviation_pct": 287.9, "direction": "above", "severity": "critical"},
+    {"metric": "t_stat", "model": "qkrr-fid", "paper_value": 2.23, "user_value": 0.848, "deviation_pct": -62.0, "direction": "below", "severity": "critical"},
+    {"metric": "t_stat", "model": "krr-rbf", "paper_value": 2.10, "user_value": 1.377, "deviation_pct": -34.4, "direction": "below", "severity": "critical"},
+    {"metric": "t_stat", "model": "ridge_top8", "paper_value": 3.21, "user_value": 1.659, "deviation_pct": -48.3, "direction": "below", "severity": "critical"},
+    {"metric": "hit_rate", "model": "qkrr-fid", "paper_value": 0.582, "user_value": 0.667, "deviation_pct": 14.6, "direction": "above", "severity": "moderate"},
+    {"metric": "hit_rate", "model": "krr-rbf", "paper_value": 0.582, "user_value": 0.667, "deviation_pct": 14.6, "direction": "above", "severity": "moderate"},
+    {"metric": "hit_rate", "model": "ridge_top8", "paper_value": 0.671, "user_value": 0.667, "deviation_pct": -0.6, "direction": "below", "severity": "excellent"}
+  ],
+  "root_causes": [
+    {"cause": "Synthetic data has an artificially injected, cleaner signal (0.02*char[0] + 0.01*latent_quality) than real 20-day-ahead A-share returns", "probability": "High", "affects": ["mean_ic", "icir"], "suggested_fix": "Source real China A-share data per data/README_data.md"},
+    {"cause": "Tiny synthetic universe (20-60 tickers vs. real top-450 pool) inflates rank-IC variance", "probability": "High", "affects": ["mean_ic", "icir"], "suggested_fix": "Use realistic universe size"},
+    {"cause": "Only 3 windows vs. the paper's 170 -- t_stat = icir*sqrt(n_windows) is mechanically deflated at this sample size", "probability": "High", "affects": ["t_stat"], "suggested_fix": "Run full --study main without --debug once real data is available"},
+    {"cause": "Hit-rate near-matches are likely coincidental: with 3 windows, hit rate can only take values in {0, 1/3, 2/3, 1}", "probability": "High", "affects": ["hit_rate"], "suggested_fix": "Not a pipeline issue -- re-evaluate with a real window count"}
+  ],
+  "hallucinations": {
+    "structural": [],
+    "parametric": [
+      {
+        "hyperparameter": "quantum.hq_gate_interpretation",
+        "assumed_value": "hadamard_conjugated_rz",
+        "severity": "Significant",
+        "evidence": "SIR ambiguities[0], confidence 0.6: paper's Eq. (1) includes an undefined H_q term.",
+        "suggested_fix": "Config-swappable via quantum.hq_gate_interpretation in configs/config.yaml; also selectable in QuantumFeatureMap's constructor argument."
+      },
+      {
+        "hyperparameter": "quantum.gamma_projected_kernel_grid",
+        "assumed_value": "[0.05, 0.1, 0.2, 0.4] (reuses the lambda grid)",
+        "severity": "Minor",
+        "evidence": "SIR ambiguities[1], confidence 0.5 -- paper never states gamma's tuning grid/procedure.",
+        "suggested_fix": "Tune independently if real-data results for qkrr-pqk look poorly calibrated."
+      },
+      {
+        "hyperparameter": "krr.nystrom_formula",
+        "assumed_value": "standard_williams_seeger_2001",
+        "severity": "Minor",
+        "evidence": "SIR ambiguities[2], confidence 0.55 -- cited but not restated in the paper.",
+        "suggested_fix": "Cross-check against a hand-computed small example before trusting Table 4's 2x2 design results."
+      },
+      {
+        "hyperparameter": "krr.subsample_stratification",
+        "assumed_value": "by_date (proportional)",
+        "severity": "Minor",
+        "evidence": "SIR ambiguities[3], confidence 0.55 -- 'stratified by date' allocation scheme not detailed.",
+        "suggested_fix": "Low expected impact on point estimates; revisit if real-data N=1536 subsample looks unrepresentative."
+      },
+      {
+        "hyperparameter": "classical_baselines.nn3_optimizer / nn3_learning_rate",
+        "assumed_value": "adam / 1e-3",
+        "severity": "Minor",
+        "evidence": "SIR implementation_assumptions[4], confidence 0.5 -- not stated in the paper.",
+        "suggested_fix": "Low expected impact; leave as-is unless NN3 baseline training looks unstable on real data."
+      }
+    ],
+    "omission": [
+      {
+        "missing_component": "Real China A-share data ingestion (CharacteristicBuilder.build_market_characteristics / build_fundamental_characteristics are stubbed with NotImplementedError)",
+        "sir_location": "Paper Sec 3.1 (data construction)",
+        "severity": "Significant",
+        "suggested_fix": "Deliberate, documented scope decision (architecture_plan.json risk_assessment: 'High' severity, proprietary data unavailable) -- not an accidental gap. Implement against a real vendor feed per data/README_data.md's schema."
+      },
+      {
+        "missing_component": "Full-scale walk-forward runs (170 main-study / 60 diagnostic-study windows) -- only a 3-window synthetic smoke test has been executed",
+        "sir_location": "Paper Sec 4.1, 5, 6",
+        "severity": "Significant",
+        "suggested_fix": "Requires real data (see above) plus nontrivial compute (8-qubit exact statevector simulation x N=1536 x 170+60 windows); run_study.py supports this via --study main without --debug once data is wired in."
+      }
+    ]
+  },
+  "verification_log": {
+    "comparison_timestamp": "2026-07-24T05:31:52Z",
+    "sir_version_used": 1,
+    "architecture_plan_version": 1,
+    "paper_metrics_total": 30,
+    "user_results_total": 12,
+    "matched_pairs": 12,
+    "user_config_modifications": [
+      "--debug flag: synthetic 20-60-ticker panel with injected signal, N=32 subsample, 3 windows -- vs. real ~450-stock universe, N=1536, 170 windows"
+    ],
+    "user_results_hashes": {
+      "qkrr-fid_ic_series.csv": "6288c9c17ebaebf59d3e10bd33efa192719e0d59363a3dfb01be894ae91c219c",
+      "krr-rbf_ic_series.csv": "dbb6b11ac14780da54592b1b6a670fbce7fb3ae4791f1c37a8f982f2eea296ce",
+      "ridge_ic_series.csv": "1dd05ba6100bcecc64e5b4343d5cf2bf08a1a17320fc909e32e04bfb6d0a1e19",
+      "comparison.csv": "8299be51eb0d9ac8a70bec7f39d23ecd620ec1b583b7d4a6aa3c2476eda056fe",
+      "comparison_pairwise.csv": "4d2ce4dfdb76da65591c10edf4d54e4a11c9a576db1f0ef1a2305df077b41396",
+      "bandwidth_geometry_diagnostic.csv": "b0dd553365a77c46c218064b782dfd9c2990c90ec8e3cb600920bf83298fe3f9"
+    },
+    "requires_manual_review": true,
+    "review_reasons": [
+      "User results come from a debug smoke-test on synthetic data with an artificially injected signal, not real China A-share data",
+      "Only 3 windows evaluated vs. the paper's 170 -- statistically meaningless sample size",
+      "No genuine reproduction attempt against arXiv:2607.20168's real (unreleased) dataset has been performed"
+    ]
+  }
+}
