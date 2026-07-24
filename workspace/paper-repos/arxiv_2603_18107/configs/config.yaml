@@ -1,0 +1,83 @@
+# =============================================================================
+# arxivist_artemis — main configuration
+# Reproduces: Ray (2026), "ARTEMIS", arXiv:2603.18107
+#
+# ⚠ IMPORTANT: This paper never gives numeric values for most ARTEMIS-specific
+# hyperparameters (latent dim, SDE step count, loss weights, symbolic basis
+# library). Every line tagged "# ASSUMED: ..." below is a documented gap, not
+# a confirmed value from the paper. See
+# sir-registry/arxiv_2603_18107/sir.json -> implementation_assumptions /
+# ambiguities for full detail and confidence scores.
+# =============================================================================
+
+seed: 0
+deterministic: true
+
+model:
+  artemis:
+    d_z: 64            # ASSUMED from Figure 3 caption ("64-dimensional latent space") -- SIR confidence 0.35; NOT confirmed as the actual training-time value for Table 2/3
+    d_w: 16             # ASSUMED -- no numeric value given anywhere in the paper
+    n_lno_poles: 16      # ASSUMED -- number of Laplace-domain poles K, unspecified
+    n_fourier_frequencies: 8  # ASSUMED -- Fourier time-embedding frequency count, unspecified
+    drift_hidden_dim: 128     # ASSUMED
+    diffusion_hidden_dim: 128 # ASSUMED
+    auxiliary_pricing_hidden_dim: 128  # ASSUMED -- V_psi architecture is entirely unspecified in the paper
+    n_sde_steps: 100    # ASSUMED from Figure 2 caption ("100-timestep input window") -- SIR confidence 0.3; NOT confirmed as training-time M
+    loss_weights:
+      # ASSUMED -- paper states only that weights are set "so that the economic
+      # losses are of the same order of magnitude as the forecast loss during
+      # early training" (Section 4.5). No numeric values given.
+      lambda_pde: 1.0
+      lambda_mpr: 1.0
+      lambda_consist: 1.0
+      lambda_symb: 0.01
+    mpr_kappa: 2.0       # per Appendix A.4.2's "reasonable choice" example for daily data -- ASSUMED as a global default across all 4 datasets (different frequencies); SIR confidence 0.4
+    use_symbolic_bottleneck: true
+    use_conformal_allocation: true
+
+  symbolic:
+    # ASSUMED -- the paper never enumerates its basis-function library (Appendix A.6.1
+    # only gives illustrative examples: moving average, ratio, difference, variance).
+    basis_lags: [2, 5, 10, 20]
+    gumbel_temperature_init: 1.0
+    gumbel_temperature_final: 0.1
+
+  conformal:
+    alpha: 0.1           # ASSUMED (90% coverage target) -- not specified in paper
+    rolling_window: 500  # ASSUMED -- adaptive conformal window size W, not specified in paper
+
+training:
+  optimizer: adam
+  learning_rate: 0.001   # explicitly stated in paper (Section 5.1) for all baselines; assumed to also apply to ARTEMIS since no separate LR is given
+  lr_scheduler: reduce_on_plateau
+  lr_reduce_factor: 0.5  # explicitly stated in paper
+  epochs_pretrain: 10    # matches Figure 6's 10-epoch ablation loss curves; NOT confirmed as the epoch count for the main Table 2 benchmark runs
+  epochs_symbolic_distill: 5   # ASSUMED -- not specified in paper
+  batch_size: 64          # ASSUMED -- not specified in paper for any model
+  mixed_precision: true   # explicitly stated in paper (Section 5.1, "Mixed-precision training is employed...")
+  early_stopping_on: validation_loss   # explicitly stated in paper
+  seeds: [0, 1, 2, 3, 4]  # paper states "results reported over five independent runs with different random seeds"
+
+data:
+  datasets: [jane_street, optiver, time_imm, dslob]
+  lookback_lengths:
+    jane_street: 20
+    optiver: 600
+    time_imm: 24
+    dslob: 20
+  feature_dims:
+    jane_street: 79
+    optiver: 7
+    time_imm: 4
+    dslob: 85   # Table 1 / Section 3.4 value used as authoritative; Section 5.1 states 59 for DSLOB, a paper-internal inconsistency -- see sir.json ambiguities
+  jane_street_max_train_days: 500   # explicitly stated in paper (Section 3.1)
+
+evaluation:
+  metrics: [rmse, rank_ic, directional_accuracy, weighted_r2]
+  significance_test: wilcoxon_signed_rank
+  significance_alpha: 0.01   # paper claims p<0.01 significance on DSLOB and Time-IMM vs. best baseline
+
+hardware:
+  device: cuda        # falls back to cpu automatically if unavailable (see utils/config.py)
+  precision: mixed_fp16
+  num_workers: 4

@@ -1,0 +1,14 @@
+# Runtime dependencies — pinned per architecture_plan.json "dependencies.runtime"
+torch==2.2.*                # core model implementation, autograd for PDE residuals, SDE simulation
+torchsde==0.2.*              # reference/validation SDE solving (cross-check against custom Euler-Maruyama loop)
+transformers==4.4*            # loading pretrained Chronos-2 checkpoint (Section 5.5)
+cvxpylayers==0.1.*              # differentiable Kelly-criterion portfolio QP (Appendix A.7.3), optional
+cvxpy==1.4.*                      # QP problem definition backing cvxpylayers
+numpy==1.26.*
+pandas==2.2.*
+scipy==1.12.*                          # Wilcoxon test, Spearman RankIC, GARCH/change-point utilities
+arch==6.3.*                              # GARCH(1,1) fitting for DSLOB synthetic volatility (Section 3.4)
+ruptures==1.1.*                           # CUSUM/change-point detection for DSLOB crash-window identification
+matplotlib==3.8.*                          # reproducing Figures 2-6
+scikit-learn==1.4.*                          # PCA for Figure 3, standardisation utilities
+PyYAML==6.0.*                                  # config.yaml loading

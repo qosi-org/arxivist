@@ -1,0 +1,24 @@
+{
+  "paper_id": "arxiv_2603_18107",
+  "comparison_date": "2026-07-19",
+  "reproducibility_score": null,
+  "score_confidence": "low",
+  "metrics_compared": 19,
+  "metrics_matched": 0,
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 0,
+    "unmatched": 19
+  },
+  "hallucination_count": {
+    "structural": 3,
+    "parametric": 9,
+    "omission": 0
+  },
+  "sir_version_used": 1,
+  "requires_manual_review": true,
+  "manual_review_reason": "No user experimental results were submitted for comparison. Additionally, DSLOB -- the dataset behind the paper's headline result (64.96% DirAcc) and its entire 7-variant ablation study -- is generated from an unnamed, unidentifiable source dataset (Section 3.4 never names it), making exact reproduction structurally impossible regardless of implementation fidelity. A Medium-High severity default-configuration bug (H-1: d_z=64/d_w=16 mismatch silently zeroes the market-price-of-risk loss) was also found and should be fixed before any comparison run is attempted. Jane Street/Optiver/Time-IMM are publicly available but require user-supplied competition/collection files not bundled with this repo."
+}
