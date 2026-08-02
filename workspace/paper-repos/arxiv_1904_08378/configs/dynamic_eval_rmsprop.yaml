@@ -1,0 +1,19 @@
+model:
+  pretrained: "transformer-xl-large"
+  segment_length: 128
+  memory_length: 3800
+
+adaptation:
+  optimizer: "rmsprop"
+  learning_rate: 0.01
+  decay_parameter: 0.99
+  num_gradient_steps: 1
+
+datasets:
+  - enwik8
+  - text8
+  - wikitext-103
+
+evaluation:
+  eval_interval: 100
+  save_dir: "checkpoints/"
