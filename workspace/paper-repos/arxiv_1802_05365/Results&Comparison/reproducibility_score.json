@@ -1,0 +1,1 @@
+{"paper":"ELMo (1802.05365)","overall_score":0.0,"components":{"architecture":{"score":0.95,"status":"High confidence"},"training":{"score":0.75,"status":"Hyperparams sparse"},"evaluation":{"score":0.95,"status":"All benchmarks available"}},"status":"Ready for implementation"}
