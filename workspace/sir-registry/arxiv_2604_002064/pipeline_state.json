@@ -1,0 +1,48 @@
+{
+  "paper_id": "arxiv_2604_002064",
+  "paper_title": "Quantitative Universal Approximation for Noisy Quantum Neural Networks",
+  "current_stage": 6,
+  "stages_completed": [1, 2, 3, 4, 5, 6],
+  "stage_timestamps": {
+    "1": "2026-07-22T00:00:00Z",
+    "2": "2026-07-22T00:05:00Z",
+    "3": "2026-07-22T00:10:00Z",
+    "4": "2026-07-22T00:20:00Z",
+    "5": "2026-07-22T00:30:00Z",
+    "6": "2026-07-22T00:45:00Z"
+  },
+  "stage_confidence": {
+    "1": 0.70,
+    "2": 1.0,
+    "3": 0.65,
+    "4": 0.65,
+    "5": 0.8,
+    "6": 0.0
+  },
+  "sir_path": "sir-registry/arxiv_2604_002064/sir.json",
+  "repo_path": "paper-repos/arxiv_2604_002064/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2604_002064/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2604_002064/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2604_002064/notebooks/reproduce_arxiv_2604_002064.ipynb",
+    "comparison_report": "paper-repos/arxiv_2604_002064/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": {
+    "training_pipeline": 0.45,
+    "implementation_assumptions": 0.45
+  },
+  "human_review_required": true,
+  "human_review_reasons": [
+    "training_pipeline confidence (0.45) is below 0.5 - optimizer hyperparameters (learning rate, iteration counts, convergence criteria) are not specified in the paper for any of Methods A/B/C",
+    "implementation_assumptions confidence (0.45) is below 0.5 - several assumptions (n0 value, loss normalisation constant, readout error probability p) required to make the paper fully reproducible are not explicitly stated",
+    "Stage 3 risk_assessment flags two High-severity risks carried from the SIR: unspecified optimizer hyperparameters, and a readout-error probability p used in the reported hardware bound but absent from the paper's own hardware parameter table",
+    "Stage 4: all High/Medium-severity risk items are implemented as explicitly ASSUMED, config-overridable values (configs/config.yaml comments) rather than silent hardcoded constants; recommend human verification before treating generated repo output as a faithful reproduction",
+    "Stage 6: reproducibility_score=0.0 on ArXivist's own self-check comparison (no external user results were available). Root causes identified: (1) Gaussian-density experiment used the wrong optimizer relative to the paper (L-BFGS-B instead of the paper's stated differential evolution, Section 4.2) -- QNNTrainer does not implement differential evolution at all (omission hallucination); (2) computed hardware fidelity factor alpha=0.99 vs. paper's reported 0.365 (171% deviation), traced to the paper's own approximate two-qubit gate-count formula producing an implausibly low gate count (critical parametric hallucination). See comparison/hallucination_report.md and comparison/benchmark_comparison.md for full detail and suggested fixes."
+  ],
+  "loop_count": 0,
+  "retry_history": [],
+  "created_at": "2026-07-22T00:00:00Z",
+  "last_updated": "2026-07-22T00:45:00Z",
+  "pipeline_complete": true
+}

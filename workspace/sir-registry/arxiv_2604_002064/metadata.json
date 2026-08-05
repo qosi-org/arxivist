@@ -1,0 +1,28 @@
+{
+  "paper_id": "arxiv_2604_002064",
+  "title": "Quantitative Universal Approximation for Noisy Quantum Neural Networks",
+  "authors": ["Lukas Gonon", "Antoine Jacquier", "Marcel Mordarski"],
+  "domain": "Other",
+  "arxiv_id": "2604.02064v3",
+  "version": 1,
+  "created_at": "2026-07-22T00:00:00Z",
+  "last_updated": "2026-07-22T00:00:00Z",
+  "sir_confidence": 0.70,
+  "stages_with_data": [1, 2, 3, 4, 5, 6],
+  "has_comparison_report": true,
+  "repo_path": "paper-repos/arxiv_2604_002064/",
+  "update_history": [
+    {
+      "version": 1,
+      "timestamp": "2026-07-22T00:00:00Z",
+      "reason": "initial commit (Stage 1 - Paper Parser)",
+      "changed_sections": []
+    },
+    {
+      "version": 1,
+      "timestamp": "2026-07-22T00:45:00Z",
+      "reason": "Stage 6 (Results Comparator) run; has_comparison_report set to true. No changes to sir.json itself.",
+      "changed_sections": []
+    }
+  ]
+}

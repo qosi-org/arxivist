@@ -1,0 +1,437 @@
+{
+  "paper_id": "arxiv_2604_002064",
+  "plan_version": 1,
+  "created_at": "2026-07-22T00:10:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": false,
+    "cuda_min_version": null,
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "The paper's core artifact is a parameterized quantum circuit executed via Qiskit (qiskit-aer for simulation, qiskit-ibm-runtime SamplerV2 for hardware) -- this is the mandatory quantum SDK dependency and is not itself one of the schema's three framework choices. For the classical side (parameter optimisation of the few circuit angles theta, and the two-parameter affine post-processing layer of Theorem 3.15), the paper reports Adam as one of three optimisation methods, which is most naturally implemented with a lightweight PyTorch autograd wrapper around the Qiskit-computed probabilities; L-BFGS-B (Method A) uses scipy.optimize directly and does not require a DL framework at all. Per the Architecture Planner's own default rule (Section 1: 'Default to PyTorch if unspecified'), PyTorch is selected as the nominal classical framework label, used only for Method C (Adam) and for the differentiable affine correction layer; Methods A and B are implemented with scipy/numpy directly. JAX/TensorFlow were not mentioned in the paper and offer no stated advantage here, so were not selected. No GPU/CUDA is required: the circuits are tiny (5-8 qubits), and even AerSimulator runs are CPU-feasible; GPU support for qiskit-aer is an optional, not required, acceleration path."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/noisy_qnn_uat/models/qnn_circuit.py",
+      "description": "Builds the noiseless parameterized quantum circuit: Hadamard state-preparation (V) followed by the block-diagonal parameterized unitary U(theta,x), decomposed via Uniformly Controlled Rotations (UCRz + UCRy).",
+      "sir_modules_mapped": ["state_preparation_V", "parameterized_unitary_U"],
+      "classes": [
+        {
+          "name": "QNNCircuitBuilder",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "build_state_preparation", "signature": "(self, n_qubits: int) -> QuantumCircuit", "returns": "QuantumCircuit implementing V (Hadamards on n-2 control qubits)"},
+            {"name": "build_parameterized_unitary", "signature": "(self, theta: list[tuple[float,float,float]], x: np.ndarray, n_accuracy_blocks: int) -> QuantumCircuit", "returns": "QuantumCircuit implementing U(theta,x) via UCRz+UCRy decomposition"},
+            {"name": "assemble_circuit", "signature": "(self, theta: list[tuple[float,float,float]], x: np.ndarray) -> QuantumCircuit", "returns": "Full V followed by U circuit with measurement appended"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/models/measurement.py",
+      "description": "Post-processes raw circuit counts/probabilities into the grouped outcomes P0..P3 and the scalar QNN output f^R_{n,theta}(x).",
+      "sir_modules_mapped": ["measurement"],
+      "classes": [
+        {
+          "name": "MeasurementProcessor",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "group_counts", "signature": "(self, counts: dict[str,int], n_accuracy_blocks: int, n_qubits: int) -> np.ndarray", "returns": "array of shape [4] with P0..P3 (Eq. 4.1 measurement rule, o=4k+m, k<n only)"},
+            {"name": "qnn_output", "signature": "(self, probs: np.ndarray, R: float) -> float", "returns": "scalar f^R_{n,theta}(x) = R[1 - 2(P1+P2)] (Eq. 2.2)"},
+            {"name": "shot_noise_stderr", "signature": "(self, probs: np.ndarray, R: float, n_shots: int) -> float", "returns": "statistical error estimate from Eq. (4.2)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/models/noise_channels.py",
+      "description": "Implements the depolarising-noise formalism (Definition 3.8), the noisy probability map (Proposition 3.12), and the hardware-calibrated lambda_V/lambda_U computation (Section 3.6), plus classical readout-error modelling (Definition 3.19).",
+      "sir_modules_mapped": ["parameterized_unitary_U", "measurement"],
+      "classes": [
+        {
+          "name": "DepolarisingChannel",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "apply_to_density_matrix", "signature": "(self, rho: np.ndarray, lam: float) -> np.ndarray", "returns": "Delta_lambda(rho) per Definition 3.8"},
+            {"name": "noisy_probability", "signature": "(self, p_noiseless: float, alpha: float, n_accuracy_blocks: int, n_qubits: int) -> float", "returns": "P~_m per Proposition 3.12 Eq. (3.7)"}
+          ]
+        },
+        {
+          "name": "HardwareNoiseCalibrator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "compute_lambda_V", "signature": "(self, eps_1q: float, n_qubits: int) -> float", "returns": "lambda_V = 1-(1-eps_1Q)^(n-2)"},
+            {"name": "compute_lambda_U", "signature": "(self, eps_2q: float, n2q_gate_count: int, t1: float, t2: float, t2q_duration: float) -> float", "returns": "lambda_U including gate error + decoherence (Section 3.6)"},
+            {"name": "compute_alpha", "signature": "(self, lambda_v: float, lambda_u: float) -> float", "returns": "alpha = (1-lambda_V)(1-lambda_U)"}
+          ]
+        },
+        {
+          "name": "ReadoutErrorModel",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "confusion_matrix", "signature": "(self, p: float) -> np.ndarray", "returns": "4x4 confusion matrix Q per Definition 3.19"},
+            {"name": "apply_readout_error", "signature": "(self, probs_true: np.ndarray, p: float) -> np.ndarray", "returns": "observed probabilities after classical bit-flip readout error"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/models/postprocessing.py",
+      "description": "Two-parameter affine post-processing layer (Theorem 3.15) that can exactly cancel the depolarising bias when trained jointly with theta.",
+      "sir_modules_mapped": ["measurement"],
+      "classes": [
+        {
+          "name": "AffineNoiseCancellation",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "(self, f_noisy: torch.Tensor) -> torch.Tensor", "returns": "beta1 * f_noisy + beta2 (Theorem 3.15)"},
+            {"name": "closed_form_correction", "signature": "(self, alpha: float, R: float, n_accuracy_blocks: int, n_qubits: int) -> tuple[float,float]", "returns": "analytic (beta1, beta2) that exactly cancel the bias, given known alpha"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/data/dataset.py",
+      "description": "Generates the two evaluation problems used in the paper: 1D Gaussian density targets and the 5D Black-Scholes European Put pricing map.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "GaussianDensityDataset",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "sample_grid", "signature": "(self, sigma: float, n_points: int = 100, x_range: tuple[float,float] = (-4.0,4.0)) -> tuple[np.ndarray,np.ndarray]", "returns": "(x grid, true density values f_sigma(x))"}
+          ]
+        },
+        {
+          "name": "BlackScholesPutDataset",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "sample_training_grid", "signature": "(self, ranges: dict) -> tuple[np.ndarray,np.ndarray]", "returns": "(normalised 5D inputs, true Put prices) over S,K,T,r,sigma ranges"},
+            {"name": "sample_eval_grid", "signature": "(self, k_range: tuple, sigma_sqrt_t_range: tuple, grid_size: int = 40, s0: float = 100.0, r: float = 0.03) -> tuple[np.ndarray,np.ndarray]", "returns": "40x40 evaluation grid over (K, sigma*sqrt(T))"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/data/transforms.py",
+      "description": "Input normalisation (Eq. 4.1) and the closed-form classical Black-Scholes Put formula used as ground truth.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "InputNormalizer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "normalize", "signature": "(self, x: np.ndarray, x_min: np.ndarray, x_max: np.ndarray) -> np.ndarray", "returns": "x normalised to [0,1]^d via Eq. (4.1), clamped outside training range"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/training/losses.py",
+      "description": "Training loss used to fit theta (and, when applicable, beta1/beta2).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "QNNMSELoss",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            {"name": "forward", "signature": "(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor", "returns": "1/(2n) * sum (pred-target)^2 -- TODO: verify from paper, normalisation constant ambiguous per SIR ambiguities[0]"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/training/trainer.py",
+      "description": "Orchestrates the three optimisation methods (A: L-BFGS-B, B: two-stage, C: Adam) compared in the paper.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "QNNTrainer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "fit_method_a_lbfgsb", "signature": "(self, theta_init: np.ndarray, x_train: np.ndarray, y_train: np.ndarray) -> np.ndarray", "returns": "optimised theta via scipy.optimize.minimize(method='L-BFGS-B')"},
+            {"name": "fit_method_b_two_stage", "signature": "(self, theta_init: np.ndarray, x_train: np.ndarray, y_train: np.ndarray) -> np.ndarray", "returns": "optimised theta: first (a,b) with gamma fixed, then refine gamma"},
+            {"name": "fit_method_c_adam", "signature": "(self, theta_init: np.ndarray, x_train: np.ndarray, y_train: np.ndarray, lr: float = 1e-3) -> np.ndarray", "returns": "optimised theta via torch.optim.Adam -- ASSUMED lr/betas, see SIR implementation_assumptions[0]"},
+            {"name": "fit_affine_correction", "signature": "(self, alpha: float, R: float, n_accuracy_blocks: int, n_qubits: int) -> tuple[float,float]", "returns": "beta1, beta2 via closed-form (Theorem 3.15) or joint gradient training"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/evaluation/metrics.py",
+      "description": "Error metrics used throughout the numerical section: RMSE, MAE, max error, and the MAE/theoretical-bound ratio used to validate the theorems empirically.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ErrorMetrics",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "rmse", "signature": "(self, pred: np.ndarray, true: np.ndarray) -> float", "returns": "root-mean-squared error"},
+            {"name": "mae", "signature": "(self, pred: np.ndarray, true: np.ndarray) -> float", "returns": "mean absolute error"},
+            {"name": "max_error", "signature": "(self, pred: np.ndarray, true: np.ndarray) -> float", "returns": "maximum absolute error"},
+            {"name": "bound_ratio", "signature": "(self, empirical_mae: float, theoretical_bound: float) -> float", "returns": "MAE / epsilon_n, expected < 1 if theorem holds"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/evaluation/hardware_bounds.py",
+      "description": "Computes the analytical error bounds of Statement 2.1, Theorem 3.6, Theorem 3.17 and Proposition 3.20 (the total epsilon_total envelope used against ibm_fez hardware).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ErrorBoundCalculator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "noiseless_bound", "signature": "(self, l1_fhat: float, n_accuracy_blocks: int) -> float", "returns": "L^1[f-hat]/sqrt(n) (Statement 2.1)"},
+            {"name": "cptp_noise_bound", "signature": "(self, l1_fhat: float, n_accuracy_blocks: int, R: float, fidelity_min: float) -> float", "returns": "Theorem 3.6 general CPTP bound"},
+            {"name": "depolarising_bound", "signature": "(self, alpha: float, l1_fhat: float, n_accuracy_blocks: int, f_l2_norm: float, R: float, n_qubits: int) -> float", "returns": "Theorem 3.17 Eq. (3.8) three-term bound"},
+            {"name": "total_bound_with_readout", "signature": "(self, alpha: float, l1_fhat: float, n_accuracy_blocks: int, f_l2_norm: float, R: float, n_qubits: int, readout_p: float) -> float", "returns": "epsilon_total, Eq. (4.4) -- readout_p is ASSUMED, see SIR ambiguities[2]"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/noisy_qnn_uat/utils/config.py",
+      "description": "Config loading (YAML) and seeding utilities for reproducibility.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ConfigLoader",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "load", "signature": "(self, path: str) -> dict", "returns": "validated config dictionary, raises ValueError on missing/invalid fields"}
+          ]
+        },
+        {
+          "name": "SeedManager",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "seed_everything", "signature": "(self, seed: int, deterministic: bool = False) -> None", "returns": "seeds Python random, NumPy, PyTorch, and Qiskit's simulator RNG -- fixed seed usage is an ASSUMED practice, see SIR implementation_assumptions[3]"}
+          ]
+        }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "FORWARD PASS: NoiselessQNN",
+      "input": {"name": "x", "shape": "[d]", "dtype": "float64"},
+      "output": {"name": "f_R_n_theta", "shape": "scalar", "dtype": "float64"},
+      "steps": [
+        "x_norm = InputNormalizer.normalize(x)  -> [d], clamped to [0,1]^d",
+        "circuit = QNNCircuitBuilder.assemble_circuit(theta, x_norm)  -> n-qubit QuantumCircuit",
+        "counts = execute(circuit, shots=Nshots)  -> dict[bitstring,int]",
+        "probs = MeasurementProcessor.group_counts(counts, n_accuracy_blocks, n_qubits)  -> [4] (P0..P3)",
+        "output = MeasurementProcessor.qnn_output(probs, R)  -> scalar f^R_{n,theta}(x)"
+      ]
+    },
+    {
+      "name": "FORWARD PASS: DepolarisingNoisyQNN",
+      "input": {"name": "x", "shape": "[d]", "dtype": "float64"},
+      "output": {"name": "f_tilde_R_n_theta", "shape": "scalar", "dtype": "float64"},
+      "steps": [
+        "alpha = HardwareNoiseCalibrator.compute_alpha(lambda_V, lambda_U)  -> scalar in (0,1]",
+        "probs_noiseless = <as in NoiselessQNN forward pass above>  -> [4]",
+        "probs_noisy = DepolarisingChannel.noisy_probability(probs_noiseless, alpha, n_accuracy_blocks, n_qubits)  -> [4] (Prop. 3.12)",
+        "probs_readout = ReadoutErrorModel.apply_readout_error(probs_noisy, p)  -> [4] (classical bit-flip, Def. 3.19)",
+        "output = MeasurementProcessor.qnn_output(probs_readout, R)  -> scalar f~^R_{n,theta}(x)"
+      ]
+    },
+    {
+      "name": "FORWARD PASS: AffineCorrectedQNN",
+      "input": {"name": "f_tilde_R_n_theta", "shape": "scalar", "dtype": "float64"},
+      "output": {"name": "f_tilde_R_n_theta_bar", "shape": "scalar", "dtype": "float64"},
+      "steps": [
+        "beta1, beta2 = AffineNoiseCancellation.closed_form_correction(alpha, R, n_accuracy_blocks, n_qubits)  -> (scalar, scalar), Theorem 3.15",
+        "output = AffineNoiseCancellation.forward(f_tilde_R_n_theta)  -> beta1 * f_tilde_R_n_theta + beta2"
+      ]
+    },
+    {
+      "name": "BOUND COMPUTATION: epsilon_total (hardware validation, Eq. 4.4)",
+      "input": {"name": "hardware_calibration_vector (eps_1Q, eps_2Q, T1, T2, t2Q, readout_p)", "shape": "[6]", "dtype": "float64"},
+      "output": {"name": "epsilon_total", "shape": "scalar", "dtype": "float64"},
+      "steps": [
+        "lambda_V = HardwareNoiseCalibrator.compute_lambda_V(eps_1Q, n_qubits)",
+        "lambda_U = HardwareNoiseCalibrator.compute_lambda_U(eps_2Q, N2Q, T1, T2, t2Q)",
+        "alpha = HardwareNoiseCalibrator.compute_alpha(lambda_V, lambda_U)",
+        "epsilon_total = ErrorBoundCalculator.total_bound_with_readout(alpha, l1_fhat, n_accuracy_blocks, f_l2_norm, R, n_qubits, readout_p)"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "n_accuracy_blocks": 8,
+      "n_qubits": 5,
+      "n0": 0,
+      "n0_comment": "ASSUMED: n0=0 per SIR implementation_assumptions[2], confidence 0.4 -- makes this component swappable via config flag per low-confidence handling rule",
+      "R_scaling_rule": "R = ceil(1.1 * max_i(P_i))",
+      "circuit_backend": "qiskit"
+    },
+    "training": {
+      "method": "A",
+      "method_options": ["A_lbfgsb", "B_two_stage", "C_adam"],
+      "loss": "mse",
+      "loss_normalisation_comment": "ASSUMED: 1/(2n) per SIR implementation_assumptions[4], confidence 0.5 -- source formula corrupted in PDF extraction",
+      "adam_lr": 0.001,
+      "adam_lr_comment": "ASSUMED: PyTorch default, confidence 0.3, not stated in paper",
+      "adam_beta1": 0.9,
+      "adam_beta2": 0.999,
+      "adam_hyperparams_comment": "ASSUMED: PyTorch/standard defaults, confidence 0.3",
+      "max_iterations": 1000,
+      "max_iterations_comment": "ASSUMED: not specified in paper, confidence 0.3",
+      "seed": 42,
+      "seed_comment": "ASSUMED: fixed seed for reproducibility, confidence 0.3, not stated in paper"
+    },
+    "data": {
+      "gaussian_sigma_values": [0.5, 1.0, 2.0],
+      "gaussian_x_range": [-4.0, 4.0],
+      "gaussian_n_points": 100,
+      "bs_S_range": [0.8, 1.2],
+      "bs_K_range": [0.9, 1.1],
+      "bs_T_range": [0.5, 1.0],
+      "bs_r_range": [0.02, 0.05],
+      "bs_sigma_range": [0.1, 0.3],
+      "bs_eval_grid_size": 40,
+      "bs_eval_S0": 100.0,
+      "bs_eval_r": 0.03
+    },
+    "evaluation": {
+      "metrics": ["rmse", "mae", "max_error", "bound_ratio"],
+      "n_shots": 8192,
+      "hardware_test_points": 10
+    },
+    "hardware": {
+      "backend": "ibm_fez",
+      "eps_1Q": 2.761e-4,
+      "eps_2Q": 2.548e-3,
+      "T1_us": 144.97,
+      "T2_us": 99.9,
+      "t2Q_ns": 68,
+      "readout_p": 0.01,
+      "readout_p_comment": "ASSUMED: not listed in Appendix A Table 1 despite being used in Eq. (4.4); confidence 0.35, see SIR implementation_assumptions[5] and ambiguities[2]",
+      "optimization_level": 3,
+      "device": "cpu",
+      "precision": "float64"
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "qiskit", "version": ">=1.2,<2.0", "reason": "Core quantum circuit construction, UCR gate decomposition, transpilation"},
+      {"package": "qiskit-aer", "version": ">=0.15", "reason": "Noiseless and depolarising/comprehensive noise-model simulation (AerSimulator, NoiseModel)"},
+      {"package": "qiskit-ibm-runtime", "version": ">=0.30", "reason": "SamplerV2 primitive for hardware execution on ibm_fez"},
+      {"package": "numpy", "version": ">=1.26", "reason": "Numerical arrays, density-matrix algebra"},
+      {"package": "scipy", "version": ">=1.11", "reason": "L-BFGS-B optimisation (Method A), erf/exponential-integral for bound constants"},
+      {"package": "torch", "version": ">=2.2", "reason": "Adam optimisation (Method C) and the differentiable affine post-processing layer (Theorem 3.15)"},
+      {"package": "pyyaml", "version": ">=6.0", "reason": "Config file loading"},
+      {"package": "matplotlib", "version": ">=3.8", "reason": "Reproducing the paper's diagnostic figures (error surfaces, convergence plots)"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": ">=8.0"},
+      {"package": "jsonschema", "version": ">=4.20"},
+      {"package": "black", "version": ">=24.0"},
+      {"package": "flake8", "version": ">=7.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Train QNN circuit parameters theta (and optionally the affine correction beta1/beta2) using Method A/B/C on the Gaussian or Black-Scholes target.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--resume", "type": "str", "required": false, "default": null, "help": "Path to checkpoint to resume from"},
+        {"flag": "--seed", "type": "int", "required": false, "default": null, "help": "Override random seed"},
+        {"flag": "--debug", "type": "bool", "required": false, "default": false, "help": "Use a reduced dataset/iteration budget for fast local testing"},
+        {"flag": "--dry-run", "type": "bool", "required": false, "default": false, "help": "Build all components without training, to validate setup"},
+        {"flag": "--method", "type": "str", "required": false, "default": "A", "help": "Optimisation method: A (L-BFGS-B), B (two-stage), or C (Adam)"}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Evaluate a trained QNN against the analytical target (Gaussian density or Black-Scholes price) and compute RMSE/MAE/max-error/bound-ratio.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to trained theta checkpoint"},
+        {"flag": "--noise", "type": "str", "required": false, "default": "none", "help": "none | depolarising | comprehensive"}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Single-sample QNN evaluation (e.g. price a single option given S,K,T,r,sigma).",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to trained theta checkpoint"},
+        {"flag": "--input", "type": "str", "required": true, "default": null, "help": "Comma-separated input values, e.g. S,K,T,r,sigma"}
+      ]
+    },
+    {
+      "filename": "run_hardware.py",
+      "purpose": "Execute the trained circuit on IBM ibm_fez via SamplerV2 and compute the empirical epsilon_total envelope against live calibration data (Section 4.5).",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to trained theta checkpoint"},
+        {"flag": "--backend", "type": "str", "required": false, "default": "ibm_fez", "help": "IBM Quantum backend name"},
+        {"flag": "--shots", "type": "int", "required": false, "default": 8192, "help": "Shots per circuit"}
+      ]
+    },
+    {
+      "filename": "simulate_noise.py",
+      "purpose": "Reproduce the depolarising-noise simulation study of Section 4.4 (density-matrix predictions vs. AerSimulator NoiseModel across epsilon in {0.001,0.005,0.01,0.02}).",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config YAML"},
+        {"flag": "--epsilons", "type": "str", "required": false, "default": "0.001,0.005,0.01,0.02", "help": "Comma-separated depolarising error rates to sweep"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "python:3.10-slim",
+    "system_deps": ["git", "build-essential"],
+    "workdir": "/workspace",
+    "default_cmd": "python train.py --help"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "Optimizer hyperparameters (learning rate, iteration/convergence budget) for all three methods (L-BFGS-B, two-stage, Adam) are unspecified in the paper (SIR training_pipeline confidence 0.45), so the generated trainer's default values are guesses that may not reproduce the paper's reported MAE/RMSE figures.",
+      "source": "SIR training_pipeline (confidence 0.45); SIR ambiguities[1]",
+      "mitigation": "Expose all optimizer hyperparameters via config.yaml with clear ASSUMED comments; make QNNTrainer.fit_method_c_adam accept lr/betas as overridable arguments; add a config_debug.yaml with a small iteration budget for fast smoke-testing without claiming fidelity to the paper's exact numbers."
+    },
+    {
+      "severity": "High",
+      "description": "The readout error probability p used in the hardware bound (Eq. 4.4, Proposition 3.20) is not present in the Appendix A hardware parameter table, yet it is required to reproduce the reported $18.578 total bound and 10/10 within-bound hardware validation.",
+      "source": "SIR implementation_assumptions[5]; SIR ambiguities[2]",
+      "mitigation": "Treat readout_p as a required, explicitly-flagged config field (ASSUMED, currently 0.01) rather than a hardcoded constant; document in README that this value must be replaced with live ibm_fez calibration data (available via qiskit-ibm-runtime backend properties) before claiming to reproduce Section 4.5's numbers."
+    },
+    {
+      "severity": "Medium",
+      "description": "The exact loss-function normalisation constant (Section 4.1) is ambiguous due to PDF-extraction corruption; using the wrong constant would rescale gradients but not change the optimum, so risk to final theta is low, but any reported absolute loss values would not match the paper.",
+      "source": "SIR mathematical_spec item 'Training loss (mean-squared error)' (confidence 0.5); SIR ambiguities[0]",
+      "mitigation": "Implement QNNMSELoss with the normalisation constant as a config-exposed multiplier (default 1/(2n)); add a unit test confirming the argmin over theta is invariant to the choice of constant."
+    },
+    {
+      "severity": "Medium",
+      "description": "The exact gate-level Uniformly Controlled Rotation (UCR) decomposition of U(theta,x) is delegated to an external reference ([23], Moettoenen et al.) and not reproduced in the paper; an incorrect or non-equivalent decomposition would change the circuit's two-qubit gate count and hence lambda_U, silently invalidating the hardware bound.",
+      "source": "SIR architecture module 'parameterized_unitary_U' (confidence 0.8); SIR ambiguities[3]",
+      "mitigation": "Use Qiskit's built-in UCRZGate/UCRYGate (or equivalent) primitives directly rather than a hand-rolled decomposition, and add a circuit-equivalence unit test against the naive multi-controlled-gate implementation (as the paper itself does in Section 4.1.1, tolerance 1e-9) before trusting derived lambda_U values."
+    },
+    {
+      "severity": "Medium",
+      "description": "The value of n0 (padding offset between accuracy blocks n and qubit count, n = ceil(log2(4n+n0))) used in the main numerical experiments is not explicitly stated; Remark 3.14's simplification (n0=0) is assumed but not confirmed for the hardware run.",
+      "source": "SIR implementation_assumptions[2] (confidence 0.4)",
+      "mitigation": "Expose n0 as a config field defaulting to 0; add an assertion in QNNCircuitBuilder that raises a clear error if the configured n_qubits is inconsistent with ceil(log2(4*n_accuracy_blocks+n0)), so any silent mismatch surfaces immediately rather than producing subtly wrong results."
+    },
+    {
+      "severity": "Low",
+      "description": "Hardware execution requires live IBM Quantum access to ibm_fez (Heron r2) and its calibration data; this is not guaranteed to be available or stable over time (queue times, backend retirement, changing calibration).",
+      "source": "SIR evaluation_protocol.compute",
+      "mitigation": "Make run_hardware.py backend-name configurable and gracefully fall back to AerSimulator with a NoiseModel built from the paper's Table 1 constants (or live-fetched calibration via qiskit-ibm-runtime) if hardware access is unavailable."
+    },
+    {
+      "severity": "Low",
+      "description": "All datasets (Gaussian density grid, Black-Scholes pricing grid) are synthetic and generated analytically -- no external data download or proprietary-data risk exists for this paper.",
+      "source": "SIR evaluation_protocol.datasets (all publicly_available: false but procedurally generated, not externally sourced)",
+      "mitigation": "None required; data/download.py can be a no-op / generator script rather than a real downloader."
+    }
+  ]
+}

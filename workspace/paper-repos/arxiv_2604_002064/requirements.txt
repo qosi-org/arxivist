@@ -1,0 +1,8 @@
+qiskit>=1.2,<2.0
+qiskit-aer>=0.15
+qiskit-ibm-runtime>=0.30
+numpy>=1.26
+scipy>=1.11
+torch>=2.2
+pyyaml>=6.0
+matplotlib>=3.8

@@ -1,0 +1,57 @@
+# Reduced-scale config for fast local smoke testing (used by train.py --debug).
+# Do NOT use this to reproduce the paper's reported numbers -- it deliberately
+# shrinks the qubit count, shot budget and iteration count for speed only.
+
+model:
+  n_accuracy_blocks: 2
+  n_qubits: 3
+  n0: 0
+  R_scaling_rule: "ceil(1.1 * max_i(P_i))"
+  circuit_backend: qiskit
+
+training:
+  method: "A"
+  loss: mse
+  loss_normalisation: "1/(2n)"
+  adam_lr: 0.001
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  max_iterations: 20
+  convergence_tol: 1.0e-6
+  seed: 42
+
+data:
+  gaussian:
+    sigma_values: [1.0]
+    x_range: [-4.0, 4.0]
+    n_points: 20
+  black_scholes:
+    S_range: [0.8, 1.2]
+    K_range: [0.9, 1.1]
+    T_range: [0.5, 1.0]
+    r_range: [0.02, 0.05]
+    sigma_range: [0.1, 0.3]
+    eval_grid_size: 5
+    eval_S0: 100.0
+    eval_r: 0.03
+    eval_K_range: [85.0, 115.0]
+    eval_sigma_sqrt_T_range: [0.05, 0.35]
+
+evaluation:
+  metrics: ["rmse", "mae", "max_error", "bound_ratio"]
+  n_shots: 256
+  hardware_test_points: 2
+
+hardware:
+  backend: "ibm_fez"
+  eps_1Q: 2.761e-4
+  eps_2Q: 2.548e-3
+  T1_us: 144.97
+  T2_us: 99.9
+  t2Q_ns: 68
+  readout_p: 0.01
+  optimization_level: 1
+
+hardware_compute:
+  device: "cpu"
+  precision: "float64"

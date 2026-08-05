@@ -1,0 +1,521 @@
+{
+  "paper_id": "arxiv_2603_18107",
+  "plan_version": 1,
+  "created_at": "2026-07-17T00:00:00Z",
+  "framework": {
+    "primary": "pytorch",
+    "python_version": "3.10+",
+    "cuda_required": true,
+    "cuda_min_version": "11.8",
+    "use_huggingface": true,
+    "config_library": "yaml",
+    "reasoning": "The paper explicitly describes gradients backpropagated through the Euler-Maruyama SDE solver via the reparametrisation trick, mixed-precision training, and 'differentiable convex optimization layers (Agrawal et al. 2019)' -- a direct reference to cvxpylayers, which is PyTorch-native (also has a JAX variant but the paper's overall description -- standard nn.Module-style drift/diffusion MLPs, Hugging Face for Chronos-2 -- points to PyTorch as the far more natural fit). Hugging Face transformers is explicitly named for loading the Chronos-2 baseline. CUDA is required for practical training given 6 models x 4 datasets x 5 seeds x (up to) 7 ablation variants, and Jane Street alone has ~12M rows."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/arxivist_artemis/__init__.py",
+      "description": "Package init, version, top-level exports.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/arxivist_artemis/data/preprocessing.py",
+      "description": "Dataset-specific preprocessing pipelines for Jane Street, Optiver, Time-IMM, and DSLOB (Section 3). Produces windowed tensors + masks shared by all neural models.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "JaneStreetPreprocessor",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "stream_windows", "signature": "stream_windows(self, partition_path: str, lookback: int = 20, max_days: int | None = None) -> Iterator[dict]", "returns": "yields {'x': [20,79], 'mask': [20,79], 'y': scalar} windows, grouped by (symbol,date), sorted by time" }
+          ]
+        },
+        {
+          "name": "OptiverPreprocessor",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "fuse_book_and_trades", "signature": "fuse_book_and_trades(self, book_df, trade_df, window_id) -> np.ndarray", "returns": "[600,7] forward-filled 1Hz feature matrix (mid price, spread, log mid price, log return, volume imbalance, total size, trade aggregates)" },
+            { "name": "build_dataset", "signature": "build_dataset(self, raw_dir: str) -> tuple[np.ndarray, np.ndarray]", "returns": "(X [N,600,7], y [N] log-realized-volatility)" }
+          ]
+        },
+        {
+          "name": "TimeIMMPreprocessor",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "load_and_fill", "signature": "load_and_fill(self, county_files: list[str]) -> pandas.DataFrame", "returns": "concatenated per-entity dataframe with forward/backward-filled features" },
+            { "name": "build_windows", "signature": "build_windows(self, df, lookback: int = 24) -> tuple[np.ndarray, np.ndarray]", "returns": "(X [N,24,4] standardised, y [N] next-hour temperature)" }
+          ]
+        },
+        {
+          "name": "DSLOBGenerator",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "detect_crash_window", "signature": "detect_crash_window(self, seed_lob_df) -> tuple[int,int]", "returns": "(start_idx, end_idx) via CUSUM + Bayesian change-point detection" },
+            { "name": "fit_vasicek", "signature": "fit_vasicek(self, mid_price: np.ndarray) -> dict", "returns": "{'theta':.., 'mu':.., 'sigma':..} MLE-fitted, then amplified (theta*1.5, mu*1.2)" },
+            { "name": "fit_garch", "signature": "fit_garch(self, log_returns: np.ndarray) -> dict", "returns": "{'omega':.., 'alpha':.., 'beta':..} GARCH(1,1), then amplified (beta'=min(0.95,1.1*beta), alpha'=1.2*alpha)" },
+            { "name": "generate_synthetic_features", "signature": "generate_synthetic_features(self, seed_features: np.ndarray, n_samples: int) -> np.ndarray", "returns": "VAR(1)-correlated-noise-augmented synthetic 85-feature panel, time-warped via a GP-sampled deformation" },
+            { "name": "validate_synthetic", "signature": "validate_synthetic(self, seed, synthetic) -> dict", "returns": "{'ks_pvalue':.., 'acf_diff':.., 'corr_matrix_diff':.., 'tail_pct_diff':..} per paper's stated validation checks" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/laplace_neural_operator.py",
+      "description": "Module 1: continuous-time encoder (Section 4.1, Appendix A.2). ASSUMED d_z=64 per Figure 3 caption hint (SIR confidence 0.35).",
+      "sir_modules_mapped": ["LaplaceNeuralOperator"],
+      "classes": [
+        {
+          "name": "LaplaceNeuralOperator",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "__init__", "signature": "__init__(self, d_x: int, d_z: int = 64, n_poles: int = 16, n_fourier: int = 8)", "returns": "initializes learnable poles lambda_k (Re<0 via softplus reparam), residue matrices A_k, and Fourier-embedding bias MLP" },
+            { "name": "kernel", "signature": "kernel(self, delta_t: torch.Tensor) -> torch.Tensor", "returns": "kappa(delta_t) = sum_k A_k * exp(lambda_k * delta_t), [*, d_z, d_x]" },
+            { "name": "forward", "signature": "forward(self, x: torch.Tensor, t: torch.Tensor, eval_times: torch.Tensor) -> torch.Tensor", "returns": "z [*, M, d_z] latent function evaluated at eval_times via left-Riemann-sum discretization of the kernel integral (Eq. 4)" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/neural_sde.py",
+      "description": "Module 2: economics-informed latent dynamics (Section 4.2, Appendix A.3).",
+      "sir_modules_mapped": ["NeuralSDELatentDynamics"],
+      "classes": [
+        {
+          "name": "DriftNet",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "forward", "signature": "forward(self, z: torch.Tensor, t: torch.Tensor) -> torch.Tensor", "returns": "mu_theta(z,t) [*, d_z], 1-hidden-layer MLP with tanh activation on [z; TimeEmbedding(t)]" }
+          ]
+        },
+        {
+          "name": "DiffusionNet",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "forward", "signature": "forward(self, z: torch.Tensor, t: torch.Tensor) -> torch.Tensor", "returns": "sigma_phi(z,t) [*, d_z, d_w] = L_phi @ D_phi, Cholesky-factorized SPD-guaranteeing construction (Appendix A.3.2)" }
+          ]
+        },
+        {
+          "name": "NeuralSDE",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "__init__", "signature": "__init__(self, d_z: int, d_w: int, drift: DriftNet, diffusion: DiffusionNet)", "returns": "wraps drift+diffusion for Euler-Maruyama simulation" },
+            { "name": "simulate", "signature": "simulate(self, z0: torch.Tensor, n_steps: int, dt: float) -> torch.Tensor", "returns": "trajectory [*, n_steps+1, d_z] via Euler-Maruyama (Eq. 6), gradients flow via reparametrisation trick" },
+            { "name": "spectral_stability_check", "signature": "spectral_stability_check(self, z_samples: torch.Tensor, t_samples: torch.Tensor) -> torch.Tensor", "returns": "diagnostic only -- Lipschitz constant estimate of drift/diffusion networks (paper's Assumption 1 is not numerically enforced, only informally assumed)" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/physics_losses.py",
+      "description": "Feynman-Kac PDE residual and market-price-of-risk penalty (Sections 4.2.1-4.2.2, Appendix A.4). NOTE: paper's own Appendix A.4.1 flags this regularizer as theoretically incomplete -- implemented exactly as operationally described in Algorithm 1 / Eq. 7, with the caveat documented in code comments and README.",
+      "sir_modules_mapped": ["FeynmanKacPDEResidual", "MarketPriceOfRiskPenalty"],
+      "classes": [
+        {
+          "name": "AuxiliaryPricingNet",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "forward", "signature": "forward(self, z: torch.Tensor, t: torch.Tensor) -> torch.Tensor", "returns": "V_psi(z,t) scalar per collocation point; architecture (depth/width) not specified in paper -- ASSUMED 2-layer MLP matching drift/diffusion net scale" }
+          ]
+        },
+        {
+          "name": "PhysicsLosses",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "feynman_kac_residual", "signature": "feynman_kac_residual(self, V: AuxiliaryPricingNet, sde: 'NeuralSDE', z: torch.Tensor, t: torch.Tensor) -> torch.Tensor", "returns": "R_FK via torch.autograd.grad (dV/dt, grad_z V, tr(sigma sigma^T grad_z^2 V)), r=0 (Eq. 7)" },
+            { "name": "pde_loss", "signature": "pde_loss(self, residuals: torch.Tensor) -> torch.Tensor", "returns": "L_PDE = mean(residuals^2)" },
+            { "name": "market_price_of_risk", "signature": "market_price_of_risk(self, mu: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor", "returns": "lambda(t) = sigma^{-1} @ mu (Eq. 8), via torch.linalg.solve for numerical stability instead of explicit inverse" },
+            { "name": "mpr_loss", "signature": "mpr_loss(self, lam: torch.Tensor, kappa: float = 2.0) -> torch.Tensor", "returns": "L_MPR = mean(relu(||lambda||^2 - kappa^2)) (Eq. 9); kappa=2.0 default per paper's Appendix A.4.2 'reasonable choice' example -- ASSUMED, SIR confidence 0.4, exposed as config param" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/symbolic_bottleneck.py",
+      "description": "Module 3: differentiable symbolic regression layer (Section 4.3, Appendix A.6). Basis-library composition is ASSUMED (paper never enumerates it) -- SIR confidence 0.3.",
+      "sir_modules_mapped": ["SymbolicBottleneck"],
+      "classes": [
+        {
+          "name": "BasisLibrary",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "compute_features", "signature": "compute_features(self, x_window: torch.Tensor) -> torch.Tensor", "returns": "[*, K] basis features: moving averages (lags 2,5,10,20), pairwise ratios, first differences, rolling variance, per feature channel. K depends on n_channels * n_basis_types -- ASSUMED enumeration, documented in README as not paper-specified" }
+          ]
+        },
+        {
+          "name": "SymbolicBottleneck",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "forward", "signature": "forward(self, basis_features: torch.Tensor, hard: bool = False) -> torch.Tensor", "returns": "y_hat_symb = sum_k w_k * f_k(x) (Eq. 12), optional Gumbel-Softmax selection over candidate lag parameterizations (tau annealed toward 0)" },
+            { "name": "l1_penalty", "signature": "l1_penalty(self, lambda_symb: float) -> torch.Tensor", "returns": "L_symb = lambda_symb * ||w||_1 (Eq. 13)" },
+            { "name": "export_formula", "signature": "export_formula(self, feature_names: list[str], top_k: int = 10) -> str", "returns": "human-readable string of the top-|w_k| weighted terms -- addresses the paper's own gap (no example formula ever shown in the paper)" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/conformal_allocation.py",
+      "description": "Module 4: adaptive conformal prediction + differentiable Kelly-criterion portfolio QP (Section 4.4, Appendix A.7).",
+      "sir_modules_mapped": ["ConformalAllocationLayer"],
+      "classes": [
+        {
+          "name": "AdaptiveConformalPredictor",
+          "base_class": "object",
+          "public_methods": [
+            { "name": "calibrate", "signature": "calibrate(self, residuals: np.ndarray) -> None", "returns": "stores rolling window of residuals" },
+            { "name": "predict_interval", "signature": "predict_interval(self, y_hat: float, alpha: float = 0.1, window: int = 500) -> tuple[float,float]", "returns": "[y_hat - q, y_hat + q], q = (1-alpha)-quantile of rolling window (Eq. 17); window size ASSUMED (not specified in paper), exposed as config param" }
+          ]
+        },
+        {
+          "name": "KellyPortfolioLayer",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "forward", "signature": "forward(self, y_hat: torch.Tensor, q: torch.Tensor, gamma: float = 1.0) -> torch.Tensor", "returns": "w* solving max_w w^T y_hat - (gamma/2) w^T diag(q^2) w s.t. 1^Tw=1,w>=0 via cvxpylayers CvxpyLayer (Eq. 20); OPTIONAL module -- paper does not confirm this was used to produce any reported Table 2/3 metric" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/artemis.py",
+      "description": "Top-level ARTEMIS model assembling all 4 modules + prediction head + total loss (Section 4.6, Algorithm 1).",
+      "sir_modules_mapped": ["LaplaceNeuralOperator", "NeuralSDELatentDynamics", "FeynmanKacPDEResidual", "MarketPriceOfRiskPenalty", "SymbolicBottleneck", "ConformalAllocationLayer"],
+      "classes": [
+        {
+          "name": "ARTEMIS",
+          "base_class": "torch.nn.Module",
+          "public_methods": [
+            { "name": "__init__", "signature": "__init__(self, d_x: int, d_z: int, d_w: int, n_steps: int, use_symbolic: bool = True, use_conformal: bool = True)", "returns": "assembles LNO + NeuralSDE + AuxiliaryPricingNet + prediction head [+ SymbolicBottleneck] [+ conformal/Kelly layer]" },
+            { "name": "forward_pretrain", "signature": "forward_pretrain(self, x: torch.Tensor, t: torch.Tensor, eval_times: torch.Tensor) -> dict", "returns": "{'y_hat':.., 'z_traj':.., 'z_enc':..} -- Phase 1 forward pass (Algorithm 1 lines 6-14), symbolic layer bypassed" },
+            { "name": "compute_losses", "signature": "compute_losses(self, batch, collocation_points, lambdas: dict) -> dict", "returns": "{'forecast':.., 'pde':.., 'mpr':.., 'consist':.., 'total':..} (Eq. 21, Section 4.5)" },
+            { "name": "forward_distill", "signature": "forward_distill(self, x: torch.Tensor) -> torch.Tensor", "returns": "Phase 2 symbolic-layer forward pass, frozen backbone (Algorithm 1 lines 27-34)" }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/baselines/lstm.py",
+      "description": "LSTM baseline (Section 5.1): 2-layer stacked LSTM, 128 hidden units, dropout 0.2, linear output head, mask multiplication for missing values.",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "LSTMBaseline", "base_class": "torch.nn.Module", "public_methods": [
+          { "name": "forward", "signature": "forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor", "returns": "scalar prediction from final hidden state" }
+        ]}
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/baselines/transformer.py",
+      "description": "Vanilla Transformer baseline (Section 5.2): encoder-only, 3 layers, 8 heads, d_model=128, FFN dim 256, dropout 0.1, positional encoding, last-timestep linear head.",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "TransformerBaseline", "base_class": "torch.nn.Module", "public_methods": [
+          { "name": "forward", "signature": "forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor", "returns": "scalar prediction from final-timestep encoder representation" }
+        ]}
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/baselines/ns_transformer.py",
+      "description": "Non-stationary Transformer baseline (Section 5.3): series stationarization + de-stationary attention, 3 encoder layers, mean-pooled + de-normalised output.",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "NSTransformerBaseline", "base_class": "torch.nn.Module", "public_methods": [
+          { "name": "forward", "signature": "forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor", "returns": "de-normalised scalar prediction" }
+        ]}
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/baselines/informer.py",
+      "description": "Informer baseline (Section 5.4): ProbSparse-attention encoder-only, 2 layers, d_model=64, linear head replacing generative decoder.",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "InformerBaseline", "base_class": "torch.nn.Module", "public_methods": [
+          { "name": "forward", "signature": "forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor", "returns": "scalar prediction via ProbSparse-attention encoder + linear head" }
+        ]}
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/models/baselines/chronos2_wrapper.py",
+      "description": "Chronos-2 zero-shot baseline (Section 5.5): Hugging Face pretrained backbone as frozen feature extractor + trainable linear head.",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "Chronos2Baseline", "base_class": "torch.nn.Module", "public_methods": [
+          { "name": "forward", "signature": "forward(self, univariate_series: torch.Tensor) -> torch.Tensor", "returns": "scalar prediction via frozen Chronos-2 embedding + trainable linear head" }
+        ]}
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/evaluation/metrics.py",
+      "description": "RMSE, RankIC, Directional Accuracy, Weighted R2 (Table 2/3 metrics).",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "ForecastMetrics", "base_class": "object", "public_methods": [
+          { "name": "rmse", "signature": "rmse(y_true, y_pred) -> float", "returns": "root mean squared error" },
+          { "name": "rank_ic", "signature": "rank_ic(y_true, y_pred) -> float", "returns": "Spearman rank correlation" },
+          { "name": "directional_accuracy", "signature": "directional_accuracy(y_true, y_pred) -> float", "returns": "fraction of matching signs" },
+          { "name": "weighted_r2", "signature": "weighted_r2(y_true, y_pred, weights=None) -> float", "returns": "competition-style weighted R2 (weight column used for Jane Street per Section 3.1; uniform weights elsewhere)" }
+        ]}
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/evaluation/statistical_tests.py",
+      "description": "Wilcoxon signed-rank significance testing across seeds (paper claims p<0.01 on DSLOB and Time-IMM vs best baseline).",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "SignificanceTester", "base_class": "object", "public_methods": [
+          { "name": "wilcoxon_vs_baseline", "signature": "wilcoxon_vs_baseline(artemis_scores: list[float], baseline_scores: list[float]) -> dict", "returns": "{'statistic':.., 'p_value':..} via scipy.stats.wilcoxon across the 5 seed runs" }
+        ]}
+      ]
+    },
+    {
+      "path": "src/arxivist_artemis/utils/config.py",
+      "description": "YAML config loading/validation, seeding.",
+      "sir_modules_mapped": [],
+      "classes": [
+        { "name": "Config", "base_class": "object", "public_methods": [
+          { "name": "from_yaml", "signature": "from_yaml(path: str) -> 'Config'", "returns": "parsed config" },
+          { "name": "set_seed", "signature": "set_seed(self, seed: int) -> None", "returns": "seeds python/numpy/torch/cuda RNGs" }
+        ]}
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "LaplaceNeuralOperator.forward",
+      "input": { "name": "x, t", "shape": "[N, d_x], [N] irregular timestamps", "dtype": "float32" },
+      "output": { "name": "z", "shape": "[M, d_z]", "dtype": "float32" },
+      "steps": [
+        "x: [N, d_x], t: [N] <- irregularly sampled raw observations",
+        "compute kernel kappa(eval_times[j] - t[i]) for all i,j -> [M, N, d_z, d_x]",
+        "left-Riemann-sum: z[j] = sum_i kappa(eval_times[j]-t[i]) @ x[i] * delta_t[i] + b(eval_times[j])",
+        "b(eval_times[j]) computed via Fourier time-embedding MLP",
+        "return z: [M, d_z] regular-grid latent function, ready for SDE solver"
+      ]
+    },
+    {
+      "name": "NeuralSDE.simulate",
+      "input": { "name": "z0", "shape": "[d_z]", "dtype": "float32" },
+      "output": { "name": "z_traj", "shape": "[n_steps+1, d_z]", "dtype": "float32" },
+      "steps": [
+        "z0: [d_z] <- initial latent state from LNO encoder at t=0",
+        "for j in 0..n_steps-1:",
+        "  mu_j = DriftNet(z_j, t_j) -> [d_z]",
+        "  sigma_j = DiffusionNet(z_j, t_j) -> [d_z, d_w] (Cholesky L_phi @ D_phi)",
+        "  eps_j ~ N(0, I_{d_w})",
+        "  z_{j+1} = z_j + mu_j * dt + sigma_j @ eps_j * sqrt(dt)  (reparametrised, differentiable)",
+        "return z_traj: [n_steps+1, d_z] full simulated trajectory"
+      ]
+    },
+    {
+      "name": "PhysicsLosses.feynman_kac_residual",
+      "input": { "name": "z, t (collocation points)", "shape": "[N_coll, d_z], [N_coll]", "dtype": "float32" },
+      "output": { "name": "R_FK", "shape": "[N_coll]", "dtype": "float32" },
+      "steps": [
+        "z, t: [N_coll, d_z], [N_coll] <- sampled from latent trajectories (random times along each simulated path)",
+        "V = AuxiliaryPricingNet(z, t) -> [N_coll], requires_grad enabled on z,t",
+        "dV_dt = autograd.grad(V.sum(), t, create_graph=True) -> [N_coll]",
+        "grad_z_V = autograd.grad(V.sum(), z, create_graph=True) -> [N_coll, d_z]",
+        "hessian_z_V = batched autograd.grad of grad_z_V w.r.t. z -> [N_coll, d_z, d_z]",
+        "mu = DriftNet(z,t), sigma = DiffusionNet(z,t)",
+        "R_FK = dV_dt + (mu * grad_z_V).sum(-1) + 0.5 * trace(sigma @ sigma.T @ hessian_z_V)",
+        "return R_FK: [N_coll]; L_PDE = mean(R_FK**2)"
+      ]
+    },
+    {
+      "name": "SymbolicBottleneck.forward",
+      "input": { "name": "basis_features", "shape": "[B, K]", "dtype": "float32" },
+      "output": { "name": "y_hat_symb", "shape": "[B]", "dtype": "float32" },
+      "steps": [
+        "basis_features: [B, K] <- BasisLibrary.compute_features applied to raw input window",
+        "if hard: select top-weighted basis functions via Gumbel-Softmax(logits, tau) -> [K] soft/hard selection mask",
+        "y_hat_symb = (basis_features * w[None,:]).sum(-1) -> [B]",
+        "return y_hat_symb: [B]; L_symb = lambda_symb * ||w||_1"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "artemis": {
+        "d_z": "64  # ASSUMED from Figure 3 caption ('64-dimensional latent space') -- SIR confidence 0.35, not confirmed as the value used in Table 2/3 training",
+        "d_w": "16  # ASSUMED -- no numeric value anywhere in paper",
+        "n_lno_poles": "16  # ASSUMED",
+        "n_fourier_frequencies": "8  # ASSUMED",
+        "drift_hidden_dim": "128  # ASSUMED",
+        "diffusion_hidden_dim": "128  # ASSUMED",
+        "auxiliary_pricing_hidden_dim": "128  # ASSUMED, architecture entirely unspecified in paper",
+        "n_sde_steps": "100  # ASSUMED from Figure 2 caption ('100-timestep input window') -- SIR confidence 0.3, not confirmed as training-time M",
+        "loss_weights": {
+          "lambda_pde": "1.0  # ASSUMED -- paper only says 'same order of magnitude as forecast loss during early training', no numeric value given",
+          "lambda_mpr": "1.0  # ASSUMED",
+          "lambda_consist": "1.0  # ASSUMED",
+          "lambda_symb": "0.01  # ASSUMED"
+        },
+        "mpr_kappa": "2.0  # per paper's Appendix A.4.2 'reasonable choice' example for daily data -- ASSUMED as global default, SIR confidence 0.4",
+        "use_symbolic_bottleneck": true,
+        "use_conformal_allocation": true
+      },
+      "symbolic": {
+        "basis_lags": "[2, 5, 10, 20]  # ASSUMED enumeration -- paper never lists the actual basis library",
+        "gumbel_temperature_init": 1.0,
+        "gumbel_temperature_final": 0.1
+      },
+      "conformal": {
+        "alpha": "0.1  # ASSUMED (90% coverage) -- not specified in paper",
+        "rolling_window": "500  # ASSUMED -- not specified in paper"
+      }
+    },
+    "training": {
+      "optimizer": "adam",
+      "learning_rate": 0.001,
+      "lr_scheduler": "reduce_on_plateau",
+      "lr_reduce_factor": 0.5,
+      "epochs_pretrain": 10,
+      "epochs_symbolic_distill": "5  # ASSUMED, not specified in paper",
+      "batch_size": "64  # ASSUMED -- not specified in paper for any model",
+      "mixed_precision": true,
+      "early_stopping_on": "validation_loss",
+      "seeds": [0, 1, 2, 3, 4]
+    },
+    "data": {
+      "datasets": ["jane_street", "optiver", "time_imm", "dslob"],
+      "lookback_lengths": { "jane_street": 20, "optiver": 600, "time_imm": 24, "dslob": 20 },
+      "feature_dims": { "jane_street": 79, "optiver": 7, "time_imm": 4, "dslob": 85 },
+      "jane_street_max_train_days": 500
+    },
+    "evaluation": {
+      "metrics": ["rmse", "rank_ic", "directional_accuracy", "weighted_r2"],
+      "significance_test": "wilcoxon_signed_rank",
+      "significance_alpha": 0.01
+    },
+    "hardware": {
+      "device": "cuda",
+      "precision": "mixed_fp16",
+      "num_workers": 4
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      { "package": "torch", "version": "2.2.*", "reason": "core model implementation, autograd for PDE residuals, Euler-Maruyama SDE simulation via reparametrisation" },
+      { "package": "torchsde", "version": "0.2.*", "reason": "reference/validation implementation of Euler-Maruyama SDE solving with adjoint gradients, useful to cross-check the custom simulate() loop" },
+      { "package": "transformers", "version": "4.4*", "reason": "loading pretrained Chronos-2 checkpoint via Hugging Face (explicitly named in paper Section 5.5)" },
+      { "package": "cvxpylayers", "version": "0.1.*", "reason": "differentiable convex optimization layer for the Kelly-criterion portfolio QP (Appendix A.7.3, citing Agrawal et al. 2019)" },
+      { "package": "cvxpy", "version": "1.4.*", "reason": "QP problem definition backing cvxpylayers" },
+      { "package": "numpy", "version": "1.26.*", "reason": "array operations, preprocessing" },
+      { "package": "pandas", "version": "2.2.*", "reason": "Jane Street/Optiver/Time-IMM data loading and windowing" },
+      { "package": "scipy", "version": "1.12.*", "reason": "Wilcoxon signed-rank test, Spearman RankIC, GARCH/change-point fitting utilities for DSLOB generation" },
+      { "package": "arch", "version": "6.3.*", "reason": "GARCH(1,1) fitting for DSLOB synthetic volatility dynamics (Section 3.4)" },
+      { "package": "ruptures", "version": "1.1.*", "reason": "CUSUM/Bayesian change-point detection to identify the DSLOB crash window (Section 3.4)" },
+      { "package": "matplotlib", "version": "3.8.*", "reason": "reproducing Figures 2-6 (drift/diffusion profiles, PCA vector fields, benchmark scatter/line plots, ablation loss curves)" },
+      { "package": "scikit-learn", "version": "1.4.*", "reason": "PCA for Figure 3's latent-space projection, standardisation utilities" },
+      { "package": "pyyaml", "version": "6.0.*", "reason": "config.yaml loading" }
+    ],
+    "dev": [
+      { "package": "pytest", "version": "8.*" },
+      { "package": "pytest-cov", "version": "5.*" },
+      { "package": "black", "version": "24.*" },
+      { "package": "ruff", "version": "0.4.*" },
+      { "package": "mypy", "version": "1.*" }
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "scripts/prepare_data.py",
+      "purpose": "Run dataset-specific preprocessing (Section 3) for one of jane_street/optiver/time_imm/dslob, producing cached windowed tensors.",
+      "cli_args": [
+        { "flag": "--dataset", "type": "str", "required": true, "default": null, "help": "'jane_street' | 'optiver' | 'time_imm' | 'dslob'" },
+        { "flag": "--raw-dir", "type": "str", "required": true, "default": null, "help": "path to raw source data (or seed LOB data for dslob)" },
+        { "flag": "--out-dir", "type": "str", "required": false, "default": "data/processed", "help": "output directory for cached windows" }
+      ]
+    },
+    {
+      "filename": "scripts/train_model.py",
+      "purpose": "Train ARTEMIS or any one baseline (LSTM/Transformer/NS-Transformer/Informer/Chronos-2) on a chosen dataset.",
+      "cli_args": [
+        { "flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml" },
+        { "flag": "--model", "type": "str", "required": true, "default": null, "help": "'artemis' | 'lstm' | 'transformer' | 'ns_transformer' | 'informer' | 'chronos2'" },
+        { "flag": "--dataset", "type": "str", "required": true, "default": null, "help": "'jane_street' | 'optiver' | 'time_imm' | 'dslob'" },
+        { "flag": "--seed", "type": "int", "required": false, "default": 0, "help": "random seed" },
+        { "flag": "--resume", "type": "str", "required": false, "default": null, "help": "checkpoint path to resume from" },
+        { "flag": "--debug", "type": "store_true", "required": false, "default": false, "help": "tiny-subset quick run" },
+        { "flag": "--dry-run", "type": "store_true", "required": false, "default": false, "help": "validate setup without training" },
+        { "flag": "--out-dir", "type": "str", "required": false, "default": "checkpoints", "help": "checkpoint output directory" }
+      ]
+    },
+    {
+      "filename": "scripts/run_ablation.py",
+      "purpose": "Run the 7-variant DSLOB ablation study (Table 3: A0_Full through A6_MLP).",
+      "cli_args": [
+        { "flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml" },
+        { "flag": "--variant", "type": "str", "required": true, "default": null, "help": "'A0_Full'|'A1_NoSDE'|'A2_NoPDE'|'A3_NoMPR'|'A4_NoPhysics'|'A5_NoConsistency'|'A6_MLP'" },
+        { "flag": "--epochs", "type": "int", "required": false, "default": 10, "help": "per Figure 6, ablation runs use 10 epochs" },
+        { "flag": "--seed", "type": "int", "required": false, "default": 0 }
+      ]
+    },
+    {
+      "filename": "scripts/evaluate.py",
+      "purpose": "Compute RMSE/RankIC/DirAcc/Weighted-R2 for a trained checkpoint on the test split, and Wilcoxon significance vs. a baseline across seeds.",
+      "cli_args": [
+        { "flag": "--checkpoint", "type": "str", "required": true, "default": null },
+        { "flag": "--dataset", "type": "str", "required": true, "default": null },
+        { "flag": "--baseline-checkpoints", "type": "str", "required": false, "default": null, "help": "comma-separated checkpoint paths across seeds, for Wilcoxon test" },
+        { "flag": "--out", "type": "str", "required": false, "default": "results/metrics_report.md" }
+      ]
+    },
+    {
+      "filename": "scripts/plot_figures.py",
+      "purpose": "Reproduce Figures 2-6 (drift/diffusion profiles, PCA vector fields, DSLOB regime-degradation plots, prediction scatter, ablation loss curves).",
+      "cli_args": [
+        { "flag": "--checkpoint", "type": "str", "required": true, "default": null },
+        { "flag": "--dataset", "type": "str", "required": false, "default": "dslob" },
+        { "flag": "--out-dir", "type": "str", "required": false, "default": "results/figures" }
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "pytorch/pytorch:2.2.0-cuda11.8-cudnn8-runtime",
+    "system_deps": ["build-essential", "git", "wget"],
+    "workdir": "/workspace",
+    "default_cmd": "python scripts/train_model.py --help"
+  },
+  "risk_assessment": [
+    {
+      "severity": "High",
+      "description": "Core architecture hyperparameters -- latent dimension d_z, Wiener dimension d_w, SDE step count M, all four loss weights lambda_1..4, and the symbolic basis-library composition -- are never given numeric values anywhere in the paper. The only concrete hints are two figure captions (Fig. 3: '64-dimensional latent space'; Fig. 2: '100-timestep input window'), neither confirmed as the actual training-time configuration used to produce Table 2/3. Any reproduction attempt is therefore fitting a materially under-specified model.",
+      "source": "sir.implementation_assumptions[0,1,2], sir.confidence_annotations.implementation_assumptions=0.45",
+      "mitigation": "Every one of these values is exposed as an explicit, clearly-commented '# ASSUMED' config parameter (never hardcoded) so a user with access to the original authors' hyperparameters can override them directly. README documents each assumption and its confidence level prominently."
+    },
+    {
+      "severity": "High",
+      "description": "DSLOB, the dataset used for the paper's central ablation study (Table 3) and headline directional-accuracy result (64.96%), is a synthetic dataset generated by this paper and is explicitly marked non-publicly-available in the SIR. It cannot be obtained -- only regenerated from a description that itself depends on an unspecified 'seed high-frequency limit order book dataset' the paper does not name or provide.",
+      "source": "sir.evaluation_protocol.datasets[3].publicly_available=false; Section 3.4 says 'The foundation of DSLOB is a real high-frequency limit order book dataset' without naming which one",
+      "mitigation": "Ship a from-scratch synthetic-seed generator (data/make_synthetic_seed_lob.py) that produces a plausible seed LOB series with a hand-specified crash window, so the full DSLOB generation pipeline (Vasicek mid-price, GARCH(1,1) volatility, VAR(1)-correlated noise, time-warping) is exercisable end-to-end for code validation. Explicitly label all such runs as NOT reproducing the paper's actual DSLOB dataset, since the true seed data is unidentified."
+    },
+    {
+      "severity": "Medium",
+      "description": "The Feynman-Kac PDE regularizer's own theoretical derivation (Appendix A.4.1) is explicitly incomplete by the authors' own admission -- penalizing a single auxiliary V_psi's residual under the physical-measure drift does not actually enforce the no-arbitrage condition the paper claims it enforces (that would require knowledge of the risk-neutral drift mu^Q, which is not estimated anywhere in the described procedure).",
+      "source": "sir.implementation_assumptions[4] (paper's own text, directly quoted/paraphrased)",
+      "mitigation": "Implement L_PDE exactly as operationally specified in Algorithm 1 (this is what the ablation study in Table 3 actually measures the effect of), but include a prominent code comment and README section quoting the paper's own caveat, so users understand this loss term is empirically validated (ablation shows it matters enormously for directional accuracy) but not proven to enforce true no-arbitrage in the theoretical sense the name suggests."
+    },
+    {
+      "severity": "Medium",
+      "description": "Two paper-internal numeric inconsistencies affect reproduction: (a) XGBoost is named as a 6th baseline in the abstract but never appears in Table 2 or any baseline description, so it is unclear whether to implement a 6th baseline; (b) DSLOB's feature count is stated as both 59 (Section 5.1 prose) and 85 (Table 1, Section 3.4 detailed description).",
+      "source": "sir.ambiguities[0], sir.ambiguities[1]",
+      "mitigation": "Implement only the 5 baselines that are actually described and reported (LSTM, Transformer, NS-Transformer, Informer, Chronos-2); document the XGBoost discrepancy in README rather than silently implementing a 6th baseline that cannot be validated against any reported number. Use Table 1's 85-feature DSLOB specification as authoritative (corroborated independently by Section 3.4's detailed breakdown) and flag the '59' in Section 5.1 as a likely paper typo."
+    },
+    {
+      "severity": "Medium",
+      "description": "The Optiver dataset requires fusing two asynchronous data streams (order-book snapshots + trade records) into a regular 1Hz, 600-step sequence via forward-filling -- a non-trivial preprocessing pipeline where subtle bugs (e.g. off-by-one in the forward-fill window boundary, incorrect trade aggregation) could silently produce a plausible-looking but numerically wrong feature set, which would be very hard to detect without the ground-truth Optiver competition data to validate against.",
+      "source": "Section 3.2 (Optiver preprocessing description)",
+      "mitigation": "Implement OptiverPreprocessor.build_dataset with extensive shape/range assertions at each stage (e.g. assert output covers all 600 seconds with no NaNs after forward-fill) and a dedicated data-validation test in tests/ that checks feature statistics against the ranges described in Section 3.2 (e.g. log-transformed realized volatility should look approximately Gaussian)."
+    },
+    {
+      "severity": "Low",
+      "description": "The Kelly-criterion differentiable portfolio optimization layer (Appendix A.7.3) is described but the paper never confirms whether it was actually exercised to produce any of the reported Table 2/3 metrics -- it may be a described-but-unused optional capability.",
+      "source": "sir.implementation_assumptions[5] (Module: ConformalAllocationLayer)",
+      "mitigation": "Implement KellyPortfolioLayer as an explicitly optional, disabled-by-default module (use_conformal_allocation controls only interval prediction; the Kelly QP itself is a separate opt-in flag), and do not include its output in any of the reproduced Table 2/3 metrics, since those metrics (RMSE, RankIC, DirAcc, Weighted R2) are all point-prediction metrics that do not depend on portfolio weights."
+    },
+    {
+      "severity": "Low",
+      "description": "Symbolic bottleneck basis-function library composition is never enumerated in the paper, and no example distilled formula is shown anywhere despite this being marketed as one of the paper's four headline contributions ('interpretable trading rules').",
+      "source": "sir.implementation_assumptions[5], sir.ambiguities analysis",
+      "mitigation": "Implement a reasonable, clearly-documented default basis library (moving averages at lags [2,5,10,20], pairwise ratios, first differences, rolling variance, per input channel) and add an export_formula() method that prints the actual distilled top-weighted terms after training, directly addressing the paper's own documentation gap rather than silently reproducing it."
+    }
+  ]
+}

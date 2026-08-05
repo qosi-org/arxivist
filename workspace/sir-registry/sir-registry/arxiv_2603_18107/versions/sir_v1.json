@@ -1,0 +1,468 @@
+{
+  "paper_id": "arxiv_2603_18107",
+  "sir_version": 1,
+  "provenance": {
+    "title": "ARTEMIS: A Neuro-Symbolic Framework for Economically Constrained Market Dynamics",
+    "authors": ["Rahul D Ray"],
+    "affiliations": ["Department of Electronics and Electrical Engineering, BITS Pilani, Hyderabad Campus"],
+    "arxiv_id": "2603.18107v1",
+    "doi": null,
+    "submission_date": "2026-03-18",
+    "abstract": "Deep learning models in quantitative finance often operate as black boxes, lacking interpretability and no-arbitrage constraints. ARTEMIS combines a Laplace Neural Operator encoder, a neural SDE regularised by physics-informed losses, and a differentiable symbolic bottleneck. Evaluated against 5-6 baselines on 4 datasets, ARTEMIS achieves state-of-the-art directional accuracy on DSLOB (64.96%) and Time-IMM (96.0%).",
+    "domain": "Other",
+    "key_claims": [
+      "ARTEMIS achieves the highest directional accuracy among 6 baselines on DSLOB (64.96%) and Time-IMM (96.0%), while remaining competitive on point-accuracy metrics (RMSE, RankIC, Weighted R2).",
+      "Ablating the Feynman-Kac PDE loss reduces DSLOB directional accuracy from 64.89% to 50.32% (near-random); removing both physics losses (PDE+MPR) collapses it to 41.77% (worse than random), demonstrating the physics-informed regularisers are the primary source of directional signal.",
+      "Removing the neural SDE component dramatically improves point accuracy (RMSE 0.2666 -> 0.0224) while only slightly reducing directional accuracy, indicating the SDE trades point-accuracy for directional signal by design.",
+      "ARTEMIS underperforms on Optiver (negative RankIC -0.0555, DirAcc 45.82%, below most baselines), attributed to long sequence length (600), a volatility-focused (magnitude, not direction) target, and a limited 7-feature set — explicit boundary conditions for the framework.",
+      "All results reported over 5 independent seeds; ARTEMIS's improvement over the best baseline on DSLOB and Time-IMM is stated as statistically significant (p<0.01, Wilcoxon signed-rank test)."
+    ],
+    "parsed_at": "2026-07-17T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "ARTEMIS (Module 1 LNO encoder + Module 2 neural SDE + Module 3 symbolic bottleneck + Module 4 conformal allocation)",
+    "modules": [
+      {
+        "name": "LaplaceNeuralOperator",
+        "operation_type": "continuous_time_kernel_convolution_encoder",
+        "input_shape": "irregularly sampled {(x_i, t_i)}_{i=1}^N, x_i in R^{d_x}",
+        "output_shape": "latent function z(t) in R^{d_z}, sampled at M fixed grid points for the SDE solver",
+        "parameters": {
+          "kernel_parameterization": "Laplace-domain rational function: kappa_hat(omega) = sum_k A_k / (omega - lambda_k), K learnable poles lambda_k (Re(lambda_k)<0 for stability) and residue matrices A_k",
+          "time_domain_kernel": "kappa(t) = sum_k A_k * exp(lambda_k * t), t>=0 (causal)",
+          "bias_function": "b(t) = MLP_psi(TimeEmbedding(t)), Fourier time embedding with learnable frequencies",
+          "discretization": "left Riemann sum over observed points: z(t) ~= sum_i kappa(t - t_i) x_i * Delta_t_i + b(t)"
+        },
+        "paper_section": "Section 4.1, Appendix A.2",
+        "confidence": 0.75,
+        "notes": "Number of poles K, latent dimension d_z, and number of Fourier frequencies F are not given numeric values anywhere in the paper. Quadrature error bound stated informally (O(max_i Delta_t_i)) but not derived with constants."
+      },
+      {
+        "name": "NeuralSDELatentDynamics",
+        "operation_type": "neural_stochastic_differential_equation_euler_maruyama",
+        "input_shape": "initial latent state z_0 = E(x)(0) in R^{d_z}",
+        "output_shape": "latent trajectory {z_j}_{j=0}^{M}, z_M in R^{d_z} used for final prediction",
+        "parameters": {
+          "sde": "dz(t) = mu_theta(z(t),t) dt + sigma_phi(z(t),t) dW(t)",
+          "drift_net": "1-hidden-layer MLP: mu_theta(z,t) = W2_mu * tanh(W1_mu*[z; TimeEmbedding(t)] + b1_mu) + b2_mu; hidden width h_mu not specified",
+          "diffusion_net": "Cholesky factorization sigma_phi = L_phi * D_phi; L_phi = Tril(MLP_phiL([z;TimeEmbedding(t)])) + I (lower-triangular, unit diagonal); D_phi = diag(Softplus(MLP_phiD([z;TimeEmbedding(t)]))) (positive diagonal) -- guarantees sigma_phi invertible and sigma*sigma^T PSD",
+          "discretization": "Euler-Maruyama: z_{j+1} = z_j + mu_theta(z_j,t_j)*Delta_t + sigma_phi(z_j,t_j)*sqrt(Delta_t)*eps_j, eps_j ~ N(0,I_{d_w})",
+          "wiener_dimension": "d_w (not numerically specified)",
+          "existence_uniqueness": "Assumption 1 (Lipschitz + linear growth on mu_theta, sigma_phi) invoked for strong solution existence per Oksendal (2003); Euler-Maruyama strong convergence order 1/2 per Kloeden & Platen (1992)"
+        },
+        "paper_section": "Section 4.2, Appendix A.3",
+        "confidence": 0.75,
+        "notes": "Architecture given at the level of layer composition and equations, but hidden-layer widths, d_z, d_w are never given numeric values in the main text or appendix."
+      },
+      {
+        "name": "FeynmanKacPDEResidual",
+        "operation_type": "physics_informed_regularization_loss_via_autodiff",
+        "input_shape": "collocation points {(z_i,t_i)} sampled from latent trajectories",
+        "output_shape": "scalar loss L_PDE",
+        "parameters": {
+          "auxiliary_pricing_network": "V_psi: R^{d_z} x [0,T] -> R",
+          "pde_residual": "R_FK(z_i,t_i) = dV_psi/dt + mu_theta . grad_z V_psi + 0.5*tr(sigma_phi sigma_phi^T grad_z^2 V_psi) - r*V_psi, with r=0 in practice",
+          "loss": "L_PDE = (1/N_coll) * sum_i ||R_FK(z_i,t_i)||^2"
+        },
+        "paper_section": "Section 4.2.1, Appendix A.4.1",
+        "confidence": 0.55,
+        "notes": "Appendix A.4.1 contains an unusually candid, unresolved theoretical discussion (the authors explicitly work through why penalizing the raw residual to zero over-constrains lambda=0, i.e. removes any risk premium, and concede the auxiliary-network approach is 'not sufficient for full no-arbitrage, [but] provides a useful regularizer'). This is a self-flagged theoretical gap in the paper itself, not an ArXivist inference -- N_coll (number of collocation points) is never given a numeric value; auxiliary network V_psi's architecture (depth/width) is unspecified."
+      },
+      {
+        "name": "MarketPriceOfRiskPenalty",
+        "operation_type": "hinge_regularization_loss_on_instantaneous_sharpe_ratio",
+        "input_shape": "sampled times {t_b}_{b=1}^{B} along latent trajectories",
+        "output_shape": "scalar loss L_MPR",
+        "parameters": {
+          "market_price_of_risk": "lambda(t) = sigma_phi(z(t),t)^{-1} mu_theta(z(t),t), element-wise/matrix inverse per parameterization",
+          "loss": "L_MPR = (1/B) * sum_b max(0, ||lambda(t_b)||^2 - kappa^2)",
+          "kappa_threshold": "paper suggests kappa=2 for daily data (annualized Sharpe ~ 2*sqrt(252) ~= 32) as 'a reasonable choice' in Appendix A.4.2, but does not confirm this is the value actually used in the reported experiments"
+        },
+        "paper_section": "Section 4.2.2, Appendix A.4.2",
+        "confidence": 0.65,
+        "notes": "kappa=2 is presented as an example/reasonable choice in the appendix, not explicitly confirmed as the exact hyperparameter used to produce Table 2/3 results."
+      },
+      {
+        "name": "SymbolicBottleneck",
+        "operation_type": "differentiable_symbolic_regression_two_phase_distillation",
+        "input_shape": "raw input window x_input (basis functions applied to raw features, not latent state, per Appendix A.6)",
+        "output_shape": "scalar y_hat_symb (interpretable sparse combination)",
+        "parameters": {
+          "basis_library": "F = {f_1,...,f_K}: moving averages, ratios, differences, variances, and other elementary operations over lags of raw input features",
+          "combination": "y_hat_symb = sum_k w_k * f_k(x_input), L1 penalty L_symb = lambda_symb * ||w||_1",
+          "differentiable_selection": "optional Gumbel-Softmax relaxation over candidate basis-function parameterizations (e.g. MA lag): p_k = softmax((log(alpha_k)+g_k)/tau), g_k ~ Gumbel(0,1), tau->0 approximates hard selection",
+          "training_procedure": "two-phase: Phase 1 pretrain encoder+SDE+prediction head on L_total (no symbolic layer); Phase 2 freeze everything except symbolic layer, train via teacher-student distillation loss L_distill = MSE(y_hat_symb, y_hat_frozen) + L_symb"
+        },
+        "paper_section": "Section 4.3, Appendix A.6",
+        "confidence": 0.55,
+        "notes": "Size of basis library K, specific set of lags/windows used, and the actual distilled closed-form expressions obtained are never reported anywhere in the paper -- no example distilled formula is shown despite this being marketed as the paper's core interpretability contribution."
+      },
+      {
+        "name": "ConformalAllocationLayer",
+        "operation_type": "adaptive_conformal_prediction_plus_differentiable_kelly_portfolio_QP",
+        "input_shape": "point prediction y_hat(X_test), calibration-set residuals",
+        "output_shape": "prediction interval [y_hat - q_{1-alpha}, y_hat + q_{1-alpha}]; optionally portfolio weights w*",
+        "parameters": {
+          "standard_conformal": "q_{1-alpha} = (1-alpha)(1+1/n)-quantile of calibration residuals r_i = |y_i - y_hat(X_i)|; coverage guarantee P(y_test in C(X_test)) >= 1-alpha under exchangeability",
+          "adaptive_variant": "rolling window W_t of most recent W residuals; q_{1-alpha}(t) = (1-alpha)-quantile of W_t (loses strict finite-sample guarantee under non-stationarity per the paper's own admission, citing Gibbs & Candes 2021)",
+          "kelly_portfolio_qp": "max_w w^T y_hat - (gamma/2) w^T Sigma_hat w s.t. 1^T w=1, w>=0; Sigma_hat approximated as diagonal with entries q_p^2 from conformal intervals; solved via differentiable convex optimization layer (cvxpylayers-style, citing Agrawal et al. 2019)"
+        },
+        "paper_section": "Section 4.4, Appendix A.7",
+        "confidence": 0.6,
+        "notes": "Rolling window size W for the adaptive conformal variant, calibration-set size, and target coverage alpha are not numerically specified. It is unclear from the paper whether the portfolio/Kelly-QP layer was actually used to produce any of the reported Table 2/3 metrics, or is a described-but-unused optional capability."
+      }
+    ],
+    "connections": [
+      { "from": "MarketData_irregular_obs", "to": "LaplaceNeuralOperator", "tensor_name": "{(x_i,t_i)}" },
+      { "from": "LaplaceNeuralOperator", "to": "NeuralSDELatentDynamics", "tensor_name": "z_0 = E(x)(0), and z_enc_j at grid points (for consistency loss)" },
+      { "from": "NeuralSDELatentDynamics", "to": "FeynmanKacPDEResidual", "tensor_name": "collocation (z_i,t_i) sampled from SDE trajectory" },
+      { "from": "NeuralSDELatentDynamics", "to": "MarketPriceOfRiskPenalty", "tensor_name": "mu_theta(z(t),t), sigma_phi(z(t),t) along trajectory" },
+      { "from": "NeuralSDELatentDynamics", "to": "PredictionHead", "tensor_name": "z_M (final latent state) -> y_hat = w^T z_M + b" },
+      { "from": "RawInputFeatures", "to": "SymbolicBottleneck", "tensor_name": "x_input (raw features, NOT latent state, per Appendix A.6.1)" },
+      { "from": "PredictionHead", "to": "SymbolicBottleneck", "tensor_name": "y_hat (frozen teacher signal for distillation, Phase 2)" },
+      { "from": "PredictionHead", "to": "ConformalAllocationLayer", "tensor_name": "y_hat, calibration residuals r_i" },
+      { "from": "ConformalAllocationLayer", "to": "PortfolioOptimization", "tensor_name": "[y_hat +/- q_{1-alpha}] -> Sigma_hat diagonal -> Kelly QP" }
+    ],
+    "variants": [
+      { "name": "A0_Full", "differences": { "description": "complete ARTEMIS: LNO + SDE + PDE loss + MPR loss + consistency loss (no symbolic/conformal ablated in Table 3)" } },
+      { "name": "A1_NoSDE", "differences": { "description": "latent evolution replaced by 'a simple deterministic transformation' (unspecified exact form)" } },
+      { "name": "A2_NoPDE", "differences": { "description": "L_PDE removed from L_total" } },
+      { "name": "A3_NoMPR", "differences": { "description": "L_MPR removed from L_total" } },
+      { "name": "A4_NoPhysics", "differences": { "description": "both L_PDE and L_MPR removed, only L_forecast + L_consist remain" } },
+      { "name": "A5_NoConsistency", "differences": { "description": "L_consist removed from L_total" } },
+      { "name": "A6_MLP", "differences": { "description": "entire ARTEMIS architecture replaced by a flat MLP on the flattened input window (no sequential/temporal structure at all)" } }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "LNO kernel integral operator",
+      "latex": "z(t) = \\int_0^T \\kappa(t-s) x(s)\\, ds + b(t)",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["kernel poles lambda_k", "residue matrices A_k", "K (number of poles, unspecified)"],
+      "undefined_symbols": ["K (exact count never given)"],
+      "paper_section": "Section 4.1, Eq. (1) Appendix A.2.1",
+      "confidence": 0.75
+    },
+    {
+      "name": "Laplace-domain rational kernel + inverse transform",
+      "latex": "\\hat{\\kappa}(\\omega) = \\sum_{k=1}^K \\frac{A_k}{\\omega - \\lambda_k}, \\qquad \\kappa(t) = \\sum_{k=1}^K A_k e^{\\lambda_k t},\\ t\\ge 0",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["K"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.2.2, Eqs. (2)-(3)",
+      "confidence": 0.8
+    },
+    {
+      "name": "Neural SDE latent dynamics",
+      "latex": "dz(t) = \\mu_\\theta(z(t),t)\\, dt + \\sigma_\\phi(z(t),t)\\, dW(t)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["d_z (latent dim, unspecified)", "d_w (Wiener dim, unspecified)"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.2, Eq. (5)",
+      "confidence": 0.85
+    },
+    {
+      "name": "Euler-Maruyama discretization",
+      "latex": "z_{j+1} = z_j + \\mu_\\theta(z_j,t_j)\\Delta t + \\sigma_\\phi(z_j,t_j)\\sqrt{\\Delta t}\\,\\epsilon_j,\\quad \\epsilon_j \\sim \\mathcal{N}(0,I_{d_w})",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["Delta t (step size, unspecified numeric value)", "M (number of grid points, unspecified)"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.2, Appendix A.3.3, Eq. (6)",
+      "confidence": 0.85
+    },
+    {
+      "name": "Diffusion Cholesky parameterization",
+      "latex": "\\sigma_\\phi = L_\\phi D_\\phi,\\quad L_\\phi = \\mathrm{Tril}(\\mathrm{MLP}_{\\phi L}(\\cdot)) + I,\\quad D_\\phi = \\mathrm{diag}(\\mathrm{Softplus}(\\mathrm{MLP}_{\\phi D}(\\cdot)))",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.3.2",
+      "confidence": 0.85
+    },
+    {
+      "name": "Feynman-Kac PDE residual",
+      "latex": "R_{FK} = \\frac{\\partial V}{\\partial t} + \\mu\\cdot\\nabla_z V + \\frac{1}{2}\\mathrm{tr}(\\sigma\\sigma^\\top \\nabla_z^2 V)",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["N_coll (collocation points, unspecified)", "r (risk-free rate, set to 0 in practice)"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.2.1, Appendix A.4.1",
+      "confidence": 0.7
+    },
+    {
+      "name": "PDE loss",
+      "latex": "\\mathcal{L}_{PDE} = \\frac{1}{N_{coll}}\\sum_{i=1}^{N_{coll}} \\|R_{FK}(z_i,t_i)\\|^2",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["N_coll"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.2.1, Eq. (7)",
+      "confidence": 0.75
+    },
+    {
+      "name": "Market price of risk and MPR loss",
+      "latex": "\\lambda(t) = \\sigma_\\phi(z(t),t)^{-1}\\mu_\\theta(z(t),t), \\qquad \\mathcal{L}_{MPR} = \\frac{1}{B}\\sum_{b=1}^B \\max(0, \\|\\lambda(t_b)\\|^2 - \\kappa^2)",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["kappa (Sharpe threshold; paper suggests kappa=2 as 'a reasonable choice' but does not confirm it is the value used)"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.2.2, Appendix A.4.2, Eqs. (8)-(9)",
+      "confidence": 0.65
+    },
+    {
+      "name": "Consistency loss",
+      "latex": "\\mathcal{L}_{consist} = \\frac{1}{M}\\sum_{j=1}^M \\|z_j^{(sde)} - z_j^{(enc)}\\|^2",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.5.2, Eq. (11)",
+      "confidence": 0.85
+    },
+    {
+      "name": "Symbolic bottleneck combination and L1 penalty",
+      "latex": "\\hat{y}_{symb} = \\sum_{k=1}^K w_k f_k(x), \\qquad \\mathcal{L}_{symb} = \\lambda_{symb}\\|w\\|_1",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["K (basis library size, unspecified)", "lambda_symb"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.3, Appendix A.6.2, Eqs. (12)-(13)",
+      "confidence": 0.7
+    },
+    {
+      "name": "Distillation loss (Phase 2 symbolic training)",
+      "latex": "\\mathcal{L}_{distill} = \\frac{1}{N_{batch}}\\sum_{n=1}^{N_{batch}} (\\hat{y}_{symb,n} - \\hat{y}_n)^2 + \\mathcal{L}_{symb}",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": [],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.6.4, Eq. (14)",
+      "confidence": 0.8
+    },
+    {
+      "name": "Total composite loss",
+      "latex": "\\mathcal{L}_{total} = \\mathcal{L}_{forecast} + \\lambda_1\\mathcal{L}_{PDE} + \\lambda_2\\mathcal{L}_{MPR} + \\lambda_3\\mathcal{L}_{consist}\\ (+\\lambda_4\\mathcal{L}_{symb}\\ \\text{in Appendix A.8})",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["lambda_1", "lambda_2", "lambda_3", "lambda_4"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.5 (3-term version), Appendix A.8 Eq. (21) (4-term version including symbolic)",
+      "confidence": 0.6
+    },
+    {
+      "name": "Conformal prediction interval and coverage guarantee",
+      "latex": "C(X_{test}) = [\\hat{y}(X_{test}) - q_{1-\\alpha},\\ \\hat{y}(X_{test}) + q_{1-\\alpha}], \\qquad P(y_{test}\\in C(X_{test})) \\ge 1-\\alpha",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["alpha (target miscoverage, unspecified)", "n (calibration set size, unspecified)", "W (adaptive rolling window size, unspecified)"],
+      "undefined_symbols": [],
+      "paper_section": "Section 4.4, Appendix A.7.1-A.7.2, Eqs. (15)-(17)",
+      "confidence": 0.65
+    },
+    {
+      "name": "Differentiable Kelly criterion portfolio QP",
+      "latex": "\\max_w\\ w^\\top \\hat{y} - \\frac{\\gamma}{2} w^\\top \\hat{\\Sigma} w \\quad \\text{s.t.}\\ \\mathbf{1}^\\top w = 1,\\ w\\ge 0",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["gamma (risk aversion, unspecified)"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix A.7.3, Eqs. (18)-(20)",
+      "confidence": 0.55
+    }
+  ],
+  "tensor_semantics": [
+    { "name": "x_i", "shape_notation": "[d_x]", "dtype": null, "tensor_type": "input", "module": "LaplaceNeuralOperator", "confidence": 0.85 },
+    { "name": "z(t)", "shape_notation": "[d_z]", "dtype": null, "tensor_type": "intermediate", "module": "LaplaceNeuralOperator/NeuralSDELatentDynamics", "confidence": 0.85 },
+    { "name": "kappa(t)", "shape_notation": "[d_z, d_x] (matrix-valued kernel)", "dtype": null, "tensor_type": "parameter", "module": "LaplaceNeuralOperator", "confidence": 0.75 },
+    { "name": "A_k", "shape_notation": "[d_z, d_x] complex, K of them", "dtype": "complex", "tensor_type": "parameter", "module": "LaplaceNeuralOperator", "confidence": 0.7 },
+    { "name": "lambda_k", "shape_notation": "scalar complex, K of them, Re(lambda_k)<0", "dtype": "complex", "tensor_type": "parameter", "module": "LaplaceNeuralOperator", "confidence": 0.7 },
+    { "name": "mu_theta(z,t)", "shape_notation": "[d_z]", "dtype": null, "tensor_type": "intermediate", "module": "NeuralSDELatentDynamics", "confidence": 0.85 },
+    { "name": "sigma_phi(z,t)", "shape_notation": "[d_z, d_w]", "dtype": null, "tensor_type": "intermediate", "module": "NeuralSDELatentDynamics", "confidence": 0.85 },
+    { "name": "V_psi(z,t)", "shape_notation": "scalar (auxiliary pricing function)", "dtype": null, "tensor_type": "intermediate", "module": "FeynmanKacPDEResidual", "confidence": 0.7 },
+    { "name": "lambda(t) [market price of risk]", "shape_notation": "[d_w]", "dtype": null, "tensor_type": "intermediate", "module": "MarketPriceOfRiskPenalty", "confidence": 0.7 },
+    { "name": "w [symbolic weights]", "shape_notation": "[K]", "dtype": null, "tensor_type": "parameter", "module": "SymbolicBottleneck", "confidence": 0.7 },
+    { "name": "y_hat", "shape_notation": "scalar", "dtype": null, "tensor_type": "output", "module": "PredictionHead", "confidence": 0.9 }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Adam",
+      "learning_rate": 0.001,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.7
+    },
+    "lr_schedule": {
+      "type": "ReduceLROnPlateau (factor 0.5 on validation-loss plateau, per baseline training protocol description in Section 5.1; not explicitly re-stated for ARTEMIS itself but implied by 'training protocol' reuse)",
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.45
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": 10,
+    "mixed_precision": "true (explicitly stated: 'Mixed-precision training is employed to accelerate computation and reduce memory usage', Section 5.1, applied to all models including ARTEMIS)",
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": "Two-phase: Phase 1 pretrains encoder+SDE+prediction head jointly under L_total (Algorithm 1, lines 3-26); Phase 2 freezes everything except the symbolic layer and trains it via distillation (Algorithm 1, lines 27-35); conformal calibration is a third, non-gradient post-training step (Algorithm 1, lines 36-38).",
+    "confidence": 0.55
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      { "name": "Jane Street (anonymised market data, Kaggle competition)", "split": "temporal: early dates train (first 500 days), intermediate val, later test; window length 20, 79 features", "size": 12180000, "publicly_available": true },
+      { "name": "Optiver Realized Volatility (limit order book, Kaggle competition)", "split": "original competition temporal split; window length 600, 7 derived features", "size": 3830, "publicly_available": true },
+      { "name": "Time-IMM EPA-Air (hourly air quality, 8 US counties)", "split": "70/15/15 temporal split per entity; window length 24, 4 features", "size": 42106, "publicly_available": true },
+      { "name": "DSLOB (Deep Synthetic Limit Order Book) -- novel synthetic dataset introduced by this paper", "split": "Normal (train) / Stress (val) / Crash (test) regimes; window length 20, 85 features", "size": 39673, "publicly_available": false }
+    ],
+    "metrics": ["RMSE", "RankIC (rank information coefficient)", "Directional Accuracy (DirAcc)", "Weighted R2"],
+    "reported_results": [
+      { "metric": "RMSE", "dataset": "Jane Street", "split": "ARTEMIS", "value": 0.7762, "is_primary": true },
+      { "metric": "RankIC", "dataset": "Jane Street", "split": "ARTEMIS", "value": 0.0432, "is_primary": true },
+      { "metric": "DirAcc", "dataset": "Jane Street", "split": "ARTEMIS", "value": 0.5150, "is_primary": true },
+      { "metric": "RMSE", "dataset": "Optiver", "split": "ARTEMIS", "value": 0.5553, "is_primary": true },
+      { "metric": "RankIC", "dataset": "Optiver", "split": "ARTEMIS", "value": -0.0555, "is_primary": true },
+      { "metric": "DirAcc", "dataset": "Optiver", "split": "ARTEMIS", "value": 0.4582, "is_primary": true },
+      { "metric": "RMSE", "dataset": "Time-IMM", "split": "ARTEMIS", "value": 4.691, "is_primary": true },
+      { "metric": "RankIC", "dataset": "Time-IMM", "split": "ARTEMIS", "value": 0.904, "is_primary": true },
+      { "metric": "DirAcc", "dataset": "Time-IMM", "split": "ARTEMIS", "value": 0.860, "is_primary": true },
+      { "metric": "RMSE", "dataset": "DSLOB", "split": "ARTEMIS (Table 2)", "value": 0.03615, "is_primary": true },
+      { "metric": "RankIC", "dataset": "DSLOB", "split": "ARTEMIS (Table 2)", "value": 0.08791, "is_primary": true },
+      { "metric": "DirAcc", "dataset": "DSLOB", "split": "ARTEMIS (Table 2)", "value": 0.6496, "is_primary": true },
+      { "metric": "DirAcc (ablation A0_Full)", "dataset": "DSLOB", "split": "Table 3", "value": 0.6489, "is_primary": true },
+      { "metric": "DirAcc (ablation A1_NoSDE)", "dataset": "DSLOB", "split": "Table 3", "value": 0.6459, "is_primary": true },
+      { "metric": "DirAcc (ablation A2_NoPDE)", "dataset": "DSLOB", "split": "Table 3", "value": 0.5032, "is_primary": true },
+      { "metric": "DirAcc (ablation A3_NoMPR)", "dataset": "DSLOB", "split": "Table 3", "value": 0.5682, "is_primary": true },
+      { "metric": "DirAcc (ablation A4_NoPhysics)", "dataset": "DSLOB", "split": "Table 3", "value": 0.4177, "is_primary": true },
+      { "metric": "DirAcc (ablation A5_NoConsistency)", "dataset": "DSLOB", "split": "Table 3", "value": 0.3754, "is_primary": true },
+      { "metric": "DirAcc (ablation A6_MLP)", "dataset": "DSLOB", "split": "Table 3", "value": 0.3504, "is_primary": true }
+    ],
+    "baselines": ["LSTM", "Transformer (vanilla)", "NS-Transformer (Non-stationary Transformer)", "Informer", "Chronos-2", "XGBoost (mentioned in abstract as a baseline but never appears in Table 2 or Section 5 baseline descriptions -- see ambiguities)"],
+    "compute": null,
+    "special_conditions": [
+      "All models trained/evaluated on identical preprocessed windows per dataset for fairness.",
+      "Mixed-precision training used for all models including ARTEMIS.",
+      "Early stopping on validation loss; checkpoint with lowest validation loss used for test evaluation.",
+      "Results averaged over 5 independent random seeds; ARTEMIS vs best-baseline improvement on DSLOB and Time-IMM claimed statistically significant at p<0.01 via Wilcoxon signed-rank test (test details -- which metric, exact baseline compared -- not fully specified).",
+      "DSLOB ablation ran for 10 epochs per Figure 6 loss curves."
+    ],
+    "confidence": 0.75
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Latent dimension d_z, Wiener dimension d_w, number of LNO poles K, MLP hidden widths for drift/diffusion/auxiliary-pricing networks are never given numeric values anywhere in the paper (main text or appendix). Figure 3's caption mentions '64-dimensional latent space', which is the only concrete clue to d_z.",
+      "basis": "Figure 3 caption is the sole quantitative hint (d_z=64); all other dimensions assumed from typical scientific-ML/neural-SDE literature defaults",
+      "confidence": 0.35,
+      "alternatives": ["d_z could be any value; 64 is inferred only from one figure caption, not confirmed in the main architecture description", "hidden widths could range widely (64-512) with no textual anchor"],
+      "affects_section": "LaplaceNeuralOperator, NeuralSDELatentDynamics modules"
+    },
+    {
+      "assumption": "Euler-Maruyama step size Delta t and number of grid points M are not given numeric values. Figure 2's caption mentions a '100-timestep input window', suggesting M=100 for at least the DSLOB crash-regime analysis figures, but this is not confirmed as the training-time M.",
+      "basis": "Figure 2 caption is the only numeric hint; not confirmed to be the value used during actual training in Algorithm 1",
+      "confidence": 0.3,
+      "alternatives": ["M could differ between the analysis figures (Figs 2-3) and the actual training loop", "Delta t could be uniform 1/M or dataset-dependent"],
+      "affects_section": "NeuralSDELatentDynamics"
+    },
+    {
+      "assumption": "Loss weights lambda_1 (PDE), lambda_2 (MPR), lambda_3 (consistency), lambda_4 (symbolic) are described only qualitatively ('we set them so that the economic losses are of the same order of magnitude as the forecast loss during early training') -- no numeric values given.",
+      "basis": "explicit paper text, Section 4.5",
+      "confidence": 0.3,
+      "alternatives": ["Any lambda_i in a plausible 0.01-10 range depending on loss-term scale at initialization", "Adaptive/learned loss weighting (e.g. uncertainty weighting) could have been used instead of fixed constants, though the paper describes fixed weights"],
+      "affects_section": "training_pipeline, total composite loss"
+    },
+    {
+      "assumption": "Sharpe threshold kappa for the MPR penalty is suggested as kappa=2 'for daily data' in Appendix A.4.2 as 'a reasonable choice', but this is presented as an illustrative example, not explicitly confirmed as the value used to produce the reported Table 2/3 results (which span 4 datasets at different frequencies: intraday, 10-min windows, hourly, and synthetic).",
+      "basis": "explicit paper text flags this as an example rather than a confirmed hyperparameter",
+      "confidence": 0.4,
+      "alternatives": ["kappa may have been tuned per-dataset given the very different frequencies (intraday Jane Street vs hourly Time-IMM)", "kappa=2 could be a global constant used everywhere as suggested"],
+      "affects_section": "MarketPriceOfRiskPenalty"
+    },
+    {
+      "assumption": "The Feynman-Kac PDE regularizer's theoretical justification is explicitly incomplete: Appendix A.4.1 contains the authors' own unresolved reasoning trail ('However, since we do not know mu^Q a priori...This is too restrictive...Instead, we note that...A practical way to enforce it is to require that the residual is small for many randomly chosen V. In our implementation, we use a single auxiliary network V_psi...'). The paper explicitly concedes this 'is not sufficient for full no-arbitrage, [but] provides a useful regularizer.'",
+      "basis": "explicit self-flagged limitation directly quoted (paraphrased) from Appendix A.4.1 of the paper itself",
+      "confidence": 0.5,
+      "alternatives": ["A more principled implementation might jointly learn or estimate mu^Q rather than penalizing a single auxiliary V_psi's residual under the physical-measure drift", "Multiple auxiliary pricing networks (a 'family of functions V_psi') as the paper itself suggests would be needed for a more complete constraint"],
+      "affects_section": "FeynmanKacPDEResidual -- this is a theoretical/scientific-validity flag, not just an implementation-detail gap"
+    },
+    {
+      "assumption": "Basis-function library size K for the symbolic bottleneck, and the actual distilled closed-form expressions obtained from any experiment, are never reported. No example symbolic formula appears anywhere in the paper despite interpretability via 'closed-form, interpretable expressions' being one of the paper's four headline contributions.",
+      "basis": "absence of any example output from the symbolic bottleneck throughout the entire paper (main text, results tables, appendix)",
+      "confidence": 0.3,
+      "alternatives": ["Library likely includes standard technical-analysis-style features (moving averages of several lags, ratios, differences, rolling variance) applied per input channel, per the description in Appendix A.6.1, but exact enumeration and count are unknown"],
+      "affects_section": "SymbolicBottleneck"
+    },
+    {
+      "assumption": "XGBoost is listed in the abstract as one of 'six strong baselines' but never appears in Table 2 (Master Benchmark Results), never receives a subsection in Section 5 (which describes exactly five baselines: LSTM, Transformer, NS-Transformer, Informer, Chronos-2), and is not mentioned in the ablation study. This is an inconsistency within the paper itself, not an ArXivist inference.",
+      "basis": "direct textual/tabular inconsistency: abstract says 'six strong baselines including LSTM, Transformer, NS Transformer, Informer, Chronos 2, and XGBoost' (6 named) but Table 2 and Section 5 only cover 5",
+      "confidence": 0.9,
+      "alternatives": ["XGBoost results may have been run but omitted from Table 2 by editing error", "The 'six' in the abstract may itself be a typo for 'five'"],
+      "affects_section": "evaluation_protocol.baselines -- flagged as a paper-internal inconsistency"
+    },
+    {
+      "assumption": "Feature counts stated in Section 5.1 ('79, 4, 59, and 7 respectively' for Jane Street/Time-IMM/DSLOB/Optiver in that listed order) do not match the feature counts given in Table 1 (Jane Street 79, Optiver 7, Time-IMM 4, DSLOB 85). Section 5.1 lists '59' where Table 1 says DSLOB has 85 features. This is a direct numeric inconsistency within the paper.",
+      "basis": "direct textual comparison between Section 5.1 prose and Table 1",
+      "confidence": 0.85,
+      "alternatives": ["Table 1's 85 (stated consistently in Sections 3.4 and the DSLOB description) is more likely correct; the '59' in Section 5.1 is likely a transcription error"],
+      "affects_section": "evaluation_protocol.datasets -- flagged as a paper-internal inconsistency; ArXivist uses Table 1's value (85) as authoritative since it is corroborated by Section 3.4's detailed DSLOB description"
+    },
+    {
+      "assumption": "Implementation framework not specified; assume PyTorch given the paper's description of 'gradients... backpropagated through the Euler-Maruyama SDE solver via the reparametrisation trick' and 'differentiable convex optimization layers (Agrawal et al. 2019)' (cvxpylayers is a PyTorch/CVXPY-based library), and Hugging Face transformers is explicitly named for loading Chronos-2.",
+      "basis": "cvxpylayers and Hugging Face transformers are both most commonly used with PyTorch; explicit textual reference to Hugging Face transformers for Chronos-2",
+      "confidence": 0.65,
+      "alternatives": ["JAX with a custom differentiable QP solver", "TensorFlow (less likely given cvxpylayers/HF ecosystem conventions)"],
+      "affects_section": "implementation_assumptions (general framework choice)"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Abstract vs. Table 2 / Section 5",
+      "description": "Abstract claims 6 baselines including XGBoost; only 5 baselines (LSTM, Transformer, NS-Transformer, Informer, Chronos-2) appear anywhere in the actual results table or baseline description sections.",
+      "primary_assumption": "XGBoost was either not actually run or its results were omitted from the paper; ArXivist implements only the 5 baselines that are actually described and reported",
+      "alternatives": ["XGBoost results exist but were accidentally dropped from Table 2 during paper preparation"],
+      "confidence": 0.9
+    },
+    {
+      "location": "Section 5.1 feature-count list vs. Table 1",
+      "description": "Section 5.1 states feature dimensions as '79, 4, 59, and 7' (for Jane Street, Time-IMM, DSLOB, Optiver in that order) while Table 1 and Section 3.4 both state DSLOB has 85 features.",
+      "primary_assumption": "Table 1's 85 is authoritative (independently corroborated by Section 3.4's detailed feature breakdown: '85 features from four levels'); the '59' in Section 5.1 is a paper-internal error",
+      "alternatives": ["59 could be correct if Section 5.1 refers to a different/reduced feature subset actually fed to baselines vs. the full 85-feature DSLOB generation described in Section 3.4"],
+      "confidence": 0.85
+    },
+    {
+      "location": "Appendix A.4.1 (Feynman-Kac PDE residual)",
+      "description": "The paper's own derivation reaches an impasse: penalizing the raw PDE residual to zero would force the market price of risk lambda=0 (i.e., physical and risk-neutral measures coincide, meaning no risk premium exists) which the authors call 'too restrictive.' Their resolution -- training a single auxiliary network V_psi and penalizing its residual -- is explicitly admitted to be 'not sufficient for full no-arbitrage' but merely 'a useful regularizer.'",
+      "primary_assumption": "Implement L_PDE exactly as operationally described (single auxiliary V_psi, residual under the physical-measure drift/diffusion, MSE penalty) since that is the actual algorithm in Algorithm 1 and Eq. (7), while documenting that the paper itself flags this as theoretically incomplete rather than presenting it as a settled result",
+      "alternatives": ["A more rigorous implementation might use multiple auxiliary V_psi networks ('a family of functions') as the paper's own aside suggests would be more correct", "An entirely different no-arbitrage regularization (e.g. explicit risk-neutral drift estimation) could be substituted"],
+      "confidence": 0.5
+    },
+    {
+      "location": "Section 4.5 vs. Appendix A.8",
+      "description": "The main text (Section 4.5) states the total loss as a 3-term sum: L_total = L_forecast + lambda1*L_PDE + lambda2*L_MPR + lambda3*L_consist. Appendix A.8 Eq. (21) gives a 4-term version additionally including lambda4*L_symb. Algorithm 1 (line 21) uses the 3-term version during Phase-1 pretraining and handles L_symb separately in Phase 2 via L_distill (which already includes L_symb per Eq. 14).",
+      "primary_assumption": "Algorithm 1 is authoritative for the actual training procedure: 3-term L_total during Phase 1, separate L_distill (incorporating L_symb) during Phase 2. Appendix A.8's 4-term formula is a post-hoc unified notation, not a distinct training regime.",
+      "alternatives": ["The symbolic layer's L1 penalty might additionally be applied during Phase 1 pretraining alongside the 3-term loss, contrary to Algorithm 1's explicit 'symbolic layer is not used' statement for Phase 1"],
+      "confidence": 0.6
+    },
+    {
+      "location": "Table 3 (ablation) DirAcc for A0_Full vs. abstract/main text",
+      "description": "Table 3 reports A0_Full DirAcc = 0.6489 (64.89%); the abstract and Section 1 state ARTEMIS achieves 64.96% on DSLOB (Table 2's ARTEMIS row). These are two different numbers for what appears to be the same model on the same dataset (0.6496 in Table 2 vs 0.6489 in Table 3's A0_Full row) -- likely due to averaging over different numbers of seeds/runs between the main benchmark and the ablation study, but the paper does not explicitly reconcile this.",
+      "primary_assumption": "Treat Table 2's 64.96% as the paper's headline reported DSLOB result, and Table 3's 64.89% as a separate ablation-study run of nominally the same full-model configuration; the ~0.07pp difference is within expected seed-to-seed variance and not a substantive discrepancy",
+      "alternatives": ["The two numbers could reflect genuinely different train/eval conditions (e.g. different epoch counts -- Table 3's ablations are explicitly run for only 10 epochs per Figure 6, while Table 2's main benchmark training duration is unspecified)"],
+      "confidence": 0.55
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.72,
+    "mathematical_spec": 0.75,
+    "tensor_semantics": 0.78,
+    "training_pipeline": 0.55,
+    "evaluation_protocol": 0.75,
+    "implementation_assumptions": 0.45,
+    "overall_sir_confidence": 0.64
+  }
+}

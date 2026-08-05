@@ -1,0 +1,163 @@
+{
+  "paper_id": "arxiv_2603_18107",
+  "paper_title": "ARTEMIS: A Neuro-Symbolic Framework for Economically Constrained Market Dynamics",
+  "current_stage": 6,
+  "stages_completed": [1, 2, 3, 4, 5, 6],
+  "sir_path": "sir-registry/arxiv_2603_18107/sir.json",
+  "repo_path": "paper-repos/arxiv_2603_18107/",
+  "artifacts": {
+    "sir": "sir-registry/arxiv_2603_18107/sir.json",
+    "architecture_plan": "sir-registry/arxiv_2603_18107/architecture_plan.json",
+    "repo_initialized": true,
+    "notebook_path": "paper-repos/arxiv_2603_18107/notebooks/reproduce_arxiv_2603_18107.ipynb",
+    "exploratory_notebook_path": "paper-repos/arxiv_2603_18107/notebooks/explore_arxiv_2603_18107.ipynb",
+    "comparison_report": "paper-repos/arxiv_2603_18107/comparison/benchmark_comparison.md"
+  },
+  "confidence_flags": {
+    "architecture": 0.72,
+    "training_pipeline": 0.55,
+    "implementation_assumptions": 0.45,
+    "overall_sir_confidence": 0.64
+  },
+  "human_review_required": true,
+  "human_review_reasons": [
+    "Overall SIR confidence 0.64 is below the 0.65 auto-proceed threshold.",
+    "Paper-internal inconsistency: abstract claims 6 baselines including XGBoost; only 5 are ever reported (Table 2, Section 5).",
+    "Paper-internal inconsistency: DSLOB feature count stated as both 59 (Section 5.1) and 85 (Table 1, Section 3.4); Table 1's value used as authoritative.",
+    "Paper-internal inconsistency (found Stage 4): Time-IMM directional accuracy stated as 96.0% in abstract/Introduction but 86.0% in Table 2 for the identical ARTEMIS/Time-IMM cell.",
+    "Core architecture hyperparameters (latent dimension d_z, SDE step size/grid M, loss weights lambda_1..4, symbolic basis-library size K) are never given numeric values anywhere in the paper; only indirect hints exist in figure captions.",
+    "The paper's own Appendix A.4.1 explicitly concedes the Feynman-Kac PDE regularizer is theoretically incomplete ('not sufficient for full no-arbitrage, but provides a useful regularizer') -- a self-flagged scientific-validity caveat, not merely a missing implementation detail.",
+    "Stage 6 finding H-1: the repo's own default config (d_z=64, d_w=16) silently zeroes the market-price-of-risk loss (L_MPR) during training, since this loss requires square sigma (d_z==d_w). Should be fixed before any real comparison run.",
+    "Stage 6 finding H-2: DSLOB -- the dataset behind the paper's headline result and entire ablation study -- is generated from an unnamed source dataset (Section 3.4), making it structurally impossible to exactly reproduce regardless of implementation fidelity.",
+    "No user experimental results were submitted at any point in this pipeline run, so no reproducibility score could be computed (see comparison/reproducibility_score.json, score: null)."
+  ],
+  "loop_count": 0,
+  "created_at": "2026-07-17T00:00:00Z",
+  "last_updated": "2026-07-19T00:30:00Z",
+  "stage4_validation": {
+    "status": "passed",
+    "validated_at": "2026-07-17T01:00:00Z",
+    "method": "synthetic/placeholder-data end-to-end smoke test (data/make_synthetic_seed_lob.py -> scripts/prepare_data.py -> train.py -> scripts/run_ablation.py -> evaluate.py -> scripts/plot_figures.py -> inference.py), since DSLOB's true seed dataset is unnamed/unavailable and Jane Street/Optiver/Time-IMM require user-supplied competition files",
+    "checks_performed": [
+      "py_compile on all 40 generated .py files (pre- and post-fix): passed",
+      "train.py --dry-run for artemis: passed, 382,196 parameters built successfully, CPU fallback confirmed working when hardware.device=cuda but no GPU present",
+      "train.py --debug for artemis (full 2-phase: 10-epoch pretrain + 5-epoch symbolic distillation): passed end-to-end, including autograd-based Feynman-Kac PDE residual (Hessian via nested autograd.grad), market-price-of-risk loss, consistency loss, and Gumbel-Softmax symbolic layer",
+      "SymbolicBottleneck.export_formula() produced an actual human-readable distilled formula on real (debug-scale) trained weights -- directly validates this addresses the paper's own documented gap (no example formula ever shown in the paper)",
+      "train.py --debug for all 4 non-Chronos baselines (lstm, transformer, ns_transformer, informer): all passed, loss decreasing over 10 epochs",
+      "scripts/run_ablation.py for A1_NoSDE, A2_NoPDE, A6_MLP: all passed",
+      "scripts/plot_figures.py: passed after bugfix, produced figure2_drift_diffusion_profiles.png, figure5_prediction_scatter.png, figure6_ablation_losses.png (3/3 expected figures)",
+      "evaluate.py (both root wrapper and direct scripts/evaluate.py invocation, including the Wilcoxon significance-test code path): passed after bugfix",
+      "inference.py single-window prediction (point + conformal interval + symbolic-distilled prediction): passed",
+      "DSLOBGenerator full pipeline (detect_crash_window, fit_vasicek w/ 1.5x/1.2x amplification, fit_garch w/ amplification, generate_synthetic_features via VAR(1)+GP time-warp, validate_synthetic): passed, produced 460 windows of shape (20,85) from a 3000-obs placeholder seed series",
+      "Post-cleanup full recompile of all 40 .py files: passed"
+    ],
+    "issues_found_and_fixed": [
+      {
+        "file": "scripts/evaluate.py, scripts/plot_figures.py",
+        "issue": "Both scripts ran the ENTIRE dataset through ARTEMIS.forward_pretrain() in a single forward pass. LaplaceNeuralOperator.forward materializes a [B, M, N, d_z, d_x] kernel tensor; with B=460 (full DSLOB dataset), M=N=20, d_z=64, d_x=85, this attempted an 8GB allocation and crashed with a CPU OOM (RuntimeError: can't allocate memory).",
+        "fix": "Both scripts now process the dataset in batches of 32 samples, concatenating predictions afterward. plot_figures.py's drift/diffusion profile sampling was also reduced from 256 to 32 samples for the same reason.",
+        "verified": "Re-ran both scripts on the full 460-window dataset after the fix; both completed successfully and produced plausible metrics/figures with no memory errors."
+      }
+    ],
+    "new_finding_not_in_sir_or_architecture_plan": {
+      "location": "README.md (documented during Stage 4, not retroactively added to sir.json per 'do not regenerate completed stages')",
+      "description": "A further paper-internal inconsistency was noticed while writing the README's 'Reported results' table: the abstract/Introduction state ARTEMIS achieves 96.0% directional accuracy on Time-IMM, but Table 2 itself reports ARTEMIS's Time-IMM DirAcc as 0.860 (86.0%). This is in addition to the two inconsistencies already documented in sir.json (XGBoost baseline; DSLOB feature count).",
+      "disposition": "Documented in README.md 'Reported results' section with an explicit footnote; will be added to comparison/hallucination_report.md when Stage 6 runs. Not retroactively edited into sir.json/architecture_plan.json per this task's 'do not regenerate completed stages' instruction -- flagged here instead for Stage 6 to pick up."
+    },
+    "artifacts_cleaned_post_validation": [
+      "data/raw/*.npz, data/processed/*.npz (placeholder DSLOB test data, git-ignored)",
+      "results/* (test run outputs, git-ignored)",
+      "checkpoints/*.pt (test checkpoints, git-ignored)",
+      "__pycache__/ directories throughout the repo",
+      "/tmp/single_window.npz (scratch file for inference.py test)"
+    ],
+    "note": "DSLOB is the only dataset with a runnable end-to-end pipeline in this repo, and even that uses a placeholder seed series (data/make_synthetic_seed_lob.py) since the paper's actual DSLOB seed source is unnamed. This validates code correctness/executability only -- none of these numbers are comparable to the paper's reported Table 2/3 results. Jane Street, Optiver, and Time-IMM preprocessors are implemented and importable but were not exercised end-to-end in this validation since they require user-supplied competition/collection files this pipeline cannot bundle."
+  },
+  "stage5_validation": {
+    "status": "passed",
+    "validated_at": "2026-07-19T00:00:00Z",
+    "method": "Executed both generated notebooks end-to-end via nbclient against a live Jupyter kernel (not just static inspection), using the same placeholder-seed DSLOB pipeline as Stage 4 (paper's real DSLOB data is unavailable).",
+    "notebooks_produced": [
+      {
+        "path": "paper-repos/arxiv_2603_18107/notebooks/reproduce_arxiv_2603_18107.ipynb",
+        "cell_count": 21,
+        "purpose": "primary reproduction notebook: environment check, install (+ path-injection fallback), paper overview, 5 component walkthroughs (LaplaceNeuralOperator, NeuralSDE, PhysicsLosses, SymbolicBottleneck, full ARTEMIS assembly) with toy-input demos, mini end-to-end fit cycle on placeholder DSLOB data, paper results comparison, next steps"
+      },
+      {
+        "path": "paper-repos/arxiv_2603_18107/notebooks/explore_arxiv_2603_18107.ipynb",
+        "cell_count": 13,
+        "purpose": "exploratory notebook: drift/diffusion temporal profiles (Fig. 2 reproduction), PCA-projected latent drift vector field (Fig. 3 reproduction), DSLOB ablation study directional-accuracy bar chart (Table 3 reproduction), symbolic bottleneck distilled-formula bar chart (closes a gap the paper itself leaves open)"
+      }
+    ],
+    "checks_performed": [
+      "Pre-execution static compile() check on every code cell's source as standalone Python, run BEFORE attempting kernel execution (added after Stage 5's own bugs below were found) -- caught 0 errors on the second pass",
+      "nbformat.validate() passed on both notebooks after adding required cell IDs",
+      "Full end-to-end execution via nbclient.NotebookClient against a live python3 kernel: both notebooks executed with zero unhandled errors (after fixes, see below)",
+      "reproduce notebook: all 5 component demo cells produced expected output shapes; mini end-to-end block (placeholder data -> DSLOBGenerator pipeline -> small ARTEMIS fit over 3 epochs) completed successfully",
+      "explore notebook: all 4 planned visualizations rendered as image outputs (4/4 confirmed via output inspection); zero errors across all 13 cells; export_formula() produced an actual distilled symbolic expression on demo-trained weights",
+      "Confirmed both saved .ipynb files have execution_count=null and outputs=[] for every code cell (no pre-run output committed)",
+      "Confirmed no hardcoded absolute paths: both notebooks derive project_root via os.path.abspath(os.path.join(os.getcwd(), '..')) relative to the notebook's own location"
+    ],
+    "issues_found_and_fixed_during_stage5": [
+      {
+        "location": "reproduce_arxiv_2603_18107.ipynb, environment-check cell (initial build)",
+        "issue": "Build script erroneously inserted literal backslash-escaped single quotes (\\\\') inside f-string dict/attr access expressions (e.g. getattr(mod, \\\\'__version__\\\\', ...)), which is invalid Python syntax outside the outer string context -- a SyntaxError on first execution attempt.",
+        "fix": "Stripped all stray \\\\' occurrences from both notebooks' source cells (4 lines in the reproduce notebook); added a pre-execution compile()-per-cell static check as a new validation step to catch this class of bug before attempting full kernel execution.",
+        "verified": "Re-ran static compile check (0 errors) then full kernel execution (0 errors)."
+      },
+      {
+        "location": "reproduce_arxiv_2603_18107.ipynb, Component 3 (physics losses) demo cell",
+        "issue": "The demo reused Component 2's DiffusionNet, which was constructed with d_w=16 while d_z=64 (mismatched, deliberately illustrating the general non-square SDE case). PhysicsLosses.market_price_of_risk requires a square sigma (d_z==d_w) since Eq. 8's lambda(t)=mu/sigma is an element-wise ratio, so the demo raised an AssertionError.",
+        "fix": "Built a second, square DiffusionNet (d_w=d_z) specifically for the Component 3 MPR demonstration, with an added code comment explaining why d_w must equal d_z for this loss term to be well-defined.",
+        "verified": "Re-ran the cell: L_MPR now computes correctly (lambda shape [16,64], L_MPR=1.068535 on toy data)."
+      }
+    ],
+    "finding_carried_forward_for_stage6": {
+      "description": "The Component 3 fix above surfaced a substantive default-configuration issue in the Stage-4-generated repo: configs/config.yaml's SIR-recommended defaults (d_z=64 per Fig. 3 caption hint, d_w=16 ASSUMED) are mismatched, meaning ARTEMIS.compute_losses() silently sets L_MPR=0 for every training run using the shipped default config (confirmed also present in Stage 4's own validation logs: 'mpr: 0.000000' appeared in the debug training output). This was NOT fixed in configs/config.yaml or src/arxivist_artemis/models/artemis.py per this task's instruction not to modify Stages 1-4; it is fixed only within the Stage 5 notebooks' own demo cells, and is flagged here for Stage 6's hallucination report to formally catalogue alongside the Time-IMM DirAcc and XGBoost/feature-count discrepancies already noted.",
+      "severity_estimate": "Medium -- silently disables one of the two physics-informed regularizers the paper's ablation study identifies as important (Table 3: A3_NoMPR alone drops DirAcc from 64.89% to 56.82%), meaning any reproduction run using the default config out-of-the-box is implicitly closer to the A3_NoMPR ablation variant than to the paper's A0_Full configuration.",
+      "suggested_fix_for_stage6_or_later": "Set model.artemis.d_w equal to model.artemis.d_z by default in configs/config.yaml (or make d_w a derived property rather than an independently-set ASSUMED value), so L_MPR is well-defined out-of-the-box."
+    },
+    "artifacts_cleaned_post_validation": [
+      "data/raw/*.npz, data/processed/*.npz (placeholder DSLOB test data, git-ignored)",
+      "results/* (git-ignored)",
+      "checkpoints/*.pt (git-ignored)",
+      "__pycache__/ directories",
+      "/tmp/executed_reproduce_artemis*.ipynb, /tmp/executed_explore_artemis.ipynb (scratch copies used only for output inspection, not part of the deliverable)"
+    ]
+  },
+  "stage6_validation": {
+    "status": "completed_with_manual_review_required",
+    "validated_at": "2026-07-19T00:30:00Z",
+    "user_results_provided": false,
+    "reproducibility_score": null,
+    "score_disposition": "requires_manual_review",
+    "reason": "No user experimental results were submitted at any point in this pipeline run. Additionally, DSLOB -- the dataset behind the paper's headline claim (64.96% DirAcc) and its entire 7-variant ablation study -- is generated from an unnamed source dataset (Section 3.4 never identifies it), making exact reproduction structurally impossible regardless of implementation fidelity. Jane Street/Optiver/Time-IMM are publicly available but require user-supplied competition/collection files not bundled with this repo. See comparison/reproducibility_score.json (score: null, requires_manual_review: true).",
+    "hallucination_analysis_performed": true,
+    "hallucination_analysis_basis": "architecture_plan.json + generated src/ code vs. sir.json + direct paper-text re-verification, independent of user results",
+    "hallucination_findings": {
+      "structural": 3,
+      "parametric": 9,
+      "omission": 0,
+      "high_severity_count": 1,
+      "medium_high_severity_count": 1,
+      "key_findings": [
+        "H-1 (Medium-High, newly escalated in Stage 6 after direct code verification): configs/config.yaml's shipped defaults (d_z=64, d_w=16) cause ARTEMIS.compute_losses() to silently set L_MPR=0 for every training run, since the market-price-of-risk loss requires square sigma. Confirmed via grep of artemis.py line 159 and cross-referenced against Stage 4's own debug logs ('mpr: 0.000000'). NOT fixed in this Stage 6 pass per 'do not modify Stages 1-5' scope -- documented only.",
+        "H-2 (High, paper-limitation not ArXivist defect): DSLOB's seed dataset is unnamed in Section 3.4, making the paper's headline result and entire ablation study structurally unreproducible by anyone outside the original authors.",
+        "H-3 (Low, already remediated): the Stage 4 OOM bugfix in scripts/evaluate.py and scripts/plot_figures.py, confirmed still present via grep for '# BUGFIX' comments."
+      ],
+      "additional_paper_internal_inconsistencies_catalogued": [
+        "XGBoost claimed as 6th baseline in abstract, never reported (sir.json ambiguities[0])",
+        "DSLOB feature count: 59 (Section 5.1) vs 85 (Table 1/3.4) (sir.json ambiguities[1])",
+        "Time-IMM DirAcc: 96.0% (abstract) vs 86.0% (Table 2) -- newly formally catalogued in hallucination_report.md; recommend adding to sir.json ambiguities on a future re-parse",
+        "DSLOB DirAcc: 64.96% (Table 2) vs 64.89% (Table 3 A0_Full) -- already in sir.json ambiguities[4], reconfirmed as within seed-variance, not substantive"
+      ]
+    },
+    "outputs_written": [
+      "paper-repos/arxiv_2603_18107/comparison/benchmark_comparison.md",
+      "paper-repos/arxiv_2603_18107/comparison/reproducibility_score.json",
+      "paper-repos/arxiv_2603_18107/comparison/hallucination_report.md",
+      "paper-repos/arxiv_2603_18107/comparison/verification_log.md"
+    ],
+    "next_step_to_unblock": "Fix H-1 (set d_w=d_z in config.yaml) before any training run. Obtain Jane Street/Optiver/Time-IMM public data and run the full benchmark for a real (non-DSLOB) reproducibility score. DSLOB itself cannot be exactly reproduced under any circumstances given the paper's own data-provenance gap."
+  }
+}

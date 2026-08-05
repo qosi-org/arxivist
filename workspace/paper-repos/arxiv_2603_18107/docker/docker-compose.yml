@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../data:/workspace/data
+      - ../results:/workspace/results
+      - ../configs:/workspace/configs
+      - ../checkpoints:/workspace/checkpoints
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: ["python", "train.py", "--config", "configs/config.yaml", "--model", "artemis", "--dataset", "dslob"]
+
+  notebook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../notebooks:/workspace/notebooks
+      - ../data:/workspace/data
+      - ../results:/workspace/results
+    ports:
+      - "8888:8888"
+    command: >
+      bash -c "pip install --no-cache-dir jupyterlab &&
+               jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root"

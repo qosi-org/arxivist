@@ -1,0 +1,66 @@
+# ArXivist-generated config for:
+# "Quantitative Universal Approximation for Noisy Quantum Neural Networks"
+# (Gonon, Jacquier, Mordarski, arXiv:2604.02064v3)
+#
+# Fields whose value was not explicitly stated in the paper are marked ASSUMED,
+# with the SIR confidence score noted. See sir.json -> implementation_assumptions
+# and ambiguities for full detail on each one.
+
+model:
+  n_accuracy_blocks: 8          # "n" in the paper (number of Fourier-like accuracy blocks)
+  n_qubits: 5                   # n = ceil(log2(4*n_accuracy_blocks + n0)); 4*8=32, log2(32)=5
+  n0: 0                         # ASSUMED (confidence 0.4): Remark 3.14 simplification, 2^n = 4n
+  R_scaling_rule: "ceil(1.1 * max_i(P_i))"   # Section 4.1, Input Normalisation
+  circuit_backend: qiskit
+
+training:
+  method: "A"                   # A = L-BFGS-B, B = two-stage, C = Adam (Section 4.1)
+  loss: mse
+  # ASSUMED (confidence 0.5): exact loss normalisation constant is ambiguous due to
+  # PDF-extraction corruption of the Section 4.1 formula. Using 1/(2n) (standard MSE).
+  loss_normalisation: "1/(2n)"
+  adam_lr: 0.001                # ASSUMED (confidence 0.3): not stated in paper (PyTorch default)
+  adam_beta1: 0.9                # ASSUMED (confidence 0.3): not stated in paper
+  adam_beta2: 0.999              # ASSUMED (confidence 0.3): not stated in paper
+  max_iterations: 1000           # ASSUMED (confidence 0.3): not stated in paper
+  convergence_tol: 1.0e-8        # ASSUMED (confidence 0.3): not stated in paper
+  seed: 42                       # ASSUMED (confidence 0.3): not stated in paper
+
+data:
+  gaussian:
+    sigma_values: [0.5, 1.0, 2.0]
+    x_range: [-4.0, 4.0]
+    n_points: 100
+  black_scholes:
+    S_range: [0.8, 1.2]
+    K_range: [0.9, 1.1]
+    T_range: [0.5, 1.0]
+    r_range: [0.02, 0.05]
+    sigma_range: [0.1, 0.3]
+    eval_grid_size: 40
+    eval_S0: 100.0
+    eval_r: 0.03
+    eval_K_range: [85.0, 115.0]         # (K, sigma*sqrt(T)) evaluation window, Section 4.3
+    eval_sigma_sqrt_T_range: [0.05, 0.35]
+
+evaluation:
+  metrics: ["rmse", "mae", "max_error", "bound_ratio"]
+  n_shots: 8192                 # Section 4.1, "Hardware execution"
+  hardware_test_points: 10      # Section 4.5
+
+hardware:
+  backend: "ibm_fez"
+  eps_1Q: 2.761e-4               # Appendix A, Table 1 (IBM ibm_fez)
+  eps_2Q: 2.548e-3               # Appendix A, Table 1
+  T1_us: 144.97                  # Appendix A, Table 1
+  T2_us: 99.9                    # Appendix A, Table 1
+  t2Q_ns: 68                     # Appendix A, Table 1
+  # ASSUMED (confidence 0.35): readout error probability p is used in Proposition 3.20 /
+  # Eq. (4.4) but is NOT listed in Appendix A Table 1. Replace with a live calibration
+  # value from qiskit-ibm-runtime backend properties before trusting hardware-bound output.
+  readout_p: 0.01
+  optimization_level: 3          # Qiskit transpilation, Section 4.1
+
+hardware_compute:
+  device: "cpu"                  # circuits are small (5-8 qubits); no GPU required
+  precision: "float64"

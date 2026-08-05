@@ -1,0 +1,359 @@
+{
+  "paper_id": "arxiv_2604_002064",
+  "sir_version": 1,
+  "provenance": {
+    "title": "Quantitative Universal Approximation for Noisy Quantum Neural Networks",
+    "authors": ["Lukas Gonon", "Antoine Jacquier", "Marcel Mordarski"],
+    "affiliations": [
+      "School of Computer Science, University of St. Gallen",
+      "Department of Mathematics, Imperial College London",
+      "Department of Computing, Imperial College London"
+    ],
+    "arxiv_id": "2604.02064v3",
+    "doi": null,
+    "submission_date": "2026-05-19",
+    "abstract": "We prove a quantitative universal approximation theorem for noisy quantum neural networks (QNNs), with explicit non-asymptotic error bounds in terms of circuit width, depth, qubit count, and hardware noise parameters. Motivated by quantitative finance, we extend existing noiseless bounds to expectation functions and derive sharp constants for exponential Levy models, covering Black-Scholes European Put options, then specialise to depolarising noise calibrated to real hardware.",
+    "domain": "Other",
+    "key_claims": [
+      "Extends the noiseless universal approximation theorem of Gonon & Jacquier to expectation functions f(x)=E[Phi(x+L)], with explicit constants for exponential Levy models including Black-Scholes",
+      "Proves a fidelity-based universal approximation bound for QNNs under arbitrary CPTP noise channels (Theorem 3.6)",
+      "Derives a sharp, hardware-calibrated bound under depolarising noise with readout error, decomposing error into statistical, systematic, offset and readout terms, and shows a 2-parameter affine post-processing layer exactly cancels the depolarising bias (Theorem 3.15)",
+      "Validates the bounds experimentally by training Black-Scholes Put pricing QNNs and executing them on the IBM ibm_fez Heron r2 processor, with empirical MAE inside the analytical envelope on 10/10 test points"
+    ],
+    "parsed_at": "2026-07-22T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "hardware_BS_pricing_n8_accuracyblocks_qubits5",
+    "modules": [
+      {
+        "name": "state_preparation_V",
+        "operation_type": "Hadamard gate layer (unitary V)",
+        "input_shape": "|0>^{tensor n} (n-qubit computational basis ground state)",
+        "output_shape": "equal superposition over n-2 control qubits, target qubits remain |00>",
+        "parameters": {
+          "gate_type": "Hadamard",
+          "qubit_count": "n-2 control qubits"
+        },
+        "paper_section": "Section 3.2 / Section 4.1",
+        "confidence": 0.9,
+        "notes": "V is stated to be noiseless in Remark 3.5 since it consists only of Hadamard gates; noise is only injected via Psi_V/Psi_U channels around it in the general noisy formalism."
+      },
+      {
+        "name": "parameterized_unitary_U",
+        "operation_type": "Block-diagonal parameterized unitary, decomposed via Uniformly Controlled Rotations (UCRz on qubit 0 conjugated by Hadamards, UCRy on qubit 1)",
+        "input_shape": "n-qubit state produced by V (rho1)",
+        "output_shape": "n-qubit state rho2 encoding a Fourier-like sum of n accuracy-block terms",
+        "parameters": {
+          "structure": "U(theta,x) = sum_{k=0}^{n-1} |k><k| tensor U^(k)(theta_k, x)",
+          "theta_k": "(a_k, b_k, gamma_k) per accuracy block",
+          "decomposition": "Uniformly Controlled Rotations (Moettoenen et al.), reduces naive O(n*n) two-qubit gate count by a factor of ~15",
+          "two_qubit_gate_count_naive": "O(n * n)",
+          "two_qubit_gate_count_UCR": "approx n * ceil(log2(4n+n0)) / 15"
+        },
+        "paper_section": "Section 4.1 (Uniformly Controlled Rotation Decomposition)",
+        "confidence": 0.8,
+        "notes": "Exact gate-level circuit for the UCR decomposition is delegated to reference [23] (Moettoenen et al. 2004) and not reproduced verbatim in this paper."
+      },
+      {
+        "name": "measurement",
+        "operation_type": "Computational basis measurement with outcome grouping modulo 4",
+        "input_shape": "n-qubit state rho2 (or noisy rho~2)",
+        "output_shape": "4 aggregated probabilities P0,P1,P2,P3 over the two target qubits",
+        "parameters": {
+          "num_raw_outcomes": "2^n",
+          "grouping_rule": "outcome o = 4k+m contributes to P_m only if k < n (states with k>=n are power-of-two padding artefacts)"
+        },
+        "paper_section": "Section 3.3 / Section 4.1 (Measurement)",
+        "confidence": 0.9,
+        "notes": null
+      }
+    ],
+    "connections": [
+      {"from": "state_preparation_V", "to": "parameterized_unitary_U", "tensor_name": "rho1"},
+      {"from": "parameterized_unitary_U", "to": "measurement", "tensor_name": "rho2 (or rho~2 under noise)"}
+    ],
+    "variants": [
+      {
+        "name": "hardware_BS_pricing_n8_accuracyblocks_qubits5",
+        "differences": {"accuracy_blocks_n": 8, "qubits_n": 5, "n0": "assumed 0 (2^n = 4n)", "use_case": "Black-Scholes Put pricing, hardware execution on ibm_fez"}
+      },
+      {
+        "name": "gaussian_density_sweep",
+        "differences": {"accuracy_blocks_n": [2, 4, 8, 12, 16], "qubits_n": "d log2(4n) e", "use_case": "1D Gaussian density approximation, sigma in {0.5,1.0,2.0}"}
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Noiseless QNN output",
+      "latex": "f^{R}_{n,\\theta}(x) = R\\left[1-2(P_1+P_2)\\right]",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["R", "n"],
+      "undefined_symbols": [],
+      "paper_section": "Eq. (2.2)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Depolarising quantum channel",
+      "latex": "\\Delta_{\\lambda}(\\rho) = (1-\\lambda)\\rho + \\frac{\\lambda}{d} I",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["lambda"],
+      "undefined_symbols": [],
+      "paper_section": "Definition 3.8",
+      "confidence": 0.95
+    },
+    {
+      "name": "Noisy measurement probability under depolarising noise",
+      "latex": "\\tilde{P}_m = \\alpha P_m + (1-\\alpha)\\frac{\\mathfrak{n}}{2^{\\mathfrak{n}}}, \\quad \\alpha := (1-\\lambda_V)(1-\\lambda_U)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["lambda_V", "lambda_U"],
+      "undefined_symbols": [],
+      "paper_section": "Proposition 3.12, Eq. (3.7)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Noisy QNN output under depolarising noise",
+      "latex": "\\tilde{f}^{R}_{n,\\theta}(x) = \\alpha f^{R}_{n,\\theta}(x) + R(1-\\alpha)\\left(1-\\frac{4n}{2^{\\mathfrak{n}}}\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["alpha", "R", "n"],
+      "undefined_symbols": [],
+      "paper_section": "Corollary 3.13",
+      "confidence": 0.95
+    },
+    {
+      "name": "Affine post-processing that exactly cancels depolarising bias",
+      "latex": "\\tilde{f}^{R}_{n,\\bar\\theta}(x) = \\beta_1 \\tilde{f}^{R}_{n,\\theta}(x) + \\beta_2, \\quad \\beta_1 = \\frac{1}{\\alpha}, \\quad \\beta_2 = -\\beta_1 R(1-\\alpha)\\left(1-\\frac{4n}{2^{\\mathfrak{n}}}\\right)",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["alpha", "beta_1", "beta_2"],
+      "undefined_symbols": [],
+      "paper_section": "Theorem 3.15",
+      "confidence": 0.9
+    },
+    {
+      "name": "Total approximation error bound under depolarising noise",
+      "latex": "\\left\\| f - \\tilde{f}^{R}_{n,\\theta} \\right\\|_{L^2(\\mu)} \\leq \\frac{\\alpha L^1[\\hat f]}{\\sqrt n} + (1-\\alpha)\\|f\\|_{L^2(\\mu)} + R(1-\\alpha)\\left(1-\\frac{4n}{2^{\\mathfrak{n}}}\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["alpha", "n", "R"],
+      "undefined_symbols": [],
+      "paper_section": "Theorem 3.17, Eq. (3.8)",
+      "confidence": 0.9
+    },
+    {
+      "name": "Total error bound including classical readout error",
+      "latex": "\\varepsilon_{total} = \\frac{\\alpha L^1[\\hat f]}{\\sqrt n} + (1-\\alpha)\\|f\\|_{L^2(\\mu)} + R(1-\\alpha)\\left(1-\\frac{4n}{2^{\\mathfrak{n}}}\\right) + 4Rp",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["alpha", "n", "R", "p"],
+      "undefined_symbols": [],
+      "paper_section": "Proposition 3.20, Eq. (4.4)",
+      "confidence": 0.9
+    },
+    {
+      "name": "Training loss (mean-squared error)",
+      "latex": "L(\\theta) = \\frac{1}{2n}\\sum_{i=1}^{n} \\left(f^{R}_{n}(x_i;\\theta) - P_i\\right)^2",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["n (number of training points)"],
+      "undefined_symbols": ["exact normalisation constant is ambiguous due to PDF text-extraction corruption of Section 4.1 formula"],
+      "paper_section": "Section 4.1, Parameters optimisation",
+      "confidence": 0.5
+    },
+    {
+      "name": "Hardware-calibrated effective lambda_U (gate error + decoherence)",
+      "latex": "\\lambda_U \\approx 1-(1-\\lambda_U^{gate})\\left(1-\\tfrac12 p_{T_1}\\right)\\left(1-\\tfrac12 p_{T_2}\\right), \\quad p_{T_i}=1-e^{-t_{circ}/T_i}",
+      "role": "other",
+      "used_in": "inference",
+      "hyperparameters": ["epsilon_2Q", "T1", "T2", "t2Q", "N2Q"],
+      "undefined_symbols": [],
+      "paper_section": "Section 3.6",
+      "confidence": 0.85
+    }
+  ],
+  "tensor_semantics": [
+    {
+      "name": "x (input financial parameters)",
+      "shape_notation": "[d] with d=5 for Black-Scholes (S,K,T,r,sigma), normalised to [0,1]^d via Eq. (4.1)",
+      "dtype": "float64",
+      "tensor_type": "input",
+      "module": "parameterized_unitary_U",
+      "confidence": 0.85
+    },
+    {
+      "name": "theta (circuit parameters)",
+      "shape_notation": "n accuracy blocks, each a triplet (a_k, b_k, gamma_k)",
+      "dtype": "float64",
+      "tensor_type": "parameter",
+      "module": "parameterized_unitary_U",
+      "confidence": 0.8
+    },
+    {
+      "name": "rho0 / rho1 / rho2 (density matrices)",
+      "shape_notation": "[2^n, 2^n] complex Hermitian, trace 1",
+      "dtype": "complex128",
+      "tensor_type": "intermediate",
+      "module": "state_preparation_V / parameterized_unitary_U",
+      "confidence": 0.8
+    },
+    {
+      "name": "P_m (measurement probabilities)",
+      "shape_notation": "[4] for m in {0,1,2,3}",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "measurement",
+      "confidence": 0.9
+    },
+    {
+      "name": "f^R_{n,theta}(x) (QNN scalar output / option price prediction)",
+      "shape_notation": "scalar per input x",
+      "dtype": "float64",
+      "tensor_type": "output",
+      "module": "measurement",
+      "confidence": 0.9
+    }
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Three methods compared: (A) L-BFGS-B (simultaneous), (B) two-stage (fix gamma, optimise a,b, then refine gamma), (C) Adam",
+      "learning_rate": null,
+      "beta1": null,
+      "beta2": null,
+      "weight_decay": null,
+      "confidence": 0.4
+    },
+    "lr_schedule": {
+      "type": null,
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.2
+    },
+    "batch_size": null,
+    "effective_batch_size": null,
+    "training_steps": null,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.45
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "Synthetic 1D Gaussian density, x in [-4,4], 100 uniformly spaced points, sigma in {0.5,1.0,2.0}", "split": "train=eval (same grid)", "size": 100, "publicly_available": false},
+      {"name": "Black-Scholes European Put pricing map: S in [0.8,1.2], K in [0.9,1.1], T in [0.5,1.0], r in [0.02,0.05], sigma in [0.1,0.3], normalised to [0,1]^5; evaluated on a 40x40 grid over (K, sigma*sqrt(T)) in [85,115]x[0.05,0.35] at fixed S0=100, r=0.03", "split": "train (grid) / eval (40x40 grid + random test set)", "size": 1600, "publicly_available": false},
+      {"name": "Hardware validation test set on ibm_fez", "split": "test", "size": 10, "publicly_available": false}
+    ],
+    "metrics": ["RMSE", "MAE", "max absolute error", "relative error (%)", "MAE / theoretical-bound ratio", "Pearson correlation"],
+    "reported_results": [
+      {"metric": "RMSE", "dataset": "Gaussian density (sigma=1, n=8)", "split": "eval", "value": 0.070027, "is_primary": false},
+      {"metric": "MAE", "dataset": "Gaussian density (sigma=1, n=8)", "split": "eval", "value": 0.048624, "is_primary": false},
+      {"metric": "max_error", "dataset": "Gaussian density (sigma=1, n=8)", "split": "eval", "value": 0.17234, "is_primary": false},
+      {"metric": "MAE", "dataset": "Black-Scholes Put, Method A, noiseless, n=8", "split": "eval", "value": 5.0326, "is_primary": true},
+      {"metric": "max_error", "dataset": "Black-Scholes Put, Method A, noiseless, n=8", "split": "eval", "value": 17.2535, "is_primary": false},
+      {"metric": "MAE", "dataset": "Black-Scholes Put on ibm_fez hardware", "split": "test", "value": 2.345, "is_primary": true},
+      {"metric": "total_error_bound", "dataset": "Black-Scholes Put on ibm_fez hardware", "split": "test", "value": 18.578, "is_primary": false},
+      {"metric": "pearson_correlation", "dataset": "ibm_fez hardware vs. comprehensive noise model", "split": "test", "value": 0.9973, "is_primary": false},
+      {"metric": "alpha_fidelity_factor", "dataset": "ibm_fez hardware run", "split": "test", "value": 0.365, "is_primary": false}
+    ],
+    "baselines": ["Classical analytical Black-Scholes formula", "AerSimulator noiseless/depolarising-noise simulation", "Comprehensive noise model (amplitude damping + phase damping + depolarising)"],
+    "compute": "IBM ibm_fez (Heron r2, 156 qubits) via Qiskit Runtime SamplerV2 primitive; qiskit-aer simulators for noiseless/noisy validation",
+    "special_conditions": ["Nshots = 8192 per circuit", "optimization_level=3 ISA transpilation", "all test circuits batched into a single job to minimise queue overhead"],
+    "confidence": 0.85
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Adam optimizer (Method C) uses standard default hyperparameters (learning rate ~1e-3, beta1=0.9, beta2=0.999)",
+      "basis": "literature default; paper does not specify",
+      "confidence": 0.3,
+      "alternatives": ["custom tuned learning rate", "learning-rate schedule with decay"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Training runs until convergence (no fixed iteration/epoch budget stated for any of Methods A/B/C)",
+      "basis": "common practice for small-scale classical optimisation of few-parameter circuits",
+      "confidence": 0.3,
+      "alternatives": ["fixed iteration budget (e.g. 500-1000 steps)", "early stopping on validation loss"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "n0 = 0 is used throughout the main numerical experiments (so that 2^n = 4n exactly, per Remark 3.14)",
+      "basis": "inferred from Remark 3.14 being presented as the practical simplification used in the numerical section",
+      "confidence": 0.4,
+      "alternatives": ["n0 > 0 with residual offset term retained in Corollary 3.13"],
+      "affects_section": "architecture / mathematical_spec"
+    },
+    {
+      "assumption": "A fixed random seed is used for reproducibility of classical optimisation and simulator noise sampling",
+      "basis": "common practice; not explicitly stated in the paper",
+      "confidence": 0.3,
+      "alternatives": ["no fixed seed / results averaged over multiple seeds"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "The training-loss normalisation constant is 1/(2n) (standard MSE over n training points)",
+      "basis": "most plausible reading of the OCR/PDF-extraction-corrupted formula in Section 4.1",
+      "confidence": 0.5,
+      "alternatives": ["1/(2n^2) normalisation", "unnormalised sum of squares"],
+      "affects_section": "mathematical_spec"
+    },
+    {
+      "assumption": "Readout error probability p for ibm_fez (used in Proposition 3.20 / Eq. 4.4) is a small value obtained from live calibration, consistent with typical superconducting-hardware readout error rates (order 1e-2), since it is not listed in Appendix A Table 1",
+      "basis": "gap in the provided hardware parameter table; typical published ibm_fez readout error magnitudes",
+      "confidence": 0.35,
+      "alternatives": ["p sourced from a separate live-calibration snapshot not reproduced in the paper", "p treated as negligible"],
+      "affects_section": "evaluation_protocol / mathematical_spec"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Section 4.1, 'Parameters optimisation' (loss function formula)",
+      "description": "The MSE loss formula's normalisation constant is corrupted by PDF text-extraction (exponents and summation bounds rendered as stray characters), so the exact prefactor is unclear.",
+      "primary_assumption": "L(theta) = 1/(2n) * sum_{i=1}^{n} (f^R_n(x_i;theta) - P_i)^2",
+      "alternatives": ["1/(2n^2) * sum(...)^2", "unnormalised sum(...)^2"],
+      "confidence": 0.5
+    },
+    {
+      "location": "Section 4.1, optimisation Methods A/B/C table",
+      "description": "No learning rate, iteration count, or convergence criterion is given for L-BFGS-B, the two-stage method, or Adam.",
+      "primary_assumption": "Defaults per optimiser, run until convergence",
+      "alternatives": ["Fixed iteration budget (e.g. 500-1000 iterations)"],
+      "confidence": 0.3
+    },
+    {
+      "location": "Section 4.5 and Appendix A Table 1",
+      "description": "The readout error probability p (used in Proposition 3.20 and the hardware bound Eq. 4.4) is not listed among the ibm_fez hardware parameters in Table 1, despite being used to compute the reported total bound.",
+      "primary_assumption": "p is taken from separate live calibration data not reproduced in the paper's table",
+      "alternatives": ["p omitted from the table by oversight", "p assumed negligible relative to other terms"],
+      "confidence": 0.4
+    },
+    {
+      "location": "Section 4.1, Uniformly Controlled Rotation Decomposition",
+      "description": "The exact gate-level sequence of the UCR decomposition of U(theta,x) is deferred to reference [23] and not reproduced in this paper.",
+      "primary_assumption": "Standard Moettoenen et al. (2004) UCR construction (UCRz then UCRy) applied directly to the block-diagonal structure",
+      "alternatives": ["A custom/modified UCR gate ordering specific to this ansatz"],
+      "confidence": 0.6
+    },
+    {
+      "location": "Section 4.5, 'comprehensive noise model'",
+      "description": "The comprehensive noise model (amplitude damping + phase damping + depolarising) used to obtain the 0.9973 correlation figure is referenced but its precise construction beyond the Section 3.6 formulas is not fully detailed for the hardware run.",
+      "primary_assumption": "Combination of amplitude damping (T1), phase damping (T2), and depolarising channel exactly per the Section 3.6 formulas",
+      "alternatives": ["Additional unmodelled noise sources such as crosstalk or leakage are also folded in"],
+      "confidence": 0.5
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.8,
+    "mathematical_spec": 0.9,
+    "tensor_semantics": 0.75,
+    "training_pipeline": 0.45,
+    "evaluation_protocol": 0.85,
+    "implementation_assumptions": 0.45,
+    "overall_sir_confidence": 0.70
+  }
+}
