@@ -1,0 +1,1 @@
+{"paper":"Dynamic Eval (1904.08378)","overall_score":0.0,"components":{"architecture":{"score":0.95,"status":"Transformer-XL clear"},"adaptation":{"score":0.85,"status":"LR tuning required"},"evaluation":{"score":0.95,"status":"All datasets public"}},"status":"Ready for implementation"}

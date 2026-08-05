@@ -1,0 +1,25 @@
+model:
+  char_vocab_size: 261
+  char_embed_dim: 50
+  num_filters: 2048
+  filter_widths: [1, 2, 3, 4, 5, 6, 7]
+  highway_layers: 2
+  projection_size: 512
+  hidden_size: 4096
+  num_bilm_layers: 2
+  dropout: 0.1
+
+training:
+  dataset: "1B Word Benchmark"
+  batch_size: 128
+  num_epochs: 10
+  optimizer: "SGD"
+  learning_rate: 0.2
+  decay: 0.5
+  weight_decay: 0.0
+  max_grad_norm: 10.0
+
+evaluation:
+  eval_interval: 1000
+  checkpoint_interval: 1000
+  save_dir: "checkpoints/"
