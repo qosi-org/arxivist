@@ -1,0 +1,12 @@
+# Runtime dependencies — pinned per architecture_plan.json `dependencies.runtime`.
+tensorflow==2.15.0
+tensorboard==2.15.2   # explicit pin: Trainer.fit() uses tf.summary.scalar for logging (training/trainer.py)
+numpy==1.26.4
+imageio==2.34.0
+imageio-ffmpeg==0.4.9
+opencv-python-headless==4.9.0.80
+configargparse==1.7
+scikit-image==0.22.0
+lpips-tf2==0.1.0
+tqdm==4.66.2
+PyYAML==6.0.1

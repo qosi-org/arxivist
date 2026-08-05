@@ -1,0 +1,25 @@
+{
+  "paper_id": "arxiv_2003_08934",
+  "title": "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis",
+  "authors": [
+    "Ben Mildenhall",
+    "Pratul P. Srinivasan",
+    "Matthew Tancik",
+    "Jonathan T. Barron",
+    "Ravi Ramamoorthi",
+    "Ren Ng"
+  ],
+  "arxiv_id": "2003.08934",
+  "source": "user-uploaded PDF (NeRF.pdf)",
+  "domain": "CV",
+  "sir_version": 1,
+  "sir_path": "sir-registry/arxiv_2003_08934/sir.json",
+  "overall_sir_confidence": 0.85,
+  "human_review_required": false,
+  "notes": [
+    "Confidence for 'implementation_assumptions' is 0.65 due to the user-requested TinyNeRF/consumer-hardware adaptation, which is external to the paper itself.",
+    "training_pipeline.training_steps (250000) is a primary_assumption recorded in ambiguities[] -- paper only gives a 100k-300k range."
+  ],
+  "created_at": "2026-07-28T00:00:00Z",
+  "last_updated": "2026-07-28T00:00:00Z"
+}

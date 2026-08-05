@@ -1,0 +1,23 @@
+name: nerf-repro
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - tensorflow==2.15.0
+      - tensorboard==2.15.2
+      - numpy==1.26.4
+      - imageio==2.34.0
+      - imageio-ffmpeg==0.4.9
+      - opencv-python-headless==4.9.0.80
+      - configargparse==1.7
+      - scikit-image==0.22.0
+      - lpips-tf2==0.1.0
+      - tqdm==4.66.2
+      - PyYAML==6.0.1
+      - pytest==8.1.1
+      - pytest-cov==5.0.0
+      - black==24.3.0
+      - ruff==0.3.4
+      - mypy==1.9.0

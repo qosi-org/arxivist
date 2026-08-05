@@ -1,0 +1,63 @@
+# =============================================================================
+# config_debug.yaml — Reduced-scale config for fast local smoke testing.
+# Inherit-by-copy of configs/config.yaml with drastically reduced steps/samples
+# so the full pipeline (data loading -> forward -> loss -> checkpoint) can be
+# validated on a laptop CPU in well under a minute.
+# Use with: python train.py --config configs/config_debug.yaml --debug
+# =============================================================================
+
+model:
+  pos_enc_freqs_x: 10
+  pos_enc_freqs_d: 4
+  include_input_in_encoding: false
+  trunk_depth: 8
+  trunk_width: 64          # reduced from 256 for speed (debug-only engineering choice, not paper-faithful)
+  skip_layers: [4]
+  color_hidden_width: 32   # reduced from 128 (debug-only)
+  use_view_dependence: true
+  num_coarse_samples: 8    # reduced from 64 (debug-only)
+  num_fine_samples: 8      # reduced from 128 (debug-only)
+  use_hierarchical_sampling: true
+  perturb_stratified: true
+  raw_noise_std: 0.0
+
+model_variant:
+  name: "full"
+
+training:
+  optimizer: "adam"
+  learning_rate_init: 0.0005
+  learning_rate_final: 0.00005
+  lr_schedule: "exponential_decay"
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1.0e-7
+  ray_batch_size: 128       # reduced from 4096 (debug-only)
+  num_training_steps: 20    # reduced from 250000 (debug-only)
+  checkpoint_every: 10
+  log_every: 1
+  eval_every: 10
+  seed: 0
+  deterministic: false
+
+data:
+  dataset_type: "blender"
+  datadir: null
+  half_res: true
+  testskip: 1
+  white_background: true
+  near: 2.0
+  far: 6.0
+  use_ndc: false
+
+evaluation:
+  metrics: ["psnr"]         # skip ssim/lpips in debug mode for speed
+  chunk_size: 512
+  render_test_every: 10
+  save_rendered_images: false
+
+hardware:
+  device: "cpu"
+  mixed_precision: false
+  num_workers: 0
+  tiny_hardware_mode: false

@@ -1,0 +1,55 @@
+model:
+  pos_enc_freqs_x: 10
+  pos_enc_freqs_d: 4
+  include_input_in_encoding: false
+  trunk_depth: 8
+  trunk_width: 256
+  skip_layers: [4]
+  color_hidden_width: 64
+  use_view_dependence: true
+  num_coarse_samples: 64
+  num_fine_samples: 0
+  use_hierarchical_sampling: false
+  perturb_stratified: true
+  raw_noise_std: 0.0
+
+model_variant:
+  name: "no_hierarchical_sampling"
+
+training:
+  optimizer: "adam"
+  learning_rate_init: 0.0005
+  learning_rate_final: 0.00005
+  lr_schedule: "exponential_decay"
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1.0e-7
+  ray_batch_size: 1024
+  num_training_steps: 200000
+  checkpoint_every: 5000
+  log_every: 100
+  eval_every: 5000
+  seed: 0
+  deterministic: false
+
+data:
+  dataset_type: "blender"
+  datadir: null
+  half_res: true
+  testskip: 1
+  white_background: true
+  near: 2.0
+  far: 6.0
+  use_ndc: false
+
+evaluation:
+  metrics: ["psnr"]
+  chunk_size: 4096
+  render_test_every: 5000
+  save_rendered_images: true
+
+hardware:
+  device: "gpu"
+  mixed_precision: false
+  num_workers: 2
+  tiny_hardware_mode: false

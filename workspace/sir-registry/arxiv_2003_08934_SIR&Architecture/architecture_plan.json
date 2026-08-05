@@ -1,0 +1,442 @@
+{
+  "paper_id": "arxiv_2003_08934",
+  "plan_version": 1,
+  "created_at": "2026-07-28T00:00:00Z",
+  "framework": {
+    "primary": "tensorflow",
+    "python_version": "3.10+",
+    "cuda_required": true,
+    "cuda_min_version": "11.2 (TF2.x GPU build); consumer 4GB-VRAM 'tiny' variant can run CPU-only for smoke tests",
+    "use_huggingface": false,
+    "config_library": "yaml",
+    "reasoning": "SIR implementation_assumptions (confidence 0.95) explicitly states the paper's reference implementation is TensorFlow ('We implement our model in Tensorflow', Appendix A). Per architecture-planning rules this explicit statement takes precedence over the CV-domain PyTorch default. We target modern TensorFlow 2.x (eager + tf.function, tf.GradientTape) rather than the original TF1.x graph/session API for maintainability, since the SIR only commits to the framework identity, not the specific API vintage. The user-requested TinyNeRF consumer-hardware variant is likewise TensorFlow-based in its official form (bmild/nerf tiny_nerf.ipynb), keeping the whole repo framework-consistent. YAML is sufficient for config management given the flat, non-nested hyperparameter surface of this model (no need for Hydra's composition features)."
+  },
+  "module_hierarchy": [
+    {
+      "path": "src/nerf/__init__.py",
+      "description": "Package init, exposes top-level NeRFModel and build_model factory.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/nerf/models/__init__.py",
+      "description": "Models sub-package init.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/nerf/models/positional_encoding.py",
+      "description": "Fourier-feature positional encoding shared by position and direction inputs.",
+      "sir_modules_mapped": ["PositionalEncoding_x", "PositionalEncoding_d"],
+      "classes": [
+        {
+          "name": "PositionalEncoding",
+          "base_class": "tf.keras.layers.Layer",
+          "public_methods": [
+            {"name": "__init__", "signature": "(self, num_freqs: int, include_input: bool = True)", "returns": "None"},
+            {"name": "call", "signature": "(self, p: tf.Tensor) -> tf.Tensor", "returns": "encoded tensor, shape [..., 2*num_freqs*last_dim] (+ last_dim if include_input)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/models/nerf_mlp.py",
+      "description": "The core 8-layer trunk MLP with skip connection, density head, and view-dependent color head — single reusable module instantiated twice (coarse/fine).",
+      "sir_modules_mapped": ["MLP_Trunk (F'_Theta, spatial branch)", "DensityHead", "ColorHead (view-dependent branch)"],
+      "classes": [
+        {
+          "name": "NeRFMLP",
+          "base_class": "tf.keras.Model",
+          "public_methods": [
+            {"name": "__init__", "signature": "(self, trunk_depth: int = 8, trunk_width: int = 256, color_width: int = 128, skip_layers: tuple = (4,), pos_enc_dim: int = 60, dir_enc_dim: int = 24, use_view_dirs: bool = True)", "returns": "None"},
+            {"name": "call", "signature": "(self, gamma_x: tf.Tensor, gamma_d: tf.Tensor = None) -> tuple[tf.Tensor, tf.Tensor]", "returns": "(rgb [..., 3], sigma [..., 1])"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/models/radiance_field.py",
+      "description": "Top-level model composing positional encodings + one or two NeRFMLP instances (coarse/fine) and exposing a single query interface used by the renderer.",
+      "sir_modules_mapped": ["CoarseNetwork (F_theta_coarse)", "FineNetwork (F_theta_fine)"],
+      "classes": [
+        {
+          "name": "NeRFModel",
+          "base_class": "tf.keras.Model",
+          "public_methods": [
+            {"name": "__init__", "signature": "(self, config: dict)", "returns": "None"},
+            {"name": "query_coarse", "signature": "(self, pts: tf.Tensor, dirs: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]", "returns": "(rgb, sigma) at coarse sample points"},
+            {"name": "query_fine", "signature": "(self, pts: tf.Tensor, dirs: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]", "returns": "(rgb, sigma) at coarse+fine sample points"},
+            {"name": "render_rays", "signature": "(self, rays_o: tf.Tensor, rays_d: tf.Tensor, near: float, far: float, training: bool = False) -> dict", "returns": "dict with keys rgb_coarse, rgb_fine, weights_coarse, depth_fine, etc."}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/models/volume_rendering.py",
+      "description": "Differentiable quadrature-based volume renderer (Eq. 1-3) and the hierarchical inverse-transform importance sampler (Eq. 5).",
+      "sir_modules_mapped": ["VolumeRenderer", "HierarchicalSampler"],
+      "classes": [
+        {
+          "name": "VolumeRenderer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "composite", "signature": "(self, rgb: tf.Tensor, sigma: tf.Tensor, z_vals: tf.Tensor, rays_d: tf.Tensor, raw_noise_std: float = 0.0) -> dict", "returns": "dict with rgb_map [N,3], weights [N,S], depth_map [N], acc_map [N]"}
+          ]
+        },
+        {
+          "name": "HierarchicalSampler",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "sample_pdf", "signature": "(self, z_vals_mid: tf.Tensor, weights: tf.Tensor, n_importance: int, deterministic: bool = False) -> tf.Tensor", "returns": "new z_vals of shape [N, n_importance], via inverse-CDF sampling"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/data/__init__.py",
+      "description": "Data sub-package init.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/nerf/data/rays.py",
+      "description": "Camera ray generation, stratified sampling along rays (Eq. 2), and the NDC ray reparameterization for forward-facing real scenes (Appendix C).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "RayGenerator",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "get_rays", "signature": "(self, H: int, W: int, focal: float, c2w: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]", "returns": "(rays_o [H,W,3], rays_d [H,W,3])"},
+            {"name": "stratified_sample", "signature": "(self, near: float, far: float, n_samples: int, n_rays: int, perturb: bool = True) -> tf.Tensor", "returns": "z_vals [n_rays, n_samples]"},
+            {"name": "ndc_rays", "signature": "(self, H: int, W: int, focal: float, near: float, rays_o: tf.Tensor, rays_d: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]", "returns": "(rays_o_ndc, rays_d_ndc)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/data/dataset.py",
+      "description": "Dataset loaders for the three SIR evaluation datasets (Blender synthetic JSON+PNG, DeepVoxels, LLFF real-scene COLMAP poses).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "BlenderSyntheticDataset",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__init__", "signature": "(self, basedir: str, half_res: bool = False, testskip: int = 1)", "returns": "None"},
+            {"name": "load", "signature": "(self) -> dict", "returns": "dict of images, poses, hwf, near, far, i_split"}
+          ]
+        },
+        {
+          "name": "LLFFRealDataset",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__init__", "signature": "(self, basedir: str, factor: int = 8, bd_factor: float = 0.75)", "returns": "None"},
+            {"name": "load", "signature": "(self) -> dict", "returns": "dict of images, poses, bds, render_poses, i_test"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/training/__init__.py",
+      "description": "Training sub-package init.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/nerf/training/losses.py",
+      "description": "Combined coarse+fine photometric MSE loss (Eq. 6).",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "PhotometricMSELoss",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__call__", "signature": "(self, rgb_coarse: tf.Tensor, rgb_fine: tf.Tensor, target_rgb: tf.Tensor) -> dict", "returns": "dict with total_loss, coarse_loss, fine_loss, psnr"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/training/trainer.py",
+      "description": "Main training loop: random ray-batch sampling, Adam optimizer with exponential LR decay, checkpointing, TensorBoard logging.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "Trainer",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "__init__", "signature": "(self, model: 'NeRFModel', config: dict, dataset: dict)", "returns": "None"},
+            {"name": "train_step", "signature": "(self, batch_rays_o: tf.Tensor, batch_rays_d: tf.Tensor, target_rgb: tf.Tensor) -> dict", "returns": "dict of scalar metrics for this step"},
+            {"name": "fit", "signature": "(self, num_steps: int) -> None", "returns": "None"},
+            {"name": "save_checkpoint", "signature": "(self, step: int) -> str", "returns": "checkpoint path"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/evaluation/__init__.py",
+      "description": "Evaluation sub-package init.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/nerf/evaluation/metrics.py",
+      "description": "PSNR, SSIM, LPIPS computation matching Table 1 / per-scene tables 3-6.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "ImageMetrics",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "psnr", "signature": "(self, pred: tf.Tensor, target: tf.Tensor) -> float", "returns": "PSNR in dB"},
+            {"name": "ssim", "signature": "(self, pred: tf.Tensor, target: tf.Tensor) -> float", "returns": "SSIM in [0,1]"},
+            {"name": "lpips", "signature": "(self, pred: tf.Tensor, target: tf.Tensor) -> float", "returns": "LPIPS distance (lower is better)"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/utils/__init__.py",
+      "description": "Utils sub-package init.",
+      "sir_modules_mapped": [],
+      "classes": []
+    },
+    {
+      "path": "src/nerf/utils/config.py",
+      "description": "YAML config loading/validation and dataclass-style access.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "NeRFConfig",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "from_yaml", "signature": "(cls, path: str) -> 'NeRFConfig'", "returns": "NeRFConfig instance"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "src/nerf/utils/tiny_variant.py",
+      "description": "Optional consumer-hardware ('TinyNeRF'-inspired) preset: single MLP (no coarse/fine split), reduced trunk depth/width, downsampled images, no hierarchical sampling. Implements SIR implementation_assumption #4 (confidence 0.5) as an explicitly swappable config preset rather than altering the paper-faithful default path.",
+      "sir_modules_mapped": [],
+      "classes": [
+        {
+          "name": "TinyNeRFPreset",
+          "base_class": "object",
+          "public_methods": [
+            {"name": "apply", "signature": "(self, base_config: dict) -> dict", "returns": "modified config dict with tiny-hardware overrides"}
+          ]
+        }
+      ]
+    }
+  ],
+  "tensor_flows": [
+    {
+      "name": "NeRFMLP forward pass (single sample-point batch)",
+      "input": {"name": "gamma_x, gamma_d", "shape": "[N_pts, 60] and [N_pts, 24]", "dtype": "float32"},
+      "output": {"name": "rgb, sigma", "shape": "[N_pts, 3] and [N_pts, 1]", "dtype": "float32"},
+      "steps": [
+        "h = gamma_x  → [N_pts, 60]",
+        "for i in range(8): h = Dense(256, activation='relu')(h); if i == 4: h = concat([h, gamma_x], axis=-1)  → [N_pts, 256] (or 316 right after the skip concat, projected back to 256 by that layer's weights)",
+        "sigma = Dense(1, activation='relu')(h)  → [N_pts, 1]",
+        "feature = Dense(256, activation=None)(h)  → [N_pts, 256]",
+        "h2 = concat([feature, gamma_d], axis=-1)  → [N_pts, 280]",
+        "h2 = Dense(128, activation='relu')(h2)  → [N_pts, 128]",
+        "rgb = Dense(3, activation='sigmoid')(h2)  → [N_pts, 3]",
+        "return rgb, sigma"
+      ]
+    },
+    {
+      "name": "Full two-pass render (ray batch -> pixel colors)",
+      "input": {"name": "rays_o, rays_d", "shape": "[N_rays, 3] and [N_rays, 3]", "dtype": "float32"},
+      "output": {"name": "rgb_fine", "shape": "[N_rays, 3]", "dtype": "float32"},
+      "steps": [
+        "z_vals_coarse = stratified_sample(near, far, Nc=64, N_rays)  → [N_rays, 64]",
+        "pts_coarse = rays_o[:, None, :] + rays_d[:, None, :] * z_vals_coarse[..., None]  → [N_rays, 64, 3]",
+        "gamma_x_c = PositionalEncoding(L=10)(pts_coarse)  → [N_rays, 64, 60]",
+        "gamma_d_c = PositionalEncoding(L=4)(broadcast(rays_d))  → [N_rays, 64, 24]",
+        "rgb_c, sigma_c = NeRFMLP_coarse(gamma_x_c, gamma_d_c)  → [N_rays,64,3], [N_rays,64,1]",
+        "render_out_c = VolumeRenderer.composite(rgb_c, sigma_c, z_vals_coarse, rays_d)  → rgb_map [N_rays,3], weights [N_rays,64]",
+        "z_vals_fine_new = HierarchicalSampler.sample_pdf(z_vals_mid(z_vals_coarse), weights, Nf=128)  → [N_rays, 128]",
+        "z_vals_fine = sort(concat([z_vals_coarse, z_vals_fine_new], axis=-1))  → [N_rays, 192]",
+        "pts_fine = rays_o[:, None, :] + rays_d[:, None, :] * z_vals_fine[..., None]  → [N_rays, 192, 3]",
+        "gamma_x_f = PositionalEncoding(L=10)(pts_fine)  → [N_rays, 192, 60]",
+        "gamma_d_f = PositionalEncoding(L=4)(broadcast(rays_d))  → [N_rays, 192, 24]",
+        "rgb_f, sigma_f = NeRFMLP_fine(gamma_x_f, gamma_d_f)  → [N_rays,192,3], [N_rays,192,1]",
+        "render_out_f = VolumeRenderer.composite(rgb_f, sigma_f, z_vals_fine, rays_d)  → rgb_map [N_rays,3]",
+        "return render_out_f.rgb_map  (rgb_fine), plus render_out_c.rgb_map (rgb_coarse) retained for the loss"
+      ]
+    },
+    {
+      "name": "Training step (photometric loss + Adam update)",
+      "input": {"name": "batch_rays_o, batch_rays_d, target_rgb", "shape": "[4096,3], [4096,3], [4096,3]", "dtype": "float32"},
+      "output": {"name": "total_loss", "shape": "scalar", "dtype": "float32"},
+      "steps": [
+        "with tf.GradientTape(): outputs = NeRFModel.render_rays(batch_rays_o, batch_rays_d, near, far, training=True)",
+        "loss_dict = PhotometricMSELoss()(outputs.rgb_coarse, outputs.rgb_fine, target_rgb)  → total_loss = ||rgb_coarse-target||^2 + ||rgb_fine-target||^2, summed over the 4096-ray batch",
+        "grads = tape.gradient(loss_dict.total_loss, model.trainable_variables)",
+        "optimizer.apply_gradients(zip(grads, model.trainable_variables))  (Adam, lr = exponential_decay(5e-4 -> 5e-5))",
+        "return loss_dict"
+      ]
+    }
+  ],
+  "config_schema": {
+    "model": {
+      "pos_enc_freqs_x": 10,
+      "pos_enc_freqs_d": 4,
+      "trunk_depth": 8,
+      "trunk_width": 256,
+      "skip_layers": [4],
+      "color_hidden_width": 128,
+      "use_view_dependence": true,
+      "num_coarse_samples": 64,
+      "num_fine_samples": 128,
+      "raw_noise_std_real_scenes": 1.0,
+      "raw_noise_std_synthetic_scenes": 0.0
+    },
+    "training": {
+      "optimizer": "adam",
+      "learning_rate_init": 0.0005,
+      "learning_rate_final": 0.00005,
+      "lr_schedule": "exponential_decay",
+      "adam_beta1": 0.9,
+      "adam_beta2": 0.999,
+      "adam_epsilon": 1e-7,
+      "ray_batch_size": 4096,
+      "num_training_steps": 250000,
+      "checkpoint_every": 10000,
+      "log_every": 100
+    },
+    "data": {
+      "dataset_type": "blender | llff | deepvoxels",
+      "half_res": true,
+      "near": 2.0,
+      "far": 6.0,
+      "use_ndc": false
+    },
+    "evaluation": {
+      "metrics": ["psnr", "ssim", "lpips"],
+      "eval_every": 25000,
+      "render_test_every": 50000
+    },
+    "hardware": {
+      "device": "gpu",
+      "mixed_precision": false,
+      "num_workers": 4,
+      "tiny_hardware_mode": false
+    }
+  },
+  "dependencies": {
+    "runtime": [
+      {"package": "tensorflow", "version": "2.15.0", "reason": "Core deep-learning framework, matches SIR-confirmed paper implementation framework"},
+      {"package": "numpy", "version": "1.26.4", "reason": "Array ops, ray/pose math"},
+      {"package": "imageio", "version": "2.34.0", "reason": "Reading/writing PNG/EXR images and rendered video frames"},
+      {"package": "imageio-ffmpeg", "version": "0.4.9", "reason": "Video export of novel-view fly-throughs"},
+      {"package": "opencv-python-headless", "version": "4.9.0.80", "reason": "Image resizing/undistortion utilities for LLFF preprocessing"},
+      {"package": "configargparse", "version": "1.7", "reason": "CLI + YAML config merging for entrypoints"},
+      {"package": "scikit-image", "version": "0.22.0", "reason": "SSIM metric computation"},
+      {"package": "lpips-tf2", "version": "0.1.0", "reason": "LPIPS perceptual metric (TF2-compatible port); documented fallback: torch-based lpips package run in an isolated eval-only process if unavailable"},
+      {"package": "tqdm", "version": "4.66.2", "reason": "Training progress bars"},
+      {"package": "PyYAML", "version": "6.0.1", "reason": "config.yaml parsing"}
+    ],
+    "dev": [
+      {"package": "pytest", "version": "8.1.1"},
+      {"package": "pytest-cov", "version": "5.0.0"},
+      {"package": "black", "version": "24.3.0"},
+      {"package": "ruff", "version": "0.3.4"},
+      {"package": "mypy", "version": "1.9.0"}
+    ]
+  },
+  "entrypoints": [
+    {
+      "filename": "train.py",
+      "purpose": "Main training entrypoint: loads dataset + config, builds NeRFModel, runs Trainer.fit().",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--datadir", "type": "str", "required": true, "default": null, "help": "Path to scene dataset directory"},
+        {"flag": "--expname", "type": "str", "required": true, "default": null, "help": "Experiment name for checkpoints/logs"},
+        {"flag": "--num_steps", "type": "int", "required": false, "default": 250000, "help": "Override number of training iterations"},
+        {"flag": "--tiny", "type": "bool", "required": false, "default": false, "help": "Apply TinyNeRF consumer-hardware preset (single MLP, downsampled images, fewer steps)"},
+        {"flag": "--resume", "type": "str", "required": false, "default": null, "help": "Path to checkpoint to resume from"}
+      ]
+    },
+    {
+      "filename": "evaluate.py",
+      "purpose": "Runs held-out test-set rendering and computes PSNR/SSIM/LPIPS, reproducing Table 1 / per-scene Tables 3-6.",
+      "cli_args": [
+        {"flag": "--config", "type": "str", "required": true, "default": null, "help": "Path to config.yaml"},
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to trained model checkpoint"},
+        {"flag": "--datadir", "type": "str", "required": true, "default": null, "help": "Path to scene dataset directory"},
+        {"flag": "--out_dir", "type": "str", "required": false, "default": "results/", "help": "Where to write rendered test images and metrics.json"}
+      ]
+    },
+    {
+      "filename": "inference.py",
+      "purpose": "Renders a single novel view (or a fly-through video) from a trained checkpoint given a camera pose.",
+      "cli_args": [
+        {"flag": "--checkpoint", "type": "str", "required": true, "default": null, "help": "Path to trained model checkpoint"},
+        {"flag": "--pose", "type": "str", "required": false, "default": null, "help": "Path to a 4x4 camera-to-world pose (.npy); if omitted, renders the standard spiral fly-through"},
+        {"flag": "--out", "type": "str", "required": false, "default": "render.png", "help": "Output image or video path"}
+      ]
+    },
+    {
+      "filename": "preprocess_llff.py",
+      "purpose": "Runs COLMAP structure-from-motion and pose-bounds packaging for a directory of real forward-facing images (paper-specific script for the 'Real Forward-Facing' dataset).",
+      "cli_args": [
+        {"flag": "--scenedir", "type": "str", "required": true, "default": null, "help": "Directory of raw input images"},
+        {"flag": "--factor", "type": "int", "required": false, "default": 8, "help": "Downsampling factor for COLMAP + training resolution"}
+      ]
+    }
+  ],
+  "docker_spec": {
+    "base_image": "tensorflow/tensorflow:2.15.0-gpu",
+    "system_deps": ["colmap", "ffmpeg", "libsm6", "libxext6", "git"],
+    "workdir": "/workspace/nerf",
+    "default_cmd": "python train.py --config configs/lego.yaml --datadir /data/lego --expname lego_full"
+  },
+  "risk_assessment": [
+    {
+      "severity": "Medium",
+      "description": "SIR flags implementation_assumptions confidence 0.65, largely driven by the TinyNeRF consumer-hardware adaptation, which is sourced from an external community/author notebook rather than the peer-reviewed paper text and has unverified exact hyperparameters (image res, MLP depth, iteration count).",
+      "source": "sir.json implementation_assumptions[3] (confidence 0.5)",
+      "mitigation": "Isolated behind utils/tiny_variant.py as an explicitly swappable config preset (--tiny CLI flag) that never touches the paper-faithful default path; document TinyNeRF settings as best-effort estimates pending direct notebook inspection in a later stage if exact fidelity is required."
+    },
+    {
+      "severity": "Medium",
+      "description": "Exact total training-step count (SIR ambiguity: 100k-300k range, defaulted to 250k) and the exact exponential LR decay rate are not pinned down in the paper.",
+      "source": "sir.json ambiguities[0], ambiguities[1]",
+      "mitigation": "Expose num_training_steps and lr decay endpoints as top-level config values (not hardcoded), so a user can sweep/match a specific reported PSNR by adjusting steps; document the assumed formula lr = lr0 * (lr_end/lr0)^(step/total_steps) in config comments."
+    },
+    {
+      "severity": "Medium",
+      "description": "Hierarchical importance sampling's inverse-CDF ('sample_pdf') procedure is a well-known but numerically fiddly custom op (must correctly handle zero-weight bins, boundary clamping, and stop-gradient on the coarse network's weights per common practice, though the paper does not explicitly state stop-gradient).",
+      "source": "sir.json mathematical_spec — 'Coarse-network ray-color weights / hierarchical sampling PDF' (confidence 0.9), architecture module HierarchicalSampler (confidence 0.9)",
+      "mitigation": "Implement sample_pdf with an epsilon-stabilized PDF/CDF and unit tests against a known analytic distribution; stop_gradient the weights feeding the sampler by default, exposed as a config flag in case exact paper behavior differs."
+    },
+    {
+      "severity": "Low",
+      "description": "Weight initialization scheme is unspecified in the paper (confidence 0.55 in SIR).",
+      "source": "sir.json implementation_assumptions[1]",
+      "mitigation": "Use Keras Dense layer defaults (Glorot uniform), which is standard for this architecture family and matches widely-used community reproductions; flag as swappable via a config-level initializer string."
+    },
+    {
+      "severity": "Low",
+      "description": "COLMAP dependency for real-scene (LLFF) pose estimation adds a nontrivial system dependency and potential long-running preprocessing step outside the core model code.",
+      "source": "sir.json evaluation_protocol.datasets — 'Real Forward-Facing'",
+      "mitigation": "Isolate in preprocess_llff.py and the Docker image's system_deps; synthetic datasets (which ship ground-truth poses) remain fully runnable without COLMAP for a fast smoke test."
+    },
+    {
+      "severity": "Low",
+      "description": "LPIPS metric requires a pretrained perceptual network (AlexNet/VGG weights); a maintained pure-TF2 LPIPS port is less standardized than the PyTorch original, risking a version mismatch with the paper's reported LPIPS numbers.",
+      "source": "sir.json evaluation_protocol.metrics",
+      "mitigation": "Pin lpips-tf2 version; if unavailable/broken, document a documented fallback of computing LPIPS in a small isolated PyTorch sub-environment purely for the evaluation script, keeping the main training stack pure TensorFlow."
+    },
+    {
+      "severity": "High",
+      "description": "Full paper-faithful training (250k steps, batch 4096 rays, Nc+Nf=192 samples/ray, 800x800 or 1008x756 images) requires ~1-2 days on a V100-class GPU and will not fit meaningfully within a 4GB-VRAM consumer GPU budget without the TinyNeRF-style reductions.",
+      "source": "sir.json evaluation_protocol.compute",
+      "mitigation": "Ship two first-class configs: configs/full_paper.yaml (paper-faithful, high-VRAM) and configs/tiny_consumer.yaml (TinyNeRF-inspired: single MLP, ~100x100 images, no hierarchical sampling, few thousand steps) so users self-select based on available hardware; document expected quality gap explicitly rather than silently degrading the paper-faithful config."
+    }
+  ]
+}

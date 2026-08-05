@@ -1,0 +1,385 @@
+{
+  "paper_id": "arxiv_2003_08934",
+  "sir_version": 1,
+  "provenance": {
+    "title": "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis",
+    "authors": [
+      "Ben Mildenhall",
+      "Pratul P. Srinivasan",
+      "Matthew Tancik",
+      "Jonathan T. Barron",
+      "Ravi Ramamoorthi",
+      "Ren Ng"
+    ],
+    "affiliations": ["UC Berkeley", "Google Research", "UC San Diego"],
+    "arxiv_id": "2003.08934",
+    "doi": null,
+    "submission_date": "2020-03-19 (v1); revised 2020-08-03 (v2, arXiv header)",
+    "abstract": "We present a method that achieves state-of-the-art results for synthesizing novel views of complex scenes by optimizing an underlying continuous volumetric scene function using a sparse set of input views. Our algorithm represents a scene using a fully-connected deep network, whose input is a single continuous 5D coordinate (x,y,z,theta,phi) and whose output is the volume density and view-dependent emitted radiance at that location.",
+    "domain": "CV",
+    "key_claims": [
+      "Represents continuous scenes as 5D neural radiance fields parameterized by a single MLP, mapping (x,y,z,theta,phi) to (RGB, sigma)",
+      "Introduces a differentiable classical-volume-rendering procedure to optimize the MLP directly from posed RGB images without 3D supervision",
+      "Introduces a high-frequency positional (Fourier feature) encoding that lets the MLP represent high-frequency geometry/appearance, overcoming networks' spectral bias toward low frequencies",
+      "Proposes a two-stage (coarse+fine) hierarchical sampling strategy that concentrates ray samples on visible scene content for sampling efficiency",
+      "Outperforms prior neural/volumetric view-synthesis baselines (SRN, Neural Volumes, LLFF) on synthetic and real forward-facing benchmarks while requiring only ~5MB of network weights per scene"
+    ],
+    "parsed_at": "2026-07-28T00:00:00Z",
+    "arxivist_version": "1.0"
+  },
+  "architecture": {
+    "primary_variant": "Full NeRF (positional encoding + view-dependence + hierarchical coarse/fine sampling)",
+    "modules": [
+      {
+        "name": "PositionalEncoding_x",
+        "operation_type": "fourier_feature_embedding",
+        "input_shape": "[3] (x,y,z normalized to [-1,1])",
+        "output_shape": "[60] (2*L*3, L=10)",
+        "parameters": {"L": 10, "function": "gamma(p) = (sin(2^0 pi p), cos(2^0 pi p), ..., sin(2^(L-1) pi p), cos(2^(L-1) pi p))"},
+        "paper_section": "Sec 5.1, Eq. 4",
+        "confidence": 0.95,
+        "notes": "Applied independently to each of the 3 coordinate components of x."
+      },
+      {
+        "name": "PositionalEncoding_d",
+        "operation_type": "fourier_feature_embedding",
+        "input_shape": "[3] (unit viewing direction)",
+        "output_shape": "[24] (2*L*3, L=4)",
+        "parameters": {"L": 4, "function": "same gamma(p) formula as PositionalEncoding_x"},
+        "paper_section": "Sec 5.1",
+        "confidence": 0.95,
+        "notes": null
+      },
+      {
+        "name": "MLP_Trunk (F'_Theta, spatial branch)",
+        "operation_type": "fully_connected_stack",
+        "input_shape": "[60] (gamma(x))",
+        "output_shape": "[256] feature vector + [1] sigma",
+        "parameters": {
+          "num_layers": 8,
+          "channels_per_layer": 256,
+          "activation": "ReLU",
+          "skip_connection": "gamma(x) input is concatenated into the activation of layer 5 (DeepSDF-style skip)"
+        },
+        "paper_section": "Sec 3, Fig. 7",
+        "confidence": 0.95,
+        "notes": "Density sigma is predicted as a function of position x only, enforcing multiview consistency."
+      },
+      {
+        "name": "DensityHead",
+        "operation_type": "linear+relu",
+        "input_shape": "[256] (final trunk layer activation)",
+        "output_shape": "[1] sigma (rectified, non-negative)",
+        "parameters": {"activation": "ReLU (to force sigma >= 0)"},
+        "paper_section": "Sec 3, Fig. 7 caption",
+        "confidence": 0.9,
+        "notes": "Emitted together with an un-activated 256-d feature vector that feeds the color branch."
+      },
+      {
+        "name": "ColorHead (view-dependent branch)",
+        "operation_type": "fully_connected_stack",
+        "input_shape": "[256 feature + 24 gamma(d)] = [280]",
+        "output_shape": "[3] RGB",
+        "parameters": {
+          "hidden_layer": {"channels": 128, "activation": "ReLU"},
+          "output_layer": {"channels": 3, "activation": "sigmoid"}
+        },
+        "paper_section": "Sec 3, Fig. 7",
+        "confidence": 0.95,
+        "notes": "Concatenates the trunk's 256-d feature vector with the encoded viewing direction before one ReLU layer and a final sigmoid layer producing RGB."
+      },
+      {
+        "name": "CoarseNetwork (F_theta_coarse)",
+        "operation_type": "MLP_instance",
+        "input_shape": "5D coordinate (x, d) sampled via stratified sampling",
+        "output_shape": "(c_i, sigma_i) per sample",
+        "parameters": {"num_samples_Nc": 64, "sampling": "stratified, Eq. 2"},
+        "paper_section": "Sec 5.2, Sec 5.3",
+        "confidence": 0.9,
+        "notes": "Structurally identical to the shared MLP_Trunk/DensityHead/ColorHead architecture; a separate weight instance is optimized for the coarse pass."
+      },
+      {
+        "name": "FineNetwork (F_theta_fine)",
+        "operation_type": "MLP_instance",
+        "input_shape": "5D coordinate (x, d) sampled via coarse-weighted importance sampling, union of Nc+Nf points",
+        "output_shape": "(c_i, sigma_i) per sample",
+        "parameters": {"num_samples_Nc_plus_Nf": 192, "Nf": 128},
+        "paper_section": "Sec 5.2, Sec 5.3",
+        "confidence": 0.9,
+        "notes": "Second, separately-weighted instance of the same MLP architecture; evaluated at the union of coarse stratified samples and new importance samples."
+      },
+      {
+        "name": "HierarchicalSampler",
+        "operation_type": "inverse_transform_sampling",
+        "input_shape": "coarse weights w_i (from Eq. 5), Nc samples along ray",
+        "output_shape": "Nf additional sample locations along ray, biased toward high-weight regions",
+        "parameters": {"Nf": 128},
+        "paper_section": "Sec 5.2, Eq. 5",
+        "confidence": 0.9,
+        "notes": "Weights w_i are normalized into a piecewise-constant PDF; Nf new samples are drawn via inverse-CDF sampling."
+      },
+      {
+        "name": "VolumeRenderer",
+        "operation_type": "differentiable_quadrature_compositing",
+        "input_shape": "sequence of (c_i, sigma_i, delta_i) along a ray",
+        "output_shape": "[3] rendered pixel RGB per ray (C_hat(r))",
+        "parameters": {"quadrature_rule": "Max 1995 discrete approximation, Eq. 3"},
+        "paper_section": "Sec 4, Eq. 1-3",
+        "confidence": 0.95,
+        "notes": "Reduces to classical alpha compositing with alpha_i = 1 - exp(-sigma_i * delta_i)."
+      }
+    ],
+    "connections": [
+      {"from": "raw_x_y_z", "to": "PositionalEncoding_x", "tensor_name": "x"},
+      {"from": "raw_theta_phi_as_unit_vector_d", "to": "PositionalEncoding_d", "tensor_name": "d"},
+      {"from": "PositionalEncoding_x", "to": "MLP_Trunk (F'_Theta, spatial branch)", "tensor_name": "gamma(x)"},
+      {"from": "MLP_Trunk (F'_Theta, spatial branch)", "to": "DensityHead", "tensor_name": "trunk_output_features"},
+      {"from": "MLP_Trunk (F'_Theta, spatial branch)", "to": "ColorHead (view-dependent branch)", "tensor_name": "feature_256"},
+      {"from": "PositionalEncoding_d", "to": "ColorHead (view-dependent branch)", "tensor_name": "gamma(d)"},
+      {"from": "DensityHead", "to": "VolumeRenderer", "tensor_name": "sigma"},
+      {"from": "ColorHead (view-dependent branch)", "to": "VolumeRenderer", "tensor_name": "c"},
+      {"from": "CoarseNetwork (F_theta_coarse)", "to": "HierarchicalSampler", "tensor_name": "coarse weights w_i"},
+      {"from": "HierarchicalSampler", "to": "FineNetwork (F_theta_fine)", "tensor_name": "importance-sampled t values"},
+      {"from": "FineNetwork (F_theta_fine)", "to": "VolumeRenderer", "tensor_name": "(c_i, sigma_i) at Nc+Nf points"}
+    ],
+    "variants": [
+      {
+        "name": "Full model (No PE/VD/H ablation baseline excluded)",
+        "differences": {"positional_encoding": true, "view_dependence": true, "hierarchical_sampling": true}
+      },
+      {
+        "name": "Ablation: No Positional Encoding",
+        "differences": {"positional_encoding": false, "note": "network fed raw xyz-theta-phi"}
+      },
+      {
+        "name": "Ablation: No View Dependence",
+        "differences": {"view_dependence": false, "note": "color predicted from x only"}
+      },
+      {
+        "name": "Ablation: No Hierarchical Sampling",
+        "differences": {"hierarchical_sampling": false, "note": "single network, 256 uniform samples"}
+      }
+    ]
+  },
+  "mathematical_spec": [
+    {
+      "name": "Volume rendering integral (expected ray color)",
+      "latex": "C(\\mathbf{r}) = \\int_{t_n}^{t_f} T(t)\\sigma(\\mathbf{r}(t))\\mathbf{c}(\\mathbf{r}(t),\\mathbf{d})\\,dt,\\quad T(t)=\\exp\\left(-\\int_{t_n}^{t}\\sigma(\\mathbf{r}(s))\\,ds\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["t_n (near bound)", "t_f (far bound)"],
+      "undefined_symbols": [],
+      "paper_section": "Sec 4, Eq. 1",
+      "confidence": 0.95
+    },
+    {
+      "name": "Stratified sampling of ray parameter t",
+      "latex": "t_i \\sim \\mathcal{U}\\left[t_n + \\frac{i-1}{N}(t_f-t_n),\\; t_n + \\frac{i}{N}(t_f-t_n)\\right]",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["N (number of bins/samples)"],
+      "undefined_symbols": [],
+      "paper_section": "Sec 4, Eq. 2",
+      "confidence": 0.95
+    },
+    {
+      "name": "Discrete quadrature approximation of C(r)",
+      "latex": "\\hat{C}(\\mathbf{r}) = \\sum_{i=1}^{N} T_i (1-\\exp(-\\sigma_i \\delta_i)) \\mathbf{c}_i,\\quad T_i = \\exp\\left(-\\sum_{j=1}^{i-1}\\sigma_j \\delta_j\\right),\\quad \\delta_i = t_{i+1}-t_i",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["N", "delta_i (inter-sample distance)"],
+      "undefined_symbols": [],
+      "paper_section": "Sec 4, Eq. 3 (Max 1995 quadrature rule)",
+      "confidence": 0.95
+    },
+    {
+      "name": "Positional (Fourier feature) encoding",
+      "latex": "\\gamma(p) = \\left(\\sin(2^0\\pi p), \\cos(2^0\\pi p), \\ldots, \\sin(2^{L-1}\\pi p), \\cos(2^{L-1}\\pi p)\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["L=10 for gamma(x)", "L=4 for gamma(d)"],
+      "undefined_symbols": [],
+      "paper_section": "Sec 5.1, Eq. 4",
+      "confidence": 0.95
+    },
+    {
+      "name": "Coarse-network ray-color weights / hierarchical sampling PDF",
+      "latex": "\\hat{C}_c(\\mathbf{r}) = \\sum_{i=1}^{N_c} w_i \\mathbf{c}_i,\\quad w_i = T_i(1-\\exp(-\\sigma_i\\delta_i)),\\quad \\hat{w}_i = w_i \\Big/ \\sum_{j=1}^{N_c} w_j",
+      "role": "other",
+      "used_in": "training",
+      "hyperparameters": ["Nc=64"],
+      "undefined_symbols": [],
+      "paper_section": "Sec 5.2, Eq. 5",
+      "confidence": 0.9
+    },
+    {
+      "name": "Combined coarse+fine photometric MSE loss",
+      "latex": "\\mathcal{L} = \\sum_{\\mathbf{r}\\in\\mathcal{R}} \\left[ \\left\\| \\hat{C}_c(\\mathbf{r}) - C(\\mathbf{r}) \\right\\|_2^2 + \\left\\| \\hat{C}_f(\\mathbf{r}) - C(\\mathbf{r}) \\right\\|_2^2 \\right]",
+      "role": "loss",
+      "used_in": "training",
+      "hyperparameters": ["|R| = ray batch size = 4096"],
+      "undefined_symbols": [],
+      "paper_section": "Sec 5.3, Eq. 6",
+      "confidence": 0.95
+    },
+    {
+      "name": "Normalized Device Coordinate (NDC) ray reparameterization for forward-facing real scenes",
+      "latex": "\\mathbf{o}' = \\left(-\\frac{f_{cam}}{W/2}\\frac{o_x}{o_z}, -\\frac{f_{cam}}{H/2}\\frac{o_y}{o_z}, 1+\\frac{2n}{o_z}\\right), \\quad \\mathbf{d}' = \\left(-\\frac{f_{cam}}{W/2}\\left(\\frac{d_x}{d_z}-\\frac{o_x}{o_z}\\right), -\\frac{f_{cam}}{H/2}\\left(\\frac{d_y}{d_z}-\\frac{o_y}{o_z}\\right), -2n\\frac{1}{o_z}\\right)",
+      "role": "other",
+      "used_in": "both",
+      "hyperparameters": ["near plane n", "focal length f_cam", "image width W", "image height H"],
+      "undefined_symbols": [],
+      "paper_section": "Appendix C, Eq. 25-26",
+      "confidence": 0.85
+    }
+  ],
+  "tensor_semantics": [
+    {"name": "x", "shape_notation": "[3]", "dtype": "float32", "tensor_type": "input", "module": "PositionalEncoding_x", "confidence": 0.9},
+    {"name": "d", "shape_notation": "[3]", "dtype": "float32", "tensor_type": "input", "module": "PositionalEncoding_d", "confidence": 0.9},
+    {"name": "gamma_x", "shape_notation": "[60]", "dtype": "float32", "tensor_type": "intermediate", "module": "PositionalEncoding_x", "confidence": 0.9},
+    {"name": "gamma_d", "shape_notation": "[24]", "dtype": "float32", "tensor_type": "intermediate", "module": "PositionalEncoding_d", "confidence": 0.9},
+    {"name": "trunk_feature", "shape_notation": "[256]", "dtype": "float32", "tensor_type": "intermediate", "module": "MLP_Trunk (F'_Theta, spatial branch)", "confidence": 0.85},
+    {"name": "sigma", "shape_notation": "[1] per sampled point", "dtype": "float32", "tensor_type": "output", "module": "DensityHead", "confidence": 0.9},
+    {"name": "c (RGB radiance)", "shape_notation": "[3] per sampled point", "dtype": "float32", "tensor_type": "output", "module": "ColorHead (view-dependent branch)", "confidence": 0.9},
+    {"name": "ray_batch", "shape_notation": "[4096, ...] rays per optimization step", "dtype": "float32", "tensor_type": "input", "module": "VolumeRenderer", "confidence": 0.85},
+    {"name": "t_i (sample depths along ray)", "shape_notation": "[Nc] coarse, [Nc+Nf] fine (64 / 192)", "dtype": "float32", "tensor_type": "intermediate", "module": "CoarseNetwork (F_theta_coarse) / FineNetwork (F_theta_fine)", "confidence": 0.9},
+    {"name": "C_hat(r)", "shape_notation": "[3] per ray", "dtype": "float32", "tensor_type": "output", "module": "VolumeRenderer", "confidence": 0.95}
+  ],
+  "training_pipeline": {
+    "optimizer": {
+      "name": "Adam",
+      "learning_rate": 0.0005,
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "weight_decay": null,
+      "confidence": 0.95
+    },
+    "lr_schedule": {
+      "type": "exponential_decay",
+      "warmup_steps": null,
+      "total_steps": null,
+      "confidence": 0.85
+    },
+    "batch_size": 4096,
+    "effective_batch_size": 4096,
+    "training_steps": 250000,
+    "epochs": null,
+    "mixed_precision": null,
+    "gradient_clipping": null,
+    "data_augmentation": [],
+    "curriculum": null,
+    "confidence": 0.8
+  },
+  "evaluation_protocol": {
+    "datasets": [
+      {"name": "Diffuse Synthetic 360 (DeepVoxels)", "split": "479 train / 1000 test views, 4 objects", "size": 479, "publicly_available": true},
+      {"name": "Realistic Synthetic 360 (authors' new pathtraced dataset)", "split": "100 train / 200 test views, 8 objects, 800x800px", "size": 100, "publicly_available": true},
+      {"name": "Real Forward-Facing (LLFF + authors' captures)", "split": "20-62 images per scene, 1/8 held out for test, 8 scenes, 1008x756px", "size": null, "publicly_available": true}
+    ],
+    "metrics": ["PSNR", "SSIM", "LPIPS"],
+    "reported_results": [
+      {"metric": "PSNR", "dataset": "Diffuse Synthetic 360", "split": "test", "value": 40.15, "is_primary": true},
+      {"metric": "SSIM", "dataset": "Diffuse Synthetic 360", "split": "test", "value": 0.991, "is_primary": true},
+      {"metric": "LPIPS", "dataset": "Diffuse Synthetic 360", "split": "test", "value": 0.023, "is_primary": true},
+      {"metric": "PSNR", "dataset": "Realistic Synthetic 360", "split": "test", "value": 31.01, "is_primary": true},
+      {"metric": "SSIM", "dataset": "Realistic Synthetic 360", "split": "test", "value": 0.947, "is_primary": true},
+      {"metric": "LPIPS", "dataset": "Realistic Synthetic 360", "split": "test", "value": 0.081, "is_primary": true},
+      {"metric": "PSNR", "dataset": "Real Forward-Facing", "split": "test", "value": 26.50, "is_primary": true},
+      {"metric": "SSIM", "dataset": "Real Forward-Facing", "split": "test", "value": 0.811, "is_primary": true},
+      {"metric": "LPIPS", "dataset": "Real Forward-Facing", "split": "test", "value": 0.250, "is_primary": true}
+    ],
+    "baselines": ["SRN (Scene Representation Networks)", "NV (Neural Volumes)", "LLFF (Local Light Field Fusion)"],
+    "compute": "Single NVIDIA V100 GPU per scene; 100k-300k iterations, ~1-2 days training per scene; ~30 sec/frame render at test time (150-200 million network queries per rendered image)",
+    "special_conditions": [
+      "A separate network is trained per individual scene (not a generalizable/amortized model)",
+      "SRN baseline evaluated at lower resolution (512x512 or 504x376) due to GPU memory limits, vs 800x800/1008x752 for other methods"
+    ],
+    "confidence": 0.95
+  },
+  "implementation_assumptions": [
+    {
+      "assumption": "Reference framework is TensorFlow 1.x (as used by the original authors)",
+      "basis": "Explicitly stated in paper Appendix A: 'We implement our model in Tensorflow'",
+      "confidence": 0.95,
+      "alternatives": ["PyTorch reimplementation (common in later community ports, including TinyNeRF)"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "Weight initialization is standard framework default (e.g. Glorot/Xavier for FC layers) since the paper does not specify an initialization scheme",
+      "basis": "common practice for MLPs of this era",
+      "confidence": 0.55,
+      "alternatives": ["He/Kaiming initialization", "custom small-variance initialization"],
+      "affects_section": "architecture"
+    },
+    {
+      "assumption": "No explicit data augmentation is used beyond the natural stochasticity of random ray/pixel sampling and stratified sampling along rays",
+      "basis": "Paper describes only random ray-batch sampling; no image-space augmentation (crop/flip/color jitter) is mentioned",
+      "confidence": 0.8,
+      "alternatives": ["none plausible given the requirement for exact posed-image photometric supervision"],
+      "affects_section": "training_pipeline"
+    },
+    {
+      "assumption": "For a consumer-hardware-friendly reproduction (per user request, e.g. 4GB VRAM), adopt principles from the official community 'TinyNeRF' notebook (bmild/nerf tiny_nerf.ipynb): single MLP (no separate coarse/fine networks), fewer/smaller layers, downsampled images (e.g. 100x100), a single stratified-sampling pass with no hierarchical importance sampling, and a much smaller iteration count for fast demonstration.",
+      "basis": "External community reference implementation, not part of the original paper's methodology -- included because the user explicitly requested consumer-hardware optimization inspired by TinyNeRF",
+      "confidence": 0.5,
+      "alternatives": [
+        "Keep the full coarse+fine two-network paper-faithful architecture but reduce batch size / image resolution / iteration count to fit VRAM",
+        "Use gradient checkpointing or mixed precision (not in the original paper) to fit the full model on 4GB VRAM"
+      ],
+      "affects_section": "architecture, training_pipeline"
+    },
+    {
+      "assumption": "Scene bounding volume / near-far planes (t_n, t_f) must be supplied per-dataset; assumed to be the synthetic-scene bounding cube [-1,1]^3 for synthetic data and NDC-mapped [0,1] disparity range for real forward-facing data, matching Appendix B/C",
+      "basis": "Explicitly described in Appendix B ('Volume Bounds') and Appendix C (NDC derivation)",
+      "confidence": 0.85,
+      "alternatives": ["manually tuned per-scene near/far planes from COLMAP depth estimates"],
+      "affects_section": "evaluation_protocol"
+    },
+    {
+      "assumption": "Random Gaussian noise (zero mean, unit variance) is added to raw sigma outputs before the ReLU only when training on real scene data, as a regularizer",
+      "basis": "Explicitly stated in Appendix A ('Training Details') as specific to real scene data",
+      "confidence": 0.9,
+      "alternatives": ["applying the same noise regularization to synthetic data as well"],
+      "affects_section": "training_pipeline"
+    }
+  ],
+  "ambiguities": [
+    {
+      "location": "Sec 5.3 / Appendix A",
+      "description": "The paper states iterations 'typically take around 100k-300k' to converge but does not give one fixed number of training steps used for the headline results.",
+      "primary_assumption": 250000,
+      "alternatives": [100000, 200000, 300000],
+      "confidence": 0.6
+    },
+    {
+      "location": "Appendix A, 'Training Details'",
+      "description": "Learning-rate decay is described as 'begins at 5e-4 and decays exponentially to 5e-5 over the course of optimization' without stating the exact decay rate/step schedule.",
+      "primary_assumption": "exponential decay with decay computed so that lr reaches 5e-5 at the final training step (standard exponential schedule: lr = lr0 * (lr_end/lr0)^(step/total_steps))",
+      "alternatives": ["staircase decay at fixed intervals", "cosine decay to the same end value"],
+      "confidence": 0.6
+    },
+    {
+      "location": "Sec 5.2 / Fig 7",
+      "description": "It is not fully explicit whether the coarse and fine networks are two entirely independently-initialized/parameterized MLPs of identical architecture, or whether any parameters are shared between them.",
+      "primary_assumption": "Two fully independent MLP instances of identical architecture, both optimized jointly (no weight sharing)",
+      "alternatives": ["partial weight sharing (e.g. shared early layers)"],
+      "confidence": 0.75
+    },
+    {
+      "location": "User-requested TinyNeRF adaptation",
+      "description": "TinyNeRF (bmild/nerf tiny_nerf.ipynb) is an external, non-peer-reviewed community/author demo notebook, not part of the NeRF paper itself. Its exact hyperparameters (image size ~100x100, single MLP depth, iteration count ~1000-5000) are not verifiable from the paper text and must be sourced separately if faithfully reproduced downstream.",
+      "primary_assumption": "Treat TinyNeRF-inspired settings purely as an optional 'consumer-hardware' architecture variant layered on top of the paper-faithful SIR, not as a modification of the paper's own reported methodology or results",
+      "alternatives": ["Fetch and parse the actual tiny_nerf.ipynb notebook content in a later stage to pin down exact hyperparameters"],
+      "confidence": 0.5
+    }
+  ],
+  "confidence_annotations": {
+    "architecture": 0.9,
+    "mathematical_spec": 0.93,
+    "tensor_semantics": 0.88,
+    "training_pipeline": 0.8,
+    "evaluation_protocol": 0.95,
+    "implementation_assumptions": 0.65,
+    "overall_sir_confidence": 0.85
+  }
+}

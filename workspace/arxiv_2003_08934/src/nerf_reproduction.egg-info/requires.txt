@@ -1,0 +1,10 @@
+PyYAML==6.0.1
+configargparse==1.7
+imageio-ffmpeg==0.4.9
+imageio==2.34.0
+numpy==1.26.4
+opencv-python-headless==4.9.0.80
+scikit-image==0.22.0
+tensorboard==2.15.2
+tensorflow==2.15.0
+tqdm==4.66.2

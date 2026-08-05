@@ -1,0 +1,63 @@
+# =============================================================================
+# full_paper.yaml — Exact Table 1 / Table 4 settings for the "Realistic
+# Synthetic 360" benchmark (Sec 6.1). Requires a datacenter-class GPU
+# (paper: single NVIDIA V100, ~1-2 days/scene). Do NOT use on a <=8GB
+# consumer GPU -- see configs/tiny_consumer.yaml instead.
+# Risk: architecture_plan.json risk_assessment[6] (High severity).
+# =============================================================================
+
+model:
+  pos_enc_freqs_x: 10
+  pos_enc_freqs_d: 4
+  include_input_in_encoding: false
+  trunk_depth: 8
+  trunk_width: 256
+  skip_layers: [4]
+  color_hidden_width: 128
+  use_view_dependence: true
+  num_coarse_samples: 64
+  num_fine_samples: 128
+  use_hierarchical_sampling: true
+  perturb_stratified: true
+  raw_noise_std: 0.0        # 0.0 for synthetic scenes; use llff_scene.yaml (raw_noise_std: 1.0) for real scenes
+
+model_variant:
+  name: "full"
+
+training:
+  optimizer: "adam"
+  learning_rate_init: 0.0005
+  learning_rate_final: 0.00005
+  lr_schedule: "exponential_decay"
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1.0e-7
+  ray_batch_size: 4096
+  num_training_steps: 300000   # upper end of paper's reported 100k-300k range, for the closest Table 1 match
+  checkpoint_every: 10000
+  log_every: 100
+  eval_every: 25000
+  seed: 0
+  deterministic: false
+
+data:
+  dataset_type: "blender"
+  datadir: null                # set via --datadir, e.g. ./data/raw/nerf_synthetic/lego
+  half_res: false               # FALSE: full 800x800 resolution, matching Table 1's Realistic Synthetic 360 setting
+  testskip: 1
+  white_background: true
+  near: 2.0
+  far: 6.0
+  use_ndc: false
+
+evaluation:
+  metrics: ["psnr", "ssim", "lpips"]
+  chunk_size: 8192
+  render_test_every: 50000
+  save_rendered_images: true
+
+hardware:
+  device: "gpu"
+  mixed_precision: false
+  num_workers: 4
+  tiny_hardware_mode: false

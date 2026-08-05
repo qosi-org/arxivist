@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: nerf-reproduction:latest
+    command: >
+      python train.py --config configs/lego.yaml --datadir /data/lego --expname lego_full
+    volumes:
+      - ../data:/data
+      - ../checkpoints:/workspace/nerf/checkpoints
+      - ../results:/workspace/nerf/results
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  notebook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: nerf-reproduction:latest
+    command: >
+      bash -c "pip install --no-cache-dir jupyterlab &&
+               jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root"
+    ports:
+      - "8888:8888"
+    volumes:
+      - ../notebooks:/workspace/nerf/notebooks
+      - ../data:/data
+      - ../checkpoints:/workspace/nerf/checkpoints
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

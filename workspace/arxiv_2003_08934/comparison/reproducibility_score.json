@@ -1,0 +1,126 @@
+{
+  "paper_id": "arxiv_2003_08934",
+  "comparison_date": "2026-07-29T21:25:28Z",
+  "arxivist_sir_version": 1,
+  "reproducibility_score": 0.0,
+  "score_confidence": "low",
+  "metric_comparisons": [
+    {
+      "metric": "PSNR",
+      "dataset": "Realistic Synthetic 360",
+      "split": "test",
+      "paper_value": 31.01,
+      "user_value": 12.690099668502807,
+      "absolute_deviation": -18.319900331497193,
+      "deviation_pct": -59.08,
+      "direction": "below",
+      "severity": "critical",
+      "root_causes": [
+        {
+          "cause": "TinyNeRFPreset architecture capacity reduction (trunk_depth 8->4, trunk_width 256->128, pos_enc_freqs_x 10->6, hierarchical sampling disabled) -- SIR implementation_assumptions[3], confidence 0.5",
+          "probability": "High",
+          "suggested_fix": "Retrain with trunk_width=256, trunk_depth=8, pos_enc_freqs_x=10, keeping use_hierarchical_sampling=false to stay VRAM-light; expected target ~PSNR 30.06 (paper's own 'No Hierarchical Sampling' ablation, Table 2 row 4)."
+        },
+        {
+          "cause": "Reduced positional-encoding frequency (L=6 vs paper's L=10) compounds on Lego's fine geometric detail (treads, gear teeth)",
+          "probability": "High",
+          "suggested_fix": "Raise pos_enc_freqs_x back to 10 alongside the trunk width/depth fix above."
+        },
+        {
+          "cause": "Reduced image resolution (half_res=true, ~half of paper's 800x800)",
+          "probability": "Medium",
+          "suggested_fix": "Set data.half_res=false once a higher-capacity config is confirmed working, for a resolution-matched comparison."
+        },
+        {
+          "cause": "Reduced ray batch size (1024 vs paper's 4096) increasing per-step gradient noise",
+          "probability": "Low",
+          "suggested_fix": "Not a priority on its own; secondary to the capacity fix above."
+        },
+        {
+          "cause": "Insufficient training steps (200,000)",
+          "probability": "Low",
+          "suggested_fix": "Not needed -- 200k falls within the paper's own reported 100k-300k range, and the user's own training log showed the loss/PSNR plateauing well before step 200k, consistent with a capacity ceiling rather than undertraining."
+        }
+      ]
+    }
+  ],
+  "unmatched_metrics": [
+    {
+      "metric": "SSIM",
+      "dataset": "Realistic Synthetic 360",
+      "paper_value": 0.947,
+      "reason": "Not computed by user's run -- configs/tiny_consumer.yaml's evaluation.metrics only includes 'psnr'."
+    },
+    {
+      "metric": "LPIPS",
+      "dataset": "Realistic Synthetic 360",
+      "paper_value": 0.081,
+      "reason": "Not computed by user's run, and additionally lpips-tf2 (originally pinned in requirements.txt) does not exist on PyPI, so it could not have been computed even if requested. See hallucinations.omission[0]."
+    }
+  ],
+  "deviation_summary": {
+    "excellent": 0,
+    "good": 0,
+    "moderate": 0,
+    "significant": 0,
+    "critical": 1,
+    "unmatched": 2
+  },
+  "hallucinations": {
+    "structural": [],
+    "parametric": [
+      {
+        "hyperparameter": "TinyNeRFPreset overrides (trunk_depth, trunk_width, pos_enc_freqs_x, ray_batch_size, num_training_steps)",
+        "assumed_value": {"trunk_depth": 4, "trunk_width": 128, "pos_enc_freqs_x": 6, "ray_batch_size": 1024, "num_training_steps": 5000},
+        "severity": "Significant",
+        "evidence": "Sourced from SIR implementation_assumptions[3] (confidence 0.5, the lowest in the SIR) -- a best-effort estimate of an external community notebook's hyperparameters, never directly verified. Directly implicated in the -59.08% PSNR deviation above.",
+        "suggested_fix": "Fetch and parse the actual tiny_nerf.ipynb notebook if exact fidelity to that specific demo is desired; otherwise use a higher-capacity single-network config for better reproduction quality."
+      },
+      {
+        "hyperparameter": "training.lr_schedule exponential decay formula",
+        "assumed_value": "lr(step) = lr_init * (lr_final/lr_init)^(step/num_training_steps)",
+        "severity": "Minor",
+        "evidence": "SIR ambiguities[1], confidence 0.6 -- paper states the general lr range and 'exponential' decay but not the exact formula.",
+        "suggested_fix": "Low priority; not implicated in the current deviation (training log shows early plateau, not slow convergence)."
+      },
+      {
+        "hyperparameter": "model weight initialization scheme",
+        "assumed_value": "Keras default (Glorot uniform)",
+        "severity": "Minor",
+        "evidence": "SIR implementation_assumptions[1], confidence 0.55 -- paper does not specify an initialization scheme at all.",
+        "suggested_fix": "Not a priority; unlikely to affect a capacity-ceiling deviation reached after 125k+ steps."
+      }
+    ],
+    "omission": [
+      {
+        "missing_component": "Functional LPIPS metric (lpips-tf2==0.1.0 pinned in requirements.txt does not exist on PyPI)",
+        "sir_location": "evaluation_protocol.metrics",
+        "severity": "Significant",
+        "suggested_fix": "Removed from requirements.txt per user correction. ImageMetrics.lpips() degrades gracefully to None with a printed warning rather than crashing. Use the documented PyTorch-subprocess fallback in README.md if a full 3-metric comparison is needed."
+      },
+      {
+        "missing_component": "DeepVoxelsDataset loader (stub, raises NotImplementedError)",
+        "sir_location": "evaluation_protocol.datasets (\"Diffuse Synthetic 360 (DeepVoxels)\")",
+        "severity": "Minor",
+        "suggested_fix": "Not relevant to this comparison run (Lego / Realistic Synthetic 360). Implement against the official DeepVoxels format only if later reproducing Table 3."
+      }
+    ]
+  },
+  "verification_log": {
+    "comparison_timestamp": "2026-07-29T21:25:28Z",
+    "sir_version_used": 1,
+    "architecture_plan_version": 1,
+    "paper_metrics_total": 3,
+    "user_results_total": 1,
+    "matched_pairs": 1,
+    "user_config_modifications": [
+      "configs/tiny_consumer.yaml with --tiny flag (TinyNeRFPreset applied)",
+      "--num_steps 200000 (config default: 5000)",
+      "dataset restricted to Lego scene only",
+      "hardware: NVIDIA RTX 3050 (6GB VRAM), WSL2/Ubuntu"
+    ],
+    "user_results_hash": "sha256:8c6ec724a9942061af1bdc80a931b6ab53437e5464ddb4261c88f6e80ab0d464",
+    "requires_manual_review": false,
+    "review_reasons": []
+  }
+}
